@@ -14,11 +14,15 @@ jobs:
 
       - name: Deploy files
         run: |
+          sudo systemctl stop cardbot
           rsync -a --delete \
             --exclude '.git' \
             --exclude '.env' \
             --exclude '.env.example' \
             --exclude 'cardbot.log' \
+            --exclude 'venv/' \
+            --exclude '__pycache__/' \
+            --exclude '.pytest_cache/' \
             ./ /opt/cardbot/
 
       - name: Install dependencies
@@ -32,4 +36,4 @@ jobs:
         run: |
           sudo systemctl restart cardbot
           sleep 5
-          systemctl is-active cardbot
+          sudo systemctl is-active cardbot
