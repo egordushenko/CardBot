@@ -25,7 +25,11 @@ jobs:
         run: |
           cd /opt/cardbot
           python3 -m venv venv
+          ./venv/bin/pip install --upgrade pip
           ./venv/bin/pip install -r requirements.txt
 
       - name: Restart service
-        run: sudo systemctl restart cardbot
+        run: |
+          sudo systemctl restart cardbot
+          sleep 5
+          systemctl is-active cardbot
