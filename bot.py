@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from asyncio import as_completed
+import asyncio
 from io import BytesIO
 from dataclasses import dataclass
 from typing import Any
@@ -20,7 +20,7 @@ GENERATE_PROMPT = (
 MARKETPLACE_PROMPT = "Выберите маркетплейс:"
 IMAGE_DESCRIPTION_PROMPT = (
     "Опишите товар: название, материал, размер, цвет, ключевые преимущества. "
-    "Чем подробнее — тем лучше результат."
+    "Чем подробнее — тем лучше результат. После этого бот попросит загрузить фото товара."
 )
 IMAGE_PHOTO_PROMPT = (
     "Загрузите от 1 до 5 фото товара с разных ракурсов. "
@@ -132,6 +132,43 @@ def build_image_photo_keyboard(photos_count: int) -> Any:
     return _keyboard([row])
 
 
+def is_supported_image_document(document: Any) -> bool:
+    mime_type = str(getattr(document, "mime_type", "") or "").lower()
+    return mime_type.startswith("image/")
+
+
+def extract_image_file_id(message: Any) -> str | None:
+    photos = list(getattr(message, "photo", None) or [])
+    if photos:
+        return photos[-1].file_id
+
+    document = getattr(message, "document", None)
+    if is_supported_image_document(document):
+        return document.file_id
+
+    return None
+
+
+def build_photo_received_message(added_count: int, total_count: int) -> str:
+    return f"Фото {added_count} получено ✓\nВсего: {total_count}/5"
+
+
+def build_image_progress_message(
+    total_count: int,
+    generated_count: int,
+    sent_count: int,
+    *,
+    still_working: bool = False,
+) -> str:
+    suffix = "\nЗапрос еще выполняется, это может занять пару минут." if still_working else ""
+    return (
+        "🎨 Генерирую изображения...\n"
+        f"Сгенерировано: {generated_count}/{total_count}\n"
+        f"Отправлено: {sent_count}/{total_count}"
+        f"{suffix}"
+    )
+
+
 def build_image_count_keyboard() -> Any:
     return _keyboard(
         [
@@ -226,6 +263,7 @@ def _clear_image_session(context: Any) -> None:
         "img_count",
         "img_waiting_description",
         "img_waiting_photos",
+        "img_media_groups",
     ):
         context.user_data.pop(key, None)
 
@@ -352,6 +390,14 @@ async def _handle_image_description(update: Any, context: Any, user_input: str) 
 
 
 async def handle_photo(update: Any, context: Any) -> None:
+    await _handle_image_upload(update, context)
+
+
+async def handle_document(update: Any, context: Any) -> None:
+    await _handle_image_upload(update, context)
+
+
+async def _handle_image_upload(update: Any, context: Any) -> None:
     await _ensure_user(update, context)
     if not context.user_data.get("img_waiting_photos"):
         return
@@ -365,14 +411,67 @@ async def handle_photo(update: Any, context: Any) -> None:
         )
         return
 
-    if not message.photo:
+    file_id = extract_image_file_id(message)
+    if not file_id:
+        await message.reply_text(
+            "Пришлите фото товара или изображение файлом.",
+            reply_markup=build_image_photo_keyboard(len(photos)),
+        )
         return
 
-    photos.append(message.photo[-1].file_id)
+    photos.append(file_id)
     context.user_data["img_photos"] = photos
+
+    media_group_id = getattr(message, "media_group_id", None)
+    if media_group_id:
+        _schedule_media_group_ack(
+            context=context,
+            chat_id=message.chat_id,
+            media_group_id=str(media_group_id),
+            total_count=len(photos),
+        )
+        return
+
     await message.reply_text(
-        f"Фото {len(photos)} получено ✓",
+        build_photo_received_message(added_count=1, total_count=len(photos)),
         reply_markup=build_image_photo_keyboard(len(photos)),
+    )
+
+
+def _schedule_media_group_ack(context: Any, chat_id: int, media_group_id: str, total_count: int) -> None:
+    groups = context.user_data.setdefault("img_media_groups", {})
+    group = groups.setdefault(
+        media_group_id,
+        {
+            "added_count": 0,
+            "chat_id": chat_id,
+            "total_count": total_count,
+            "scheduled": False,
+        },
+    )
+    group["added_count"] += 1
+    group["total_count"] = total_count
+    if group["scheduled"]:
+        return
+
+    group["scheduled"] = True
+    context.application.create_task(_flush_media_group_ack(context, media_group_id))
+
+
+async def _flush_media_group_ack(context: Any, media_group_id: str) -> None:
+    await asyncio.sleep(1.2)
+    group = (context.user_data.get("img_media_groups") or {}).pop(media_group_id, None)
+    if not group:
+        return
+
+    total_count = int(group["total_count"])
+    await context.bot.send_message(
+        chat_id=group["chat_id"],
+        text=build_photo_received_message(
+            added_count=int(group["added_count"]),
+            total_count=total_count,
+        ),
+        reply_markup=build_image_photo_keyboard(total_count),
     )
 
 
@@ -438,11 +537,10 @@ async def _generate_images_for_user(
         )
         return
 
-    await message.reply_text(f"🎨 Генерирую изображения... (0/{images_count})")
+    status_message = await message.reply_text(build_image_progress_message(images_count, 0, 0))
     generated: list[dict[str, Any]] = []
     tasks = [
-        _generate_and_send_single_image(
-            message=message,
+        _generate_single_image_result(
             context=context,
             concept=concept,
             photo_file_ids=photo_file_ids,
@@ -450,19 +548,52 @@ async def _generate_images_for_user(
         )
         for concept in concepts
     ]
-    completed = 0
-    for task in as_completed(tasks):
-        completed += 1
-        try:
-            image_record = await task
-        except Exception:
-            logging.exception("Single image generation failed")
-            await message.reply_text(
-                f"Изображение {completed}/{images_count} не удалось сгенерировать."
-            )
-            continue
-        generated.append(image_record)
-        await message.reply_text(f"Готово {completed}/{images_count}")
+    generated_count = 0
+    sent_count = 0
+    next_to_send = 1
+    ready: dict[int, dict[str, Any]] = {}
+    failed: set[int] = set()
+    stop_progress = asyncio.Event()
+    progress_task = asyncio.create_task(
+        _image_generation_heartbeat(
+            status_message=status_message,
+            total_count=images_count,
+            get_counts=lambda: (generated_count, sent_count),
+            stop_event=stop_progress,
+        )
+    )
+
+    try:
+        for task in asyncio.as_completed(tasks):
+            result = await task
+            generated_count += 1
+            image_index = int(result["image_index"])
+
+            if result.get("ok"):
+                ready[image_index] = result
+            else:
+                failed.add(image_index)
+                logging.warning("Image %s generation failed: %s", image_index, result.get("error"))
+
+            while next_to_send in ready or next_to_send in failed:
+                if next_to_send in failed:
+                    await message.reply_text(
+                        f"Изображение {next_to_send}/{images_count} не удалось сгенерировать."
+                    )
+                    next_to_send += 1
+                    continue
+
+                image_record = await _send_generated_image_result(message, ready.pop(next_to_send))
+                generated.append(image_record)
+                sent_count += 1
+                await _safe_edit_message_text(
+                    status_message,
+                    build_image_progress_message(images_count, generated_count, sent_count),
+                )
+                next_to_send += 1
+    finally:
+        stop_progress.set()
+        await progress_task
 
     try:
         image_balance = await db.save_generated_images_and_consume_balance(
@@ -505,34 +636,83 @@ def _serialize_image_concepts(concepts: list[ImageConcept]) -> str:
     )
 
 
-async def _generate_and_send_single_image(
-    message: Any,
+async def _image_generation_heartbeat(
+    status_message: Any,
+    total_count: int,
+    get_counts: Any,
+    stop_event: asyncio.Event,
+) -> None:
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=30)
+        except asyncio.TimeoutError:
+            generated_count, sent_count = get_counts()
+            await _safe_edit_message_text(
+                status_message,
+                build_image_progress_message(
+                    total_count,
+                    generated_count,
+                    sent_count,
+                    still_working=True,
+                ),
+            )
+
+
+async def _safe_edit_message_text(message: Any, text: str) -> None:
+    try:
+        await message.edit_text(text)
+    except Exception:
+        logging.debug("Failed to edit image progress message", exc_info=True)
+
+
+async def _generate_single_image_result(
     context: Any,
     concept: ImageConcept,
     photo_file_ids: list[str],
     settings: Settings,
 ) -> dict[str, Any]:
     photo_index = min(concept.photo_index, len(photo_file_ids) - 1)
-    image_bytes = await generate_marketplace_image(
-        prompt=concept.prompt,
-        reference_photo_file_id=photo_file_ids[photo_index],
-        bot=context.bot,
-        api_key=settings.openrouter_api_key,
-        model=settings.gpt_image_model,
-        site_url=settings.site_url,
-    )
-    buffer = BytesIO(image_bytes)
-    buffer.name = f"cardbot-image-{concept.image_index}.png"
+    try:
+        image_bytes = await asyncio.wait_for(
+            generate_marketplace_image(
+                prompt=concept.prompt,
+                reference_photo_file_id=photo_file_ids[photo_index],
+                bot=context.bot,
+                api_key=settings.openrouter_api_key,
+                model=settings.gpt_image_model,
+                site_url=settings.site_url,
+            ),
+            timeout=180,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "image_index": concept.image_index,
+            "error": str(exc),
+        }
+
+    return {
+        "ok": True,
+        "image_index": concept.image_index,
+        "purpose": concept.purpose,
+        "prompt_used": concept.prompt,
+        "image_bytes": image_bytes,
+    }
+
+
+async def _send_generated_image_result(message: Any, result: dict[str, Any]) -> dict[str, Any]:
+    buffer = BytesIO(result["image_bytes"])
+    buffer.name = f"cardbot-image-{result['image_index']}.png"
     sent_message = await message.reply_photo(
         photo=buffer,
-        caption=f"Изображение {concept.image_index}: {concept.purpose}",
+        caption=f"Изображение {result['image_index']}: {result['purpose']}",
     )
     telegram_file_id = ""
     if getattr(sent_message, "photo", None):
         telegram_file_id = sent_message.photo[-1].file_id
     return {
-        "image_index": concept.image_index,
-        "prompt_used": concept.prompt,
+        "image_index": result["image_index"],
+        "prompt_used": result["prompt_used"],
         "telegram_file_id": telegram_file_id,
     }
 
@@ -744,6 +924,7 @@ def create_application(settings: Settings) -> Any:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    application.add_handler(MessageHandler(filters.Document.IMAGE, handle_document))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     return application
 

@@ -7,8 +7,11 @@ from bot import (
     build_image_count_keyboard,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
+    build_photo_received_message,
     build_marketplace_keyboard,
     build_main_menu,
+    extract_image_file_id,
+    is_supported_image_document,
 )
 from db import TRIAL_GENERATIONS
 from llm import CardGeneration
@@ -67,6 +70,33 @@ def test_image_keyboards_follow_spec_callbacks():
     ]
     assert packages_keyboard.inline_keyboard[0][0].callback_data == "img_buy:img_mini"
     assert after_keyboard.inline_keyboard[0][0].callback_data == "action:images"
+
+
+def test_extract_image_file_id_accepts_photo_and_image_document():
+    class Photo:
+        def __init__(self, file_id):
+            self.file_id = file_id
+
+    class Document:
+        file_id = "document-file-id"
+        mime_type = "image/png"
+
+    class PhotoMessage:
+        photo = [Photo("small"), Photo("large")]
+        document = None
+
+    class DocumentMessage:
+        photo = []
+        document = Document()
+
+    assert extract_image_file_id(PhotoMessage()) == "large"
+    assert extract_image_file_id(DocumentMessage()) == "document-file-id"
+    assert is_supported_image_document(Document()) is True
+
+
+def test_build_photo_received_message_groups_album_count():
+    assert build_photo_received_message(added_count=3, total_count=3).startswith("Фото 3 получено")
+    assert "Всего: 3/5" in build_photo_received_message(added_count=3, total_count=3)
 
 
 def test_generation_messages_use_hashtags_label_for_ozon():
