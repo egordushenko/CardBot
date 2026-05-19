@@ -1,0 +1,31 @@
+name: Deploy CardBot
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy files
+        run: |
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude '.env.example' \
+            --exclude 'cardbot.log' \
+            ./ /opt/cardbot/
+
+      - name: Install dependencies
+        run: |
+          cd /opt/cardbot
+          python3 -m venv venv
+          ./venv/bin/pip install -r requirements.txt
+
+      - name: Restart service
+        run: sudo systemctl restart cardbot
