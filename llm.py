@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,11 +36,37 @@ def _strip_markdown_fence(payload: str) -> str:
     return text
 
 
+_SERVICE_MARKERS_RE = re.compile(r"(?i)(\\r|\\n|\bsummary\b|\bdepth\b|\btfo\b)")
+_CJK_RE = re.compile(r"[\u3400-\u9fff]")
+
+
+def sanitize_characteristics(value: str) -> str:
+    lines: list[str] = []
+    for raw_line in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw_line.strip()
+        if not line:
+            continue
+        if _SERVICE_MARKERS_RE.search(line) or _CJK_RE.search(line):
+            break
+        if ":" not in line:
+            continue
+        key, field_value = line.split(":", 1)
+        key = key.strip()
+        field_value = field_value.strip()
+        if not key or not field_value:
+            continue
+        lines.append(f"{key}: {field_value}")
+    return "\n".join(lines).strip()
+
+
 def parse_generation_payload(payload: str, tokens_used: int = 0) -> CardGeneration:
     try:
         data = json.loads(_strip_markdown_fence(payload))
     except json.JSONDecodeError as exc:
         raise LLMResponseError("LLM returned invalid JSON") from exc
+
+    if "characteristics" in data:
+        data["characteristics"] = sanitize_characteristics(str(data["characteristics"]))
 
     required = ("title", "description", "keywords", "characteristics")
     for field in required:
