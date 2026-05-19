@@ -1,6 +1,12 @@
 import pytest
 
-from llm import CardGeneration, LLMResponseError, parse_generation_payload
+from llm import (
+    CardGeneration,
+    LLMResponseError,
+    build_user_prompt,
+    parse_generation_payload,
+    select_system_prompt,
+)
 
 
 def test_parse_generation_payload_accepts_valid_json():
@@ -58,3 +64,29 @@ def test_parse_generation_payload_filters_characteristics_lines_without_colon():
     result = parse_generation_payload(payload)
 
     assert result.characteristics == "Material: cotton\nSize: XL"
+
+
+def test_parse_generation_payload_accepts_ozon_hashtags_field():
+    result = parse_generation_payload(
+        '{"title":"Title","description":"Description","hashtags":"#tag #other","characteristics":"A: B"}',
+        marketplace="ozon",
+    )
+
+    assert result.marketplace == "ozon"
+    assert result.keywords == "#tag #other"
+
+
+def test_select_system_prompt_uses_marketplace_specific_rules():
+    wb_prompt = select_system_prompt("wb")
+    ozon_prompt = select_system_prompt("ozon")
+
+    assert "Wildberries" in wb_prompt
+    assert "не указывай пол и цвет" in wb_prompt
+    assert "Ozon" in ozon_prompt
+    assert "hashtags" in ozon_prompt
+    assert "600-900" in ozon_prompt
+
+
+def test_build_user_prompt_includes_marketplace_name():
+    assert build_user_prompt("wb", "товар").startswith("Маркетплейс: Wildberries")
+    assert build_user_prompt("ozon", "товар").startswith("Маркетплейс: Ozon")

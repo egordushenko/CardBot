@@ -6,7 +6,7 @@ from typing import Any
 
 from config import Settings, load_settings
 from db import PACKAGES, Database, UsageMode
-from llm import CardGeneration, generate_card
+from llm import CardGeneration, generate_card, normalize_marketplace
 
 
 PAYMENT_UNAVAILABLE_MESSAGE = "💳 Оплата временно недоступна, скоро откроем!"
@@ -14,6 +14,7 @@ GENERATE_PROMPT = (
     "Отправьте описание товара. Минимум — название. "
     "Можно добавить материал, размер, цвет и особенности."
 )
+MARKETPLACE_PROMPT = "Выберите маркетплейс:"
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,17 @@ def build_buy_keyboard() -> Any:
     )
 
 
+def build_marketplace_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("Wildberries", "marketplace:wb"),
+                _button("Ozon", "marketplace:ozon"),
+            ]
+        ]
+    )
+
+
 def build_after_generation_keyboard() -> Any:
     return _keyboard(
         [
@@ -87,10 +99,11 @@ def build_after_generation_keyboard() -> Any:
 
 
 def build_generation_messages(card: CardGeneration) -> list[str]:
+    search_label = "🔖 ХЭШТЕГИ" if card.marketplace == "ozon" else "🔑 КЛЮЧЕВЫЕ СЛОВА"
     return [
         f"📌 НАЗВАНИЕ:\n{card.title}",
         f"📝 ОПИСАНИЕ:\n{card.description}",
-        f"🔑 КЛЮЧЕВЫЕ СЛОВА:\n{card.keywords}",
+        f"{search_label}:\n{card.keywords}",
         f"📋 ХАРАКТЕРИСТИКИ:\n{card.characteristics}",
     ]
 
@@ -154,7 +167,11 @@ async def start(update: Any, context: Any) -> None:
 
 async def generate_command(update: Any, context: Any) -> None:
     await _ensure_user(update, context)
-    await update.effective_message.reply_text(GENERATE_PROMPT)
+    context.user_data.pop("marketplace", None)
+    await update.effective_message.reply_text(
+        MARKETPLACE_PROMPT,
+        reply_markup=build_marketplace_keyboard(),
+    )
 
 
 async def balance_command(update: Any, context: Any) -> None:
@@ -220,6 +237,14 @@ async def handle_text(update: Any, context: Any) -> None:
         )
         return
 
+    marketplace = context.user_data.get("marketplace")
+    if not marketplace:
+        await update.effective_message.reply_text(
+            MARKETPLACE_PROMPT,
+            reply_markup=build_marketplace_keyboard(),
+        )
+        return
+
     settings = _get_settings(context)
     db = _get_db(context)
     usage_mode = await db.get_usage_mode(
@@ -240,6 +265,7 @@ async def handle_text(update: Any, context: Any) -> None:
             api_key=settings.openrouter_api_key,
             model=settings.openrouter_model,
             site_url=settings.site_url,
+            marketplace=marketplace,
         )
     except Exception:
         logging.exception("LLM generation failed")
@@ -270,6 +296,7 @@ async def handle_text(update: Any, context: Any) -> None:
         messages[-1],
         reply_markup=build_after_generation_keyboard(),
     )
+    context.user_data.pop("marketplace", None)
 
 
 async def handle_callback(update: Any, context: Any) -> None:
@@ -279,6 +306,20 @@ async def handle_callback(update: Any, context: Any) -> None:
 
     data = query.data or ""
     if data == "action:generate":
+        context.user_data.pop("marketplace", None)
+        await query.message.reply_text(
+            MARKETPLACE_PROMPT,
+            reply_markup=build_marketplace_keyboard(),
+        )
+    elif data.startswith("marketplace:"):
+        try:
+            context.user_data["marketplace"] = normalize_marketplace(data.split(":", 1)[1])
+        except Exception:
+            await query.message.reply_text(
+                MARKETPLACE_PROMPT,
+                reply_markup=build_marketplace_keyboard(),
+            )
+            return
         await query.message.reply_text(GENERATE_PROMPT)
     elif data == "action:balance":
         await balance_command(update, context)
