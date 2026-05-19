@@ -24,6 +24,8 @@ jobs:
             --exclude '__pycache__/' \
             --exclude '.pytest_cache/' \
             ./ /opt/cardbot/
+          touch /opt/cardbot/cardbot.log
+          chmod 664 /opt/cardbot/cardbot.log
 
       - name: Install dependencies
         run: |
@@ -35,5 +37,13 @@ jobs:
       - name: Restart service
         run: |
           sudo systemctl restart cardbot
-          sleep 5
+          for attempt in {1..30}; do
+            status="$(sudo systemctl is-active cardbot || true)"
+            if [ "$status" = "active" ]; then
+              echo "$status"
+              exit 0
+            fi
+            sleep 2
+          done
           sudo systemctl is-active cardbot
+          exit 1
