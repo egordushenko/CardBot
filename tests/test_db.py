@@ -2,9 +2,11 @@ import pytest
 
 from db import (
     CREATE_TABLES_SQL,
+    IMAGE_PACKAGES,
     TRIAL_GENERATIONS,
     UsageMode,
     decide_usage_mode,
+    image_package_rows,
     package_rows,
 )
 
@@ -13,9 +15,12 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     schema = CREATE_TABLES_SQL.lower()
 
     assert "create table if not exists users" in schema
+    assert "add column if not exists image_balance" in schema
     assert "create table if not exists generations" in schema
     assert "create table if not exists packages" in schema
     assert "create table if not exists payments" in schema
+    assert "create table if not exists image_sessions" in schema
+    assert "create table if not exists generated_images" in schema
     assert "inv_id text unique not null" in schema
     assert "status text default 'pending'" in schema
 
@@ -41,3 +46,14 @@ def test_package_rows_match_mvp_tariffs():
         ("basic", "Основной", 100, 990, "100 карточек"),
         ("pro", "Про", 300, 1990, "300 карточек"),
     ]
+
+
+def test_image_package_rows_match_image_tariffs():
+    rows = image_package_rows()
+
+    assert rows == [
+        ("img_mini", "Мини", 5, 199, "5 изображений"),
+        ("img_standard", "Стандарт", 10, 390, "10 изображений"),
+        ("img_pro", "Про", 25, 790, "25 изображений"),
+    ]
+    assert IMAGE_PACKAGES["img_pro"]["images"] == 25

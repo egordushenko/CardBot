@@ -1,4 +1,5 @@
 asyncpg==0.30.0
+httpx==0.28.1
 openai==2.11.0
 python-telegram-bot==22.5
 pytest==8.3.4

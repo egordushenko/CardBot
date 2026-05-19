@@ -28,6 +28,27 @@ PACKAGES = {
     },
 }
 
+IMAGE_PACKAGES = {
+    "img_mini": {
+        "name": "Мини",
+        "images": 5,
+        "price_rub": 199,
+        "description": "5 изображений",
+    },
+    "img_standard": {
+        "name": "Стандарт",
+        "images": 10,
+        "price_rub": 390,
+        "description": "10 изображений",
+    },
+    "img_pro": {
+        "name": "Про",
+        "images": 25,
+        "price_rub": 790,
+        "description": "25 изображений",
+    },
+}
+
 CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT PRIMARY KEY,
@@ -37,6 +58,8 @@ CREATE TABLE IF NOT EXISTS users (
     trial_used INT DEFAULT 0,
     balance INT DEFAULT 0
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS image_balance INT DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS generations (
     id SERIAL PRIMARY KEY,
@@ -72,10 +95,36 @@ CREATE TABLE IF NOT EXISTS payments (
     paid_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS image_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES users(id),
+    product_description TEXT,
+    marketplace TEXT,
+    photos_count INT,
+    images_requested INT,
+    prompts_json TEXT,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS generated_images (
+    id SERIAL PRIMARY KEY,
+    session_id INT REFERENCES image_sessions(id),
+    user_id BIGINT REFERENCES users(id),
+    image_index INT,
+    prompt_used TEXT,
+    telegram_file_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_generations_user_created
     ON generations(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_user_created
     ON payments(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_image_sessions_user_created
+    ON image_sessions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_generated_images_session
+    ON generated_images(session_id, image_index);
 """
 
 
@@ -89,6 +138,7 @@ class UsageMode(str, Enum):
 class UserBalance:
     trial_used: int
     balance: int
+    image_balance: int = 0
 
 
 def package_rows() -> list[tuple[str, str, int, int, str]]:
@@ -101,6 +151,19 @@ def package_rows() -> list[tuple[str, str, int, int, str]]:
             package["description"],
         )
         for code, package in PACKAGES.items()
+    ]
+
+
+def image_package_rows() -> list[tuple[str, str, int, int, str]]:
+    return [
+        (
+            code,
+            package["name"],
+            package["images"],
+            package["price_rub"],
+            package["description"],
+        )
+        for code, package in IMAGE_PACKAGES.items()
     ]
 
 
@@ -171,11 +234,24 @@ class Database:
         pool = self._require_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT trial_used, balance FROM users WHERE id = $1", user_id
+                "SELECT trial_used, balance, image_balance FROM users WHERE id = $1", user_id
             )
         if row is None:
-            return UserBalance(trial_used=0, balance=0)
-        return UserBalance(trial_used=row["trial_used"], balance=row["balance"])
+            return UserBalance(trial_used=0, balance=0, image_balance=0)
+        return UserBalance(
+            trial_used=row["trial_used"],
+            balance=row["balance"],
+            image_balance=row["image_balance"],
+        )
+
+    async def get_image_balance(self, user_id: int) -> int:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            value = await conn.fetchval(
+                "SELECT image_balance FROM users WHERE id = $1",
+                user_id,
+            )
+        return int(value or 0)
 
     async def get_usage_mode(
         self, user_id: int, trial_generations: int = TRIAL_GENERATIONS
@@ -268,3 +344,120 @@ class Database:
                 limit,
             )
         return [dict(row) for row in rows]
+
+    async def create_image_session(
+        self,
+        user_id: int,
+        product_description: str,
+        marketplace: str,
+        photos_count: int,
+        images_requested: int,
+    ) -> int:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            return int(
+                await conn.fetchval(
+                    """
+                    INSERT INTO image_sessions(
+                        user_id,
+                        product_description,
+                        marketplace,
+                        photos_count,
+                        images_requested,
+                        status
+                    )
+                    VALUES($1, $2, $3, $4, $5, 'pending')
+                    RETURNING id
+                    """,
+                    user_id,
+                    product_description,
+                    marketplace,
+                    photos_count,
+                    images_requested,
+                )
+            )
+
+    async def update_image_session_prompts(
+        self,
+        session_id: int,
+        prompts_json: str,
+        status: str = "generating",
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE image_sessions
+                SET prompts_json = $2, status = $3
+                WHERE id = $1
+                """,
+                session_id,
+                prompts_json,
+                status,
+            )
+
+    async def set_image_session_status(self, session_id: int, status: str) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE image_sessions SET status = $2 WHERE id = $1",
+                session_id,
+                status,
+            )
+
+    async def save_generated_images_and_consume_balance(
+        self,
+        session_id: int,
+        user_id: int,
+        generated_images: list[dict[str, Any]],
+    ) -> int:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                count = len(generated_images)
+                if count:
+                    status = await conn.execute(
+                        """
+                        UPDATE users
+                        SET image_balance = image_balance - $2
+                        WHERE id = $1 AND image_balance >= $2
+                        """,
+                        user_id,
+                        count,
+                    )
+                    if status != "UPDATE 1":
+                        raise RuntimeError("Image balance was already consumed")
+                    await conn.executemany(
+                        """
+                        INSERT INTO generated_images(
+                            session_id,
+                            user_id,
+                            image_index,
+                            prompt_used,
+                            telegram_file_id
+                        )
+                        VALUES($1, $2, $3, $4, $5)
+                        """,
+                        [
+                            (
+                                session_id,
+                                user_id,
+                                image["image_index"],
+                                image["prompt_used"],
+                                image["telegram_file_id"],
+                            )
+                            for image in generated_images
+                        ],
+                    )
+                await conn.execute(
+                    "UPDATE image_sessions SET status = $2 WHERE id = $1",
+                    session_id,
+                    "done" if count else "failed",
+                )
+                return int(
+                    await conn.fetchval(
+                        "SELECT image_balance FROM users WHERE id = $1",
+                        user_id,
+                    )
+                    or 0
+                )

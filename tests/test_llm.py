@@ -2,8 +2,11 @@ import pytest
 
 from llm import (
     CardGeneration,
+    ImageConcept,
     LLMResponseError,
     build_user_prompt,
+    build_image_director_user_prompt,
+    parse_image_concepts_payload,
     parse_generation_payload,
     select_system_prompt,
 )
@@ -90,3 +93,39 @@ def test_select_system_prompt_uses_marketplace_specific_rules():
 def test_build_user_prompt_includes_marketplace_name():
     assert build_user_prompt("wb", "товар").startswith("Маркетплейс: Wildberries")
     assert build_user_prompt("ozon", "товар").startswith("Маркетплейс: Ozon")
+
+
+def test_parse_image_concepts_payload_validates_and_clamps_photo_index():
+    result = parse_image_concepts_payload(
+        (
+            '{"concepts":['
+            '{"image_index":1,"purpose":"main","photo_index":0,"prompt":"Prompt one"},'
+            '{"image_index":2,"purpose":"details","photo_index":99,"prompt":"Prompt two"}'
+            ']}'
+        ),
+        photos_count=2,
+        images_count=2,
+    )
+
+    assert result == [
+        ImageConcept(image_index=1, purpose="main", photo_index=0, prompt="Prompt one"),
+        ImageConcept(image_index=2, purpose="details", photo_index=1, prompt="Prompt two"),
+    ]
+
+
+def test_parse_image_concepts_payload_rejects_missing_concepts():
+    with pytest.raises(LLMResponseError, match="concepts"):
+        parse_image_concepts_payload("{}", photos_count=1, images_count=1)
+
+
+def test_build_image_director_user_prompt_includes_counts_and_marketplace():
+    prompt = build_image_director_user_prompt(
+        product_description="коврик EVA",
+        marketplace="wb",
+        photos_count=3,
+        images_count=5,
+    )
+
+    assert "Маркетплейс: Wildberries" in prompt
+    assert "Загружено фото: 3" in prompt
+    assert "Нужно сгенерировать изображений: 5" in prompt
