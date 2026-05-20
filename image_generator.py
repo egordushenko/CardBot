@@ -5,12 +5,18 @@ from typing import Any
 
 import httpx
 
+from prompts import PRODUCT_PRESERVATION_SUFFIX
+
 
 OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 class ImageGenerationError(RuntimeError):
     pass
+
+
+def build_safe_image_prompt(prompt: str) -> str:
+    return f"{prompt}{PRODUCT_PRESERVATION_SUFFIX}"
 
 
 def extract_openrouter_image_bytes(payload: dict[str, Any]) -> bytes:
@@ -49,6 +55,7 @@ async def generate_single_image(
     site_url: str = "https://alterega.ru",
 ) -> bytes:
     photo_b64 = base64.b64encode(reference_photo_bytes).decode("ascii")
+    safe_prompt = build_safe_image_prompt(prompt)
     payload = {
         "model": model,
         "messages": [
@@ -63,7 +70,7 @@ async def generate_single_image(
                     },
                     {
                         "type": "text",
-                        "text": prompt,
+                        "text": safe_prompt,
                     },
                 ],
             }

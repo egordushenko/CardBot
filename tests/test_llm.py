@@ -10,6 +10,7 @@ from llm import (
     parse_generation_payload,
     select_system_prompt,
 )
+from prompts import DIRECTOR_SYSTEM_PROMPT
 
 
 def test_parse_generation_payload_accepts_valid_json():
@@ -129,3 +130,10 @@ def test_build_image_director_user_prompt_includes_counts_and_marketplace():
     assert "Маркетплейс: Wildberries" in prompt
     assert "Загружено фото: 3" in prompt
     assert "Нужно сгенерировать изображений: 5" in prompt
+
+
+def test_director_system_prompt_requires_product_preservation_rules():
+    assert "STRICT PRODUCT PRESERVATION RULES" in DIRECTOR_SYSTEM_PROMPT
+    assert "Do NOT add any buttons" in DIRECTOR_SYSTEM_PROMPT
+    assert "The product must look IDENTICAL to the reference photo" in DIRECTOR_SYSTEM_PROMPT
+    assert "Preserve exact product geometry" in DIRECTOR_SYSTEM_PROMPT

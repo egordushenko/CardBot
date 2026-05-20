@@ -1,8 +1,15 @@
 import base64
+import asyncio
 
 import pytest
 
-from image_generator import ImageGenerationError, extract_openrouter_image_bytes
+import image_generator
+from image_generator import (
+    ImageGenerationError,
+    PRODUCT_PRESERVATION_SUFFIX,
+    build_safe_image_prompt,
+    extract_openrouter_image_bytes,
+)
 
 
 def test_extract_openrouter_image_bytes_reads_data_url():
@@ -45,3 +52,68 @@ def test_extract_openrouter_image_bytes_reads_legacy_data_shape():
 def test_extract_openrouter_image_bytes_rejects_missing_images():
     with pytest.raises(ImageGenerationError, match="images"):
         extract_openrouter_image_bytes({"choices": [{"message": {}}]})
+
+
+def test_build_safe_image_prompt_appends_product_preservation_rules():
+    prompt = build_safe_image_prompt("Show product on white background")
+
+    assert prompt.startswith("Show product on white background")
+    assert PRODUCT_PRESERVATION_SUFFIX in prompt
+    assert "Do NOT add any buttons" in prompt
+    assert "Preserve exact product geometry" in prompt
+
+
+def test_generate_single_image_sends_safe_prompt_to_api(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "images": [
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(b"png").decode("ascii")
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, headers, json):
+            captured["payload"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        image_generator.generate_single_image(
+            prompt="Original prompt",
+            reference_photo_bytes=b"photo",
+            api_key="key",
+            model="model",
+        )
+    )
+
+    sent_text = captured["payload"]["messages"][0]["content"][1]["text"]
+    assert result == b"png"
+    assert sent_text.startswith("Original prompt")
+    assert PRODUCT_PRESERVATION_SUFFIX in sent_text
