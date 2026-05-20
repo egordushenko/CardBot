@@ -9,9 +9,20 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import Settings, load_settings
-from db import IMAGE_PACKAGES, PACKAGES, Database, UsageMode
+from db import Database, UsageMode
 from image_generator import generate_marketplace_image
 from llm import CardGeneration, ImageConcept, generate_card, generate_image_prompts, normalize_marketplace
+from payments import (
+    IMAGE_ADDON_CODES,
+    MAIN_PACKAGE_CODES,
+    PACKAGES as PAYMENT_PACKAGES,
+    PROMO_PACKAGE_CODE,
+    TEXT_ADDON_CODES,
+    build_payment_url,
+    calculate_package_counts,
+    generate_inv_id,
+)
+from webhook_server import start_webhook_server
 
 
 PAYMENT_UNAVAILABLE_MESSAGE = "💳 Оплата временно недоступна, скоро откроем!"
@@ -51,6 +62,7 @@ TEMPLATES_LIMIT = 10
 class KeyboardButton:
     text: str
     callback_data: str
+    url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +77,15 @@ def _button(text: str, callback_data: str) -> Any:
         return InlineKeyboardButton(text, callback_data=callback_data)
     except ImportError:
         return KeyboardButton(text=text, callback_data=callback_data)
+
+
+def _url_button(text: str, url: str) -> Any:
+    try:
+        from telegram import InlineKeyboardButton
+
+        return InlineKeyboardButton(text, url=url)
+    except ImportError:
+        return KeyboardButton(text=text, callback_data="", url=url)
 
 
 def _keyboard(rows: list[list[Any]]) -> Any:
@@ -95,25 +116,25 @@ def build_main_menu() -> Any:
     )
 
 
-def build_buy_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button(
-                    f"{package['name']} — {package['generations']} за {package['price_rub']} ₽",
-                    f"buy:{code}",
-                )
-            ]
-            for code, package in PACKAGES.items()
-        ]
+def _payment_button(package_code: str) -> Any:
+    package = PAYMENT_PACKAGES[package_code]
+    return _button(
+        f"{package.title} — {package.description} за {package.price_rub:,} ₽".replace(",", " "),
+        f"buy:{package_code}",
     )
 
 
-def build_combined_buy_keyboard() -> Any:
-    rows: list[list[Any]] = []
-    rows.extend(build_buy_keyboard().inline_keyboard)
-    rows.extend(build_image_packages_keyboard().inline_keyboard)
+def build_buy_keyboard(show_first_image_promo: bool = False) -> Any:
+    rows = [[_payment_button(code)] for code in MAIN_PACKAGE_CODES]
+    rows.extend([[_payment_button(code)] for code in TEXT_ADDON_CODES])
+    rows.extend([[_payment_button(code)] for code in IMAGE_ADDON_CODES])
+    if show_first_image_promo:
+        rows.insert(0, [_payment_button(PROMO_PACKAGE_CODE)])
     return _keyboard(rows)
+
+
+def build_combined_buy_keyboard(show_first_image_promo: bool = False) -> Any:
+    return build_buy_keyboard(show_first_image_promo=show_first_image_promo)
 
 
 def build_balance_keyboard() -> Any:
@@ -127,18 +148,19 @@ def build_balance_keyboard() -> Any:
     )
 
 
-def build_image_packages_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button(
-                    f"{package['name']} — {package['images']} за {package['price_rub']} ₽",
-                    f"img_buy:{code}",
-                )
-            ]
-            for code, package in IMAGE_PACKAGES.items()
-        ]
-    )
+def build_image_packages_keyboard(show_first_image_promo: bool = False) -> Any:
+    rows = [[_payment_button(code)] for code in IMAGE_ADDON_CODES]
+    if show_first_image_promo:
+        rows.insert(0, [_payment_button(PROMO_PACKAGE_CODE)])
+    return _keyboard(rows)
+
+
+def build_text_packages_keyboard() -> Any:
+    return _keyboard([[_payment_button(code)] for code in TEXT_ADDON_CODES])
+
+
+def build_payment_link_keyboard(payment_url: str) -> Any:
+    return _keyboard([[_url_button("Перейти к оплате", payment_url)]])
 
 
 def build_marketplace_keyboard() -> Any:
@@ -540,10 +562,69 @@ async def balance_command(update: Any, context: Any) -> None:
 
 
 async def buy_command(update: Any, context: Any) -> None:
-    await _ensure_user(update, context)
-    await update.effective_message.reply_text(
-        PAYMENT_UNAVAILABLE_MESSAGE,
-        reply_markup=build_combined_buy_keyboard(),
+    user_id = await _ensure_user(update, context)
+    if user_id is None:
+        return
+    await _show_buy_menu(update.effective_message, context, user_id, kind="all")
+
+
+async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "all") -> None:
+    first_image_purchase = await _get_db(context).is_first_image_purchase(user_id)
+    if kind == "text":
+        await message.reply_text(
+            "Выберите пакет текстовых карточек:",
+            reply_markup=build_text_packages_keyboard(),
+        )
+        return
+    if kind == "images":
+        await message.reply_text(
+            "Выберите пакет изображений:",
+            reply_markup=build_image_packages_keyboard(show_first_image_promo=first_image_purchase),
+        )
+        return
+    await message.reply_text(
+        "Выберите пакет CardBot:",
+        reply_markup=build_combined_buy_keyboard(show_first_image_promo=first_image_purchase),
+    )
+
+
+async def _send_payment_link(message: Any, context: Any, user_id: int, package_code: str) -> None:
+    if package_code not in PAYMENT_PACKAGES:
+        await message.reply_text("Пакет не найден. Откройте /buy и выберите пакет заново.")
+        return
+
+    db = _get_db(context)
+    if package_code == PROMO_PACKAGE_CODE and not await db.is_first_image_purchase(user_id):
+        await message.reply_text("Акция первой покупки уже использована.")
+        return
+
+    settings = _get_settings(context)
+    if not settings.robokassa_login or not settings.robokassa_password1:
+        await message.reply_text(PAYMENT_UNAVAILABLE_MESSAGE)
+        return
+
+    package = PAYMENT_PACKAGES[package_code]
+    text_count, images_count = calculate_package_counts(package_code)
+    inv_id = generate_inv_id()
+    await db.create_pending_payment(
+        inv_id=inv_id,
+        user_id=user_id,
+        package_code=package_code,
+        amount_rub=package.price_rub,
+        text_count=text_count,
+        images_count=images_count,
+    )
+    payment_url = build_payment_url(
+        settings=settings,
+        inv_id=inv_id,
+        user_id=user_id,
+        package_code=package_code,
+    )
+    await message.reply_text(
+        f"💳 Оплата пакета \"{package.title}\"\n"
+        f"Сумма: {package.price_rub:,} ₽\n\n"
+        f"После оплаты баланс пополнится автоматически.".replace(",", " "),
+        reply_markup=build_payment_link_keyboard(payment_url),
     )
 
 
@@ -1553,6 +1634,15 @@ async def handle_callback(update: Any, context: Any) -> None:
             await _generate_images_for_user(update, context, user.id, images_count)
     elif data == "action:balance":
         await balance_command(update, context)
+    elif data == "action:buy":
+        if user_id is not None:
+            await _show_buy_menu(query.message, context, user_id, kind="all")
+    elif data == "action:buy_text":
+        if user_id is not None:
+            await _show_buy_menu(query.message, context, user_id, kind="text")
+    elif data == "action:buy_images":
+        if user_id is not None:
+            await _show_buy_menu(query.message, context, user_id, kind="images")
     elif data == "action:templates":
         if user_id is not None:
             await _show_templates(query.message, context, user_id, page=0)
@@ -1689,17 +1779,24 @@ async def handle_callback(update: Any, context: Any) -> None:
         await query.message.reply_text("🗑 Шаблон удалён.")
     elif data.startswith("template_delete_cancel:"):
         await query.message.reply_text("Удаление отменено.")
-    elif data in {"action:buy", "action:buy_text", "action:buy_images"} or data.startswith(("buy:", "img_buy:")):
-        await query.message.reply_text(
-            PAYMENT_UNAVAILABLE_MESSAGE,
-            reply_markup=build_payment_stub_keyboard(data),
-        )
+    elif data.startswith(("buy:", "img_buy:")):
+        if user_id is None:
+            return
+        package_code = data.split(":", 1)[1]
+        await _send_payment_link(query.message, context, user_id, package_code)
 
 
 async def post_init(application: Any) -> None:
     db: Database = application.bot_data["db"]
+    settings: Settings = application.bot_data["settings"]
     await db.connect()
     await db.init_db()
+    application.bot_data["webhook_runner"] = await start_webhook_server(
+        bot=application.bot,
+        db=db,
+        robokassa_password2=settings.robokassa_password2,
+        port=settings.cardbot_webhook_port,
+    )
     await application.bot.set_my_commands(
         [
             ("start", "Главное меню"),
@@ -1714,6 +1811,9 @@ async def post_init(application: Any) -> None:
 
 
 async def post_shutdown(application: Any) -> None:
+    webhook_runner = application.bot_data.get("webhook_runner")
+    if webhook_runner is not None:
+        await webhook_runner.cleanup()
     await application.bot_data["db"].close()
 
 

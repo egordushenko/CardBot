@@ -19,6 +19,8 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     assert "create table if not exists generations" in schema
     assert "create table if not exists packages" in schema
     assert "create table if not exists payments" in schema
+    assert "add column if not exists text_count" in schema
+    assert "add column if not exists images_count" in schema
     assert "create table if not exists image_sessions" in schema
     assert "create table if not exists generated_images" in schema
     assert "create table if not exists templates" in schema

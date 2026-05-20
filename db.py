@@ -96,6 +96,9 @@ CREATE TABLE IF NOT EXISTS payments (
     paid_at TIMESTAMPTZ
 );
 
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS text_count INT DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS images_count INT DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS image_sessions (
     id SERIAL PRIMARY KEY,
     user_id BIGINT REFERENCES users(id),
@@ -359,6 +362,119 @@ class Database:
                 limit,
             )
         return [dict(row) for row in rows]
+
+    async def create_pending_payment(
+        self,
+        *,
+        inv_id: str,
+        user_id: int,
+        package_code: str,
+        amount_rub: int,
+        text_count: int,
+        images_count: int,
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO payments(
+                    user_id,
+                    inv_id,
+                    package_code,
+                    amount_rub,
+                    generations_count,
+                    text_count,
+                    images_count,
+                    status
+                )
+                VALUES($1, $2, $3, $4, $5, $6, $7, 'pending')
+                """,
+                user_id,
+                inv_id,
+                package_code,
+                amount_rub,
+                text_count,
+                images_count,
+            )
+
+    async def get_payment_by_inv_id(self, inv_id: str) -> dict[str, Any] | None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    inv_id,
+                    user_id,
+                    package_code,
+                    amount_rub,
+                    generations_count,
+                    text_count,
+                    images_count,
+                    status,
+                    created_at,
+                    paid_at
+                FROM payments
+                WHERE inv_id = $1
+                """,
+                inv_id,
+            )
+        return dict(row) if row else None
+
+    async def mark_payment_paid_and_add_balance(self, inv_id: str) -> bool:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    UPDATE payments
+                    SET status = 'paid', paid_at = NOW()
+                    WHERE inv_id = $1 AND status <> 'paid'
+                    RETURNING user_id, text_count, images_count
+                    """,
+                    inv_id,
+                )
+                if row is None:
+                    return False
+                await conn.execute(
+                    """
+                    UPDATE users
+                    SET balance = balance + $2,
+                        image_balance = image_balance + $3
+                    WHERE id = $1
+                    """,
+                    row["user_id"],
+                    row["text_count"],
+                    row["images_count"],
+                )
+                return True
+
+    async def is_first_image_purchase(self, user_id: int) -> bool:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            count = await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM payments
+                WHERE user_id = $1
+                  AND status = 'paid'
+                  AND images_count > 0
+                """,
+                user_id,
+            )
+        return int(count or 0) == 0
+
+    async def get_user(self, user_id: int) -> dict[str, Any] | None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, username, first_name, trial_used, balance, image_balance, created_at
+                FROM users
+                WHERE id = $1
+                """,
+                user_id,
+            )
+        return dict(row) if row else None
 
     async def save_template(
         self,

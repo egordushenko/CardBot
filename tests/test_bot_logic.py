@@ -1,5 +1,4 @@
 from bot import (
-    PAYMENT_UNAVAILABLE_MESSAGE,
     build_after_generation_keyboard,
     build_after_image_generation_keyboard,
     build_balance_keyboard,
@@ -144,7 +143,7 @@ def test_image_keyboards_follow_spec_callbacks():
         "img_count:5",
     ]
     assert "img_count:7" not in count_callbacks
-    assert packages_keyboard.inline_keyboard[0][0].callback_data == "img_buy:img_mini"
+    assert packages_keyboard.inline_keyboard[0][0].callback_data == "buy:addon_img_20"
     assert after_keyboard.inline_keyboard[0][0].callback_data == "action:generate"
 
 
@@ -208,17 +207,21 @@ def test_balance_keyboard_offers_both_package_types():
     assert callbacks == ["action:buy_text", "action:buy_images"]
 
 
-def test_buy_keyboard_contains_package_buttons_but_runtime_uses_stub_message():
-    keyboard = build_buy_keyboard()
+def test_buy_keyboard_contains_main_tariffs_and_addons():
+    keyboard = build_buy_keyboard(show_first_image_promo=True)
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert PAYMENT_UNAVAILABLE_MESSAGE == "💳 Оплата временно недоступна, скоро откроем!"
-    assert len(keyboard.inline_keyboard) == 3
-    assert keyboard.inline_keyboard[0][0].callback_data == "buy:starter"
+    assert "buy:text_start_x0" in callbacks
+    assert "buy:text_business_x5" in callbacks
+    assert "buy:addon_text_30" in callbacks
+    assert "buy:addon_img_50" in callbacks
+    assert "buy:promo_img_10" in callbacks
 
 
 def test_combined_buy_keyboard_includes_text_and_image_packages():
-    keyboard = build_combined_buy_keyboard()
+    keyboard = build_combined_buy_keyboard(show_first_image_promo=False)
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert "buy:starter" in callbacks
-    assert "img_buy:img_mini" in callbacks
+    assert "buy:text_start_x0" in callbacks
+    assert "buy:addon_img_20" in callbacks
+    assert "buy:promo_img_10" not in callbacks

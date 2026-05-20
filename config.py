@@ -15,6 +15,8 @@ class Settings:
     gpt_image_model: str = "openai/gpt-5.4-image-2"
     site_url: str = "https://alterega.ru"
     cardbot_result_url: str = "https://alterega.ru/api/payment/robokassa/cardbot-result"
+    cardbot_bot_url: str = "https://t.me/CaardMakerBot"
+    cardbot_webhook_port: int = 8090
     robokassa_login: str = ""
     robokassa_password1: str = ""
     robokassa_password2: str = ""
@@ -73,6 +75,12 @@ def load_settings(load_dotenv_files: bool = True) -> Settings:
             defaults,
             "https://alterega.ru/api/payment/robokassa/cardbot-result",
         ),
+        cardbot_bot_url=_env(
+            "CARDBOT_BOT_URL",
+            defaults,
+            "https://t.me/CaardMakerBot",
+        ),
+        cardbot_webhook_port=int(_env("CARDBOT_WEBHOOK_PORT", defaults, "8090")),
         robokassa_login=_env("ROBOKASSA_LOGIN", defaults),
         robokassa_password1=_env("ROBOKASSA_PASSWORD1", defaults),
         robokassa_password2=_env("ROBOKASSA_PASSWORD2", defaults),
