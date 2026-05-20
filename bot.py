@@ -130,17 +130,54 @@ def _payment_button(package_code: str) -> Any:
     )
 
 
+def _combo_package_code(text_count: int, images_per_card: int) -> str:
+    for code in MAIN_PACKAGE_CODES:
+        package = PAYMENT_PACKAGES[code]
+        if package.text_count == text_count and package.images_per_card == images_per_card:
+            return code
+    raise ValueError(f"Unknown combo package: {text_count=} {images_per_card=}")
+
+
+def _combo_payment_button(text_count: int, images_per_card: int) -> Any:
+    code = _combo_package_code(text_count, images_per_card)
+    package = PAYMENT_PACKAGES[code]
+    if images_per_card == 0:
+        label = f"Без фото — {package.price_rub:,} ₽"
+    else:
+        label = f"{images_per_card} фото/карточка — {package.price_rub:,} ₽"
+    return _button(label.replace(",", " "), f"buy:{code}")
+
+
 def build_buy_keyboard(show_first_image_promo: bool = False) -> Any:
-    rows = [[_payment_button(code)] for code in MAIN_PACKAGE_CODES]
-    rows.extend([[_payment_button(code)] for code in TEXT_ADDON_CODES])
-    rows.extend([[_payment_button(code)] for code in IMAGE_ADDON_CODES])
-    if show_first_image_promo:
-        rows.insert(0, [_payment_button(PROMO_PACKAGE_CODE)])
-    return _keyboard(rows)
+    return _keyboard(
+        [
+            [_button("Комбо: карточки + изображения", "action:buy_combo")],
+            [_button("Только карточки", "action:buy_text")],
+            [_button("Только изображения", "action:buy_images")],
+        ]
+    )
 
 
 def build_combined_buy_keyboard(show_first_image_promo: bool = False) -> Any:
     return build_buy_keyboard(show_first_image_promo=show_first_image_promo)
+
+
+def build_combo_card_count_keyboard() -> Any:
+    counts = sorted({PAYMENT_PACKAGES[code].text_count for code in MAIN_PACKAGE_CODES})
+    rows = [[_button(f"{count} карточек", f"combo_cards:{count}")] for count in counts]
+    rows.append([_button("⬅️ Назад", "buy_back:root")])
+    return _keyboard(rows)
+
+
+def build_combo_photo_count_keyboard(text_count: int) -> Any:
+    photo_counts = sorted(
+        PAYMENT_PACKAGES[code].images_per_card
+        for code in MAIN_PACKAGE_CODES
+        if PAYMENT_PACKAGES[code].text_count == text_count
+    )
+    rows = [[_combo_payment_button(text_count, photo_count)] for photo_count in photo_counts]
+    rows.append([_button("⬅️ Назад", "buy_back:combo")])
+    return _keyboard(rows)
 
 
 def build_balance_keyboard() -> Any:
@@ -582,6 +619,12 @@ async def buy_command(update: Any, context: Any) -> None:
 
 async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "all") -> None:
     first_image_purchase = await _get_db(context).is_first_image_purchase(user_id)
+    if kind == "combo":
+        await message.reply_text(
+            "Сколько карточек нужно в комбо-пакете?",
+            reply_markup=build_combo_card_count_keyboard(),
+        )
+        return
     if kind == "text":
         await message.reply_text(
             "Выберите пакет текстовых карточек:",
@@ -595,7 +638,7 @@ async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "
         )
         return
     await message.reply_text(
-        "Выберите пакет CardBot:",
+        "Что хотите купить?",
         reply_markup=build_combined_buy_keyboard(show_first_image_promo=first_image_purchase),
     )
 
@@ -1653,6 +1696,9 @@ async def handle_callback(update: Any, context: Any) -> None:
     elif data == "action:buy":
         if user_id is not None:
             await _show_buy_menu(query.message, context, user_id, kind="all")
+    elif data == "action:buy_combo":
+        if user_id is not None:
+            await _show_buy_menu(query.message, context, user_id, kind="combo")
     elif data == "action:buy_text":
         if user_id is not None:
             await _show_buy_menu(query.message, context, user_id, kind="text")
@@ -1799,6 +1845,21 @@ async def handle_callback(update: Any, context: Any) -> None:
         await query.message.reply_text("🗑 Шаблон удалён.")
     elif data.startswith("template_delete_cancel:"):
         await query.message.reply_text("Удаление отменено.")
+    elif data == "buy_back:root":
+        if user_id is not None:
+            await _show_buy_menu(query.message, context, user_id, kind="all")
+    elif data == "buy_back:combo":
+        if user_id is not None:
+            await _show_buy_menu(query.message, context, user_id, kind="combo")
+    elif data.startswith("combo_cards:"):
+        try:
+            text_count = int(data.split(":", 1)[1])
+        except ValueError:
+            return
+        await query.message.reply_text(
+            f"{text_count} карточек: выберите количество фото",
+            reply_markup=build_combo_photo_count_keyboard(text_count),
+        )
     elif data.startswith(("buy:", "img_buy:")):
         if user_id is None:
             return

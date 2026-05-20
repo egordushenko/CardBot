@@ -4,6 +4,8 @@ from bot import (
     build_balance_keyboard,
     build_balance_message,
     build_buy_keyboard,
+    build_combo_card_count_keyboard,
+    build_combo_photo_count_keyboard,
     build_combined_buy_keyboard,
     build_generation_messages,
     build_generation_mode_keyboard,
@@ -220,15 +222,12 @@ def test_help_message_contains_contact_and_offer_link_button():
     assert keyboard.inline_keyboard[0][0].url == "https://alterega.ru/cardbot/offer"
 
 
-def test_buy_keyboard_contains_main_tariffs_and_addons():
+def test_buy_keyboard_starts_with_package_categories():
     keyboard = build_buy_keyboard(show_first_image_promo=True)
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert "buy:text_start_x0" in callbacks
-    assert "buy:text_business_x5" in callbacks
-    assert "buy:addon_text_30" in callbacks
-    assert "buy:addon_img_50" in callbacks
-    assert "buy:promo_img_10" in callbacks
+    assert callbacks == ["action:buy_combo", "action:buy_text", "action:buy_images"]
+    assert all(not callback.startswith("buy:") for callback in callbacks)
 
 
 def test_text_package_buttons_are_short_enough_for_mobile():
@@ -248,6 +247,36 @@ def test_combined_buy_keyboard_includes_text_and_image_packages():
     keyboard = build_combined_buy_keyboard(show_first_image_promo=False)
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert "buy:text_start_x0" in callbacks
-    assert "buy:addon_img_20" in callbacks
-    assert "buy:promo_img_10" not in callbacks
+    assert callbacks == ["action:buy_combo", "action:buy_text", "action:buy_images"]
+
+
+def test_combo_card_count_keyboard_is_short_and_staged():
+    keyboard = build_combo_card_count_keyboard()
+    labels = [button.text for row in keyboard.inline_keyboard for button in row]
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert labels == ["10 карточек", "30 карточек", "100 карточек", "⬅️ Назад"]
+    assert callbacks == ["combo_cards:10", "combo_cards:30", "combo_cards:100", "buy_back:root"]
+
+
+def test_combo_photo_count_keyboard_uses_short_final_payment_labels():
+    keyboard = build_combo_photo_count_keyboard(10)
+    labels = [button.text for row in keyboard.inline_keyboard for button in row]
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert labels == [
+        "Без фото — 490 ₽",
+        "3 фото/карточка — 1 990 ₽",
+        "5 фото/карточка — 2 990 ₽",
+        "7 фото/карточка — 3 990 ₽",
+        "⬅️ Назад",
+    ]
+    assert callbacks == [
+        "buy:text_start_x0",
+        "buy:text_start_x3",
+        "buy:text_start_x5",
+        "buy:text_start_x7",
+        "buy_back:combo",
+    ]
+    assert all("Старт" not in label for label in labels)
+    assert all(len(label) <= 28 for label in labels)
