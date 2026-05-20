@@ -118,8 +118,14 @@ def build_main_menu() -> Any:
 
 def _payment_button(package_code: str) -> Any:
     package = PAYMENT_PACKAGES[package_code]
+    if package_code.startswith("addon_text_"):
+        label = f"{package.text_count} карточек за {package.price_rub:,} ₽"
+    elif package_code.startswith("addon_img_") or package_code == "promo_img_10":
+        label = f"{package.images_count} изображений за {package.price_rub:,} ₽"
+    else:
+        label = f"{package.title} — {package.description} за {package.price_rub:,} ₽"
     return _button(
-        f"{package.title} — {package.description} за {package.price_rub:,} ₽".replace(",", " "),
+        label.replace(",", " "),
         f"buy:{package_code}",
     )
 

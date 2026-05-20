@@ -13,6 +13,7 @@ from bot import (
     build_image_count_prompt,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
+    build_text_packages_keyboard,
     build_photo_received_message,
     build_marketplace_keyboard,
     build_main_menu,
@@ -228,6 +229,19 @@ def test_buy_keyboard_contains_main_tariffs_and_addons():
     assert "buy:addon_text_30" in callbacks
     assert "buy:addon_img_50" in callbacks
     assert "buy:promo_img_10" in callbacks
+
+
+def test_text_package_buttons_are_short_enough_for_mobile():
+    keyboard = build_text_packages_keyboard()
+    labels = [row[0].text for row in keyboard.inline_keyboard]
+
+    assert labels == [
+        "10 карточек за 560 ₽",
+        "30 карточек за 1 370 ₽",
+        "100 карточек за 3 440 ₽",
+    ]
+    assert all("—" not in label for label in labels)
+    assert all("Докупить" not in label for label in labels)
 
 
 def test_combined_buy_keyboard_includes_text_and_image_packages():
