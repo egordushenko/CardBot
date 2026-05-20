@@ -7,6 +7,8 @@ from bot import (
     build_combined_buy_keyboard,
     build_generation_messages,
     build_generation_mode_keyboard,
+    build_help_keyboard,
+    build_help_message,
     build_image_count_keyboard,
     build_image_count_prompt,
     build_image_packages_keyboard,
@@ -205,6 +207,16 @@ def test_balance_keyboard_offers_both_package_types():
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
     assert callbacks == ["action:buy_text", "action:buy_images"]
+
+
+def test_help_message_contains_contact_and_offer_link_button():
+    text = build_help_message()
+    keyboard = build_help_keyboard("https://alterega.ru/cardbot/offer")
+
+    assert "alterega@list.ru" in text
+    assert "публичная оферта" in text.lower()
+    assert keyboard.inline_keyboard[0][0].text == "Публичная оферта"
+    assert keyboard.inline_keyboard[0][0].url == "https://alterega.ru/cardbot/offer"
 
 
 def test_buy_keyboard_contains_main_tariffs_and_addons():

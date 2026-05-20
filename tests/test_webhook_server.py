@@ -1,7 +1,7 @@
 import pytest
 
 from payments import robokassa_result_signature
-from webhook_server import handle_robokassa_result
+from webhook_server import build_cardbot_offer_html, handle_cardbot_offer, handle_robokassa_result
 
 
 class FakeRequest:
@@ -11,6 +11,10 @@ class FakeRequest:
 
     async def post(self):
         return self._form
+
+
+class FakeGetRequest:
+    app = {}
 
 
 class FakeDb:
@@ -126,3 +130,22 @@ async def test_robokassa_result_is_idempotent_for_already_paid_payment():
     assert response.text == "OKabc123"
     assert db.mark_calls == 0
     assert bot.messages == []
+
+
+def test_cardbot_offer_html_is_public_and_contains_contacts():
+    html = build_cardbot_offer_html()
+
+    assert "Публичная оферта CardBot" in html
+    assert "alterega@list.ru" in html
+    assert "Telegram-бот CardBot" in html
+    assert "615422982815" in html
+    assert "AEGACut" not in html
+
+
+@pytest.mark.asyncio
+async def test_cardbot_offer_handler_returns_html():
+    response = await handle_cardbot_offer(FakeGetRequest())
+
+    assert response.status == 200
+    assert response.content_type == "text/html"
+    assert "Публичная оферта CardBot" in response.text

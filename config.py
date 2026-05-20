@@ -16,6 +16,7 @@ class Settings:
     site_url: str = "https://alterega.ru"
     cardbot_result_url: str = "https://alterega.ru/api/payment/robokassa/cardbot-result"
     cardbot_bot_url: str = "https://t.me/CaardMakerBot"
+    cardbot_offer_url: str = "https://alterega.ru/cardbot/offer"
     cardbot_webhook_port: int = 8090
     robokassa_login: str = ""
     robokassa_password1: str = ""
@@ -79,6 +80,11 @@ def load_settings(load_dotenv_files: bool = True) -> Settings:
             "CARDBOT_BOT_URL",
             defaults,
             "https://t.me/CaardMakerBot",
+        ),
+        cardbot_offer_url=_env(
+            "CARDBOT_OFFER_URL",
+            defaults,
+            "https://alterega.ru/cardbot/offer",
         ),
         cardbot_webhook_port=int(_env("CARDBOT_WEBHOOK_PORT", defaults, "8090")),
         robokassa_login=_env("ROBOKASSA_LOGIN", defaults),

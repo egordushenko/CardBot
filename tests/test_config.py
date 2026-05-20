@@ -36,6 +36,7 @@ def test_load_settings_keeps_robokassa_values_available_but_optional(monkeypatch
     monkeypatch.setenv("ROBOKASSA_TEST_MODE", "1")
     monkeypatch.setenv("CARDBOT_WEBHOOK_PORT", "8091")
     monkeypatch.setenv("CARDBOT_BOT_URL", "https://t.me/CaardMakerBot")
+    monkeypatch.setenv("CARDBOT_OFFER_URL", "https://alterega.ru/cardbot/offer")
 
     settings = load_settings(load_dotenv_files=False)
 
@@ -45,3 +46,4 @@ def test_load_settings_keeps_robokassa_values_available_but_optional(monkeypatch
     assert settings.robokassa_test_mode is True
     assert settings.cardbot_webhook_port == 8091
     assert settings.cardbot_bot_url == "https://t.me/CaardMakerBot"
+    assert settings.cardbot_offer_url == "https://alterega.ru/cardbot/offer"

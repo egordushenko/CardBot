@@ -427,12 +427,18 @@ def build_help_message() -> str:
         "CardBot генерирует SEO-карточки товаров для Wildberries и Ozon.\n\n"
         "Просто отправьте описание товара одним сообщением. "
         "Бот вернёт название, описание, ключевые слова и характеристики.\n\n"
+        "Контакт для вопросов по оплате и работе сервиса: alterega@list.ru\n"
+        "Условия оказания услуги: публичная оферта.\n\n"
         "/generate — создать карточку\n"
         "/balance — баланс\n"
         "/templates — мои шаблоны\n"
         "/history — последние генерации\n"
         "/buy — пакеты генераций"
     )
+
+
+def build_help_keyboard(offer_url: str) -> Any:
+    return _keyboard([[_url_button("Публичная оферта", offer_url)]])
 
 
 def build_start_message(first_name: str | None) -> str:
@@ -630,7 +636,11 @@ async def _send_payment_link(message: Any, context: Any, user_id: int, package_c
 
 async def help_command(update: Any, context: Any) -> None:
     await _ensure_user(update, context)
-    await update.effective_message.reply_text(build_help_message(), reply_markup=build_main_menu())
+    settings = _get_settings(context)
+    await update.effective_message.reply_text(
+        build_help_message(),
+        reply_markup=build_help_keyboard(settings.cardbot_offer_url),
+    )
 
 
 async def templates_command(update: Any, context: Any) -> None:
@@ -1649,7 +1659,11 @@ async def handle_callback(update: Any, context: Any) -> None:
     elif data == "action:history":
         await history_command(update, context)
     elif data == "action:help":
-        await query.message.reply_text(build_help_message(), reply_markup=build_main_menu())
+        settings = _get_settings(context)
+        await query.message.reply_text(
+            build_help_message(),
+            reply_markup=build_help_keyboard(settings.cardbot_offer_url),
+        )
     elif data == "action:save_template":
         if user_id is None:
             await query.answer()
