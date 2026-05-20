@@ -1,10 +1,14 @@
 from bot import (
     PAYMENT_UNAVAILABLE_MESSAGE,
     build_after_image_generation_keyboard,
+    build_balance_keyboard,
     build_balance_message,
     build_buy_keyboard,
+    build_combined_buy_keyboard,
     build_generation_messages,
+    build_generation_mode_keyboard,
     build_image_count_keyboard,
+    build_image_count_prompt,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
     build_photo_received_message,
@@ -45,31 +49,44 @@ def test_marketplace_keyboard_contains_wb_and_ozon_choices():
     assert keyboard.inline_keyboard[0][1].callback_data == "marketplace:ozon"
 
 
-def test_main_menu_contains_image_generation_entrypoint():
+def test_main_menu_uses_single_generation_entrypoint():
     keyboard = build_main_menu()
 
     flattened = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert "action:images" in flattened
+    assert "action:generate" in flattened
+    assert "action:images" not in flattened
+
+
+def test_generation_mode_keyboard_offers_text_and_combined_modes():
+    keyboard = build_generation_mode_keyboard()
+
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert callbacks == ["mode:text_only", "mode:text_and_images"]
 
 
 def test_image_keyboards_follow_spec_callbacks():
     photo_keyboard = build_image_photo_keyboard(photos_count=2)
-    count_keyboard = build_image_count_keyboard()
+    count_keyboard = build_image_count_keyboard(image_balance=5)
     packages_keyboard = build_image_packages_keyboard()
     after_keyboard = build_after_image_generation_keyboard()
 
     assert photo_keyboard.inline_keyboard[0][0].callback_data == "img_photos_done"
     assert photo_keyboard.inline_keyboard[0][1].callback_data == "img_add_more"
-    assert [button.callback_data for row in count_keyboard.inline_keyboard for button in row] == [
+    count_callbacks = [button.callback_data for row in count_keyboard.inline_keyboard for button in row]
+    assert count_callbacks == [
         "img_count:1",
         "img_count:3",
         "img_count:5",
-        "img_count:7",
-        "img_count:9",
     ]
+    assert "img_count:7" not in count_callbacks
     assert packages_keyboard.inline_keyboard[0][0].callback_data == "img_buy:img_mini"
-    assert after_keyboard.inline_keyboard[0][0].callback_data == "action:images"
+    assert after_keyboard.inline_keyboard[0][0].callback_data == "action:generate"
+
+
+def test_image_count_prompt_shows_current_balance():
+    assert "5" in build_image_count_prompt(image_balance=5)
 
 
 def test_extract_image_file_id_accepts_photo_and_image_document():
@@ -117,9 +134,15 @@ def test_generation_messages_use_hashtags_label_for_ozon():
 def test_build_balance_message_shows_trial_paid_and_image_balance():
     text = build_balance_message(trial_used=1, balance=7, image_balance=4)
 
-    assert f"Бесплатно осталось: {TRIAL_GENERATIONS - 1}" in text
-    assert "Платных генераций: 7" in text
-    assert "Изображений: 4" in text
+    assert str(TRIAL_GENERATIONS - 1 + 7) in text
+    assert "4" in text
+
+
+def test_balance_keyboard_offers_both_package_types():
+    keyboard = build_balance_keyboard()
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert callbacks == ["action:buy_text", "action:buy_images"]
 
 
 def test_buy_keyboard_contains_package_buttons_but_runtime_uses_stub_message():
@@ -128,3 +151,11 @@ def test_buy_keyboard_contains_package_buttons_but_runtime_uses_stub_message():
     assert PAYMENT_UNAVAILABLE_MESSAGE == "💳 Оплата временно недоступна, скоро откроем!"
     assert len(keyboard.inline_keyboard) == 3
     assert keyboard.inline_keyboard[0][0].callback_data == "buy:starter"
+
+
+def test_combined_buy_keyboard_includes_text_and_image_packages():
+    keyboard = build_combined_buy_keyboard()
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert "buy:starter" in callbacks
+    assert "img_buy:img_mini" in callbacks

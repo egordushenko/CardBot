@@ -38,13 +38,13 @@ IMAGE_PACKAGES = {
     "img_standard": {
         "name": "Стандарт",
         "images": 10,
-        "price_rub": 390,
+        "price_rub": 590,
         "description": "10 изображений",
     },
     "img_pro": {
         "name": "Про",
         "images": 25,
-        "price_rub": 790,
+        "price_rub": 1290,
         "description": "25 изображений",
     },
 }

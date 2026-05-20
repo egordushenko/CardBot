@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+from contextlib import suppress
 from io import BytesIO
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,11 @@ GENERATE_PROMPT = (
     "Можно добавить материал, размер, цвет и особенности."
 )
 MARKETPLACE_PROMPT = "Выберите маркетплейс:"
+MODE_PROMPT = (
+    "Что сгенерировать?\n\n"
+    "«Только текст» — название, описание, ключевые слова, характеристики. Тратит 1 текстовую генерацию.\n"
+    "«Текст + изображения» — всё выше плюс изображения для карточки. Тратит 1 текстовую генерацию + N изображений."
+)
 IMAGE_DESCRIPTION_PROMPT = (
     "Опишите товар: название, материал, размер, цвет, ключевые преимущества. "
     "Чем подробнее — тем лучше результат. После этого бот попросит загрузить фото товара."
@@ -26,7 +32,6 @@ IMAGE_PHOTO_PROMPT = (
     "Загрузите от 1 до 5 фото товара с разных ракурсов. "
     "Когда загрузите все — нажмите ✅ Готово"
 )
-IMAGE_COUNT_PROMPT = "Сколько изображений сгенерировать для карточки?"
 
 
 @dataclass(frozen=True)
@@ -62,7 +67,6 @@ def build_main_menu() -> Any:
     return _keyboard(
         [
             [_button("⚡ Сгенерировать карточку", "action:generate")],
-            [_button("🖼 Создать изображения", "action:images")],
             [
                 _button("💳 Купить генерации", "action:buy"),
                 _button("📊 Мой баланс", "action:balance"),
@@ -85,6 +89,24 @@ def build_buy_keyboard() -> Any:
                 )
             ]
             for code, package in PACKAGES.items()
+        ]
+    )
+
+
+def build_combined_buy_keyboard() -> Any:
+    rows: list[list[Any]] = []
+    rows.extend(build_buy_keyboard().inline_keyboard)
+    rows.extend(build_image_packages_keyboard().inline_keyboard)
+    return _keyboard(rows)
+
+
+def build_balance_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("💳 Купить текстовые", "action:buy_text"),
+                _button("💳 Купить изображения", "action:buy_images"),
+            ]
         ]
     )
 
@@ -112,6 +134,36 @@ def build_marketplace_keyboard() -> Any:
             ]
         ]
     )
+
+
+def build_generation_mode_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("📝 Только текст", "mode:text_only"),
+                _button("📝🖼 Текст + изображения", "mode:text_and_images"),
+            ]
+        ]
+    )
+
+
+def build_no_image_balance_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("💳 Купить изображения", "action:buy_images"),
+                _button("📝 Только текст", "mode:text_only"),
+            ]
+        ]
+    )
+
+
+def build_payment_stub_keyboard(data: str) -> Any:
+    if data == "action:buy_images" or data.startswith("img_buy:"):
+        return build_image_packages_keyboard()
+    if data == "action:buy_text" or data.startswith("buy:"):
+        return build_buy_keyboard()
+    return build_combined_buy_keyboard()
 
 
 def build_image_marketplace_keyboard() -> Any:
@@ -169,12 +221,22 @@ def build_image_progress_message(
     )
 
 
-def build_image_count_keyboard() -> Any:
-    return _keyboard(
-        [
-            [_button("1", "img_count:1"), _button("3", "img_count:3"), _button("5", "img_count:5")],
-            [_button("7", "img_count:7"), _button("9", "img_count:9")],
-        ]
+def build_image_count_keyboard(image_balance: int | None = None) -> Any:
+    counts = [1, 3, 5, 7, 9]
+    if image_balance is not None:
+        counts = [count for count in counts if count <= image_balance]
+    if not counts:
+        return _keyboard([[_button("💳 Купить изображения", "action:buy_images")]])
+    rows = [[_button(str(count), f"img_count:{count}") for count in counts[:3]]]
+    if len(counts) > 3:
+        rows.append([_button(str(count), f"img_count:{count}") for count in counts[3:]])
+    return _keyboard(rows)
+
+
+def build_image_count_prompt(image_balance: int) -> str:
+    return (
+        "Сколько изображений сгенерировать?\n\n"
+        f"На вашем балансе: {image_balance} изображений"
     )
 
 
@@ -193,7 +255,7 @@ def build_after_image_generation_keyboard() -> Any:
     return _keyboard(
         [
             [
-                _button("🔄 Сгенерировать ещё", "action:images"),
+                _button("⚡ Сгенерировать ещё", "action:generate"),
                 _button("💳 Пополнить баланс", "action:buy_images"),
             ]
         ]
@@ -217,11 +279,11 @@ def build_balance_message(
     trial_generations: int = 3,
 ) -> str:
     free_left = max(trial_generations - trial_used, 0)
+    text_balance = free_left + balance
     return (
-        "📊 Ваш баланс\n\n"
-        f"Бесплатно осталось: {free_left}\n"
-        f"Платных генераций: {balance}\n"
-        f"Изображений: {image_balance}"
+        "📊 Ваш баланс:\n\n"
+        f"📝 Текстовых генераций: {text_balance}\n"
+        f"🖼 Изображений: {image_balance}"
     )
 
 
@@ -231,7 +293,6 @@ def build_help_message() -> str:
         "Просто отправьте описание товара одним сообщением. "
         "Бот вернёт название, описание, ключевые слова и характеристики.\n\n"
         "/generate — создать карточку\n"
-        "/images — создать изображения карточки\n"
         "/balance — баланс\n"
         "/history — последние генерации\n"
         "/buy — пакеты генераций"
@@ -257,12 +318,13 @@ def _get_settings(context: Any) -> Settings:
 
 def _clear_image_session(context: Any) -> None:
     for key in (
+        "mode",
+        "generation_step",
+        "marketplace",
         "img_marketplace",
         "img_description",
         "img_photos",
         "img_count",
-        "img_waiting_description",
-        "img_waiting_photos",
         "img_media_groups",
     ):
         context.user_data.pop(key, None)
@@ -289,7 +351,8 @@ async def start(update: Any, context: Any) -> None:
 
 async def generate_command(update: Any, context: Any) -> None:
     await _ensure_user(update, context)
-    context.user_data.pop("marketplace", None)
+    _clear_image_session(context)
+    context.user_data["generation_step"] = "marketplace"
     await update.effective_message.reply_text(
         MARKETPLACE_PROMPT,
         reply_markup=build_marketplace_keyboard(),
@@ -297,10 +360,7 @@ async def generate_command(update: Any, context: Any) -> None:
 
 
 async def images_command(update: Any, context: Any) -> None:
-    user_id = await _ensure_user(update, context)
-    if user_id is None:
-        return
-    await _start_image_flow(update.effective_message, context, user_id)
+    await generate_command(update, context)
 
 
 async def balance_command(update: Any, context: Any) -> None:
@@ -315,7 +375,8 @@ async def balance_command(update: Any, context: Any) -> None:
             balance.balance,
             image_balance=balance.image_balance,
             trial_generations=settings.trial_generations,
-        )
+        ),
+        reply_markup=build_balance_keyboard(),
     )
 
 
@@ -323,7 +384,7 @@ async def buy_command(update: Any, context: Any) -> None:
     await _ensure_user(update, context)
     await update.effective_message.reply_text(
         PAYMENT_UNAVAILABLE_MESSAGE,
-        reply_markup=build_buy_keyboard(),
+        reply_markup=build_combined_buy_keyboard(),
     )
 
 
@@ -357,22 +418,17 @@ async def history_command(update: Any, context: Any) -> None:
 
 async def _start_image_flow(message: Any, context: Any, user_id: int) -> None:
     _clear_image_session(context)
-    image_balance = await _get_db(context).get_image_balance(user_id)
-    if image_balance <= 0:
-        await message.reply_text(
-            "Баланс изображений пуст. Выберите пакет изображений:",
-            reply_markup=build_image_packages_keyboard(),
-        )
-        return
-
+    context.user_data["generation_step"] = "marketplace"
     await message.reply_text(
         MARKETPLACE_PROMPT,
-        reply_markup=build_image_marketplace_keyboard(),
+        reply_markup=build_marketplace_keyboard(),
     )
 
 
 async def _handle_image_description(update: Any, context: Any, user_input: str) -> bool:
-    if not context.user_data.get("img_waiting_description"):
+    if context.user_data.get("generation_step") != "description":
+        return False
+    if context.user_data.get("mode") != "text_and_images":
         return False
 
     if len(user_input) < 3:
@@ -382,8 +438,7 @@ async def _handle_image_description(update: Any, context: Any, user_input: str) 
         return True
 
     context.user_data["img_description"] = user_input
-    context.user_data["img_waiting_description"] = False
-    context.user_data["img_waiting_photos"] = True
+    context.user_data["generation_step"] = "photos"
     context.user_data["img_photos"] = []
     await update.effective_message.reply_text(IMAGE_PHOTO_PROMPT)
     return True
@@ -399,7 +454,7 @@ async def handle_document(update: Any, context: Any) -> None:
 
 async def _handle_image_upload(update: Any, context: Any) -> None:
     await _ensure_user(update, context)
-    if not context.user_data.get("img_waiting_photos"):
+    if context.user_data.get("generation_step") != "photos":
         return
 
     message = update.effective_message
@@ -484,7 +539,7 @@ async def _generate_images_for_user(
     message = update.callback_query.message
     settings = _get_settings(context)
     db = _get_db(context)
-    marketplace = context.user_data.get("img_marketplace")
+    marketplace = context.user_data.get("marketplace") or context.user_data.get("img_marketplace")
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
 
@@ -537,63 +592,13 @@ async def _generate_images_for_user(
         )
         return
 
-    status_message = await message.reply_text(build_image_progress_message(images_count, 0, 0))
-    generated: list[dict[str, Any]] = []
-    tasks = [
-        _generate_single_image_result(
-            context=context,
-            concept=concept,
-            photo_file_ids=photo_file_ids,
-            settings=settings,
-        )
-        for concept in concepts
-    ]
-    generated_count = 0
-    sent_count = 0
-    next_to_send = 1
-    ready: dict[int, dict[str, Any]] = {}
-    failed: set[int] = set()
-    stop_progress = asyncio.Event()
-    progress_task = asyncio.create_task(
-        _image_generation_heartbeat(
-            status_message=status_message,
-            total_count=images_count,
-            get_counts=lambda: (generated_count, sent_count),
-            stop_event=stop_progress,
-        )
+    generated = await _generate_and_send_image_concepts(
+        message=message,
+        context=context,
+        concepts=concepts,
+        photo_file_ids=photo_file_ids,
+        settings=settings,
     )
-
-    try:
-        for task in asyncio.as_completed(tasks):
-            result = await task
-            generated_count += 1
-            image_index = int(result["image_index"])
-
-            if result.get("ok"):
-                ready[image_index] = result
-            else:
-                failed.add(image_index)
-                logging.warning("Image %s generation failed: %s", image_index, result.get("error"))
-
-            while next_to_send in ready or next_to_send in failed:
-                if next_to_send in failed:
-                    await message.reply_text(
-                        f"Изображение {next_to_send}/{images_count} не удалось сгенерировать."
-                    )
-                    next_to_send += 1
-                    continue
-
-                image_record = await _send_generated_image_result(message, ready.pop(next_to_send))
-                generated.append(image_record)
-                sent_count += 1
-                await _safe_edit_message_text(
-                    status_message,
-                    build_image_progress_message(images_count, generated_count, sent_count),
-                )
-                next_to_send += 1
-    finally:
-        stop_progress.set()
-        await progress_task
 
     try:
         image_balance = await db.save_generated_images_and_consume_balance(
@@ -617,6 +622,169 @@ async def _generate_images_for_user(
     _clear_image_session(context)
 
 
+async def _generate_text_and_images_for_user(
+    update: Any,
+    context: Any,
+    user_id: int,
+    images_count: int,
+) -> None:
+    message = update.callback_query.message
+    settings = _get_settings(context)
+    db = _get_db(context)
+    marketplace = context.user_data.get("marketplace")
+    product_description = context.user_data.get("img_description")
+    photo_file_ids = list(context.user_data.get("img_photos") or [])
+
+    if not marketplace or not product_description or not photo_file_ids:
+        await message.reply_text(
+            "Сессия генерации устарела. Начните заново.",
+            reply_markup=build_after_image_generation_keyboard(),
+        )
+        _clear_image_session(context)
+        return
+
+    usage_mode = await db.get_usage_mode(user_id, trial_generations=settings.trial_generations)
+    if usage_mode is UsageMode.BLOCKED:
+        await message.reply_text(
+            "Бесплатные генерации закончились.",
+            reply_markup=build_buy_keyboard(),
+        )
+        return
+
+    current_image_balance = await db.get_image_balance(user_id)
+    if current_image_balance < images_count:
+        await message.reply_text(
+            f"Не хватает {images_count - current_image_balance} изображений на балансе.",
+            reply_markup=build_image_packages_keyboard(),
+        )
+        return
+
+    session_id = await db.create_image_session(
+        user_id=user_id,
+        product_description=product_description,
+        marketplace=marketplace,
+        photos_count=len(photo_file_ids),
+        images_requested=images_count,
+    )
+
+    await message.reply_text("⏳ Генерирую карточку...")
+    card_task = asyncio.create_task(
+        generate_card(
+            product_description,
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_model,
+            site_url=settings.site_url,
+            marketplace=marketplace,
+        )
+    )
+    concepts_task = asyncio.create_task(
+        generate_image_prompts(
+            product_description=product_description,
+            marketplace=marketplace,
+            photos_count=len(photo_file_ids),
+            images_count=images_count,
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_model,
+            site_url=settings.site_url,
+        )
+    )
+
+    try:
+        card = await card_task
+    except Exception:
+        await _cancel_task(concepts_task)
+        await db.set_image_session_status(session_id, "failed")
+        logging.exception("LLM generation failed")
+        await message.reply_text(
+            "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
+        )
+        return
+
+    try:
+        await db.save_successful_generation(
+            user_id,
+            product_description,
+            card,
+            usage_mode,
+            trial_generations=settings.trial_generations,
+        )
+    except Exception:
+        await _cancel_task(concepts_task)
+        await db.set_image_session_status(session_id, "failed")
+        logging.exception("Failed to save generation")
+        await message.reply_text(
+            "Карточка создана, но не удалось сохранить историю. Баланс изображений не списан."
+        )
+        return
+
+    await message.reply_text("✅ Текстовая карточка готова:")
+    for text in build_generation_messages(card):
+        await message.reply_text(text)
+    await message.reply_text("🖼 Изображения генерируются... подождите ~1-2 минуты")
+
+    try:
+        concepts = await concepts_task
+        await db.update_image_session_prompts(
+            session_id,
+            _serialize_image_concepts(concepts),
+            status="generating",
+        )
+    except Exception:
+        logging.exception("Image prompt generation failed")
+        await db.set_image_session_status(session_id, "failed")
+        balance = await db.get_balance(user_id)
+        text_left = max(settings.trial_generations - balance.trial_used, 0) + balance.balance
+        await message.reply_text(
+            "Не удалось разработать концепцию изображений. Списана только текстовая генерация.\n"
+            f"Остаток: {text_left} текстовых / {balance.image_balance} изображений",
+            reply_markup=build_after_image_generation_keyboard(),
+        )
+        _clear_image_session(context)
+        return
+
+    generated = await _generate_and_send_image_concepts(
+        message=message,
+        context=context,
+        concepts=concepts,
+        photo_file_ids=photo_file_ids,
+        settings=settings,
+    )
+
+    try:
+        image_balance = await db.save_generated_images_and_consume_balance(
+            session_id=session_id,
+            user_id=user_id,
+            generated_images=generated,
+        )
+    except Exception:
+        logging.exception("Failed to save generated images")
+        await db.set_image_session_status(session_id, "failed")
+        await message.reply_text(
+            "Изображения отправлены, но не удалось сохранить историю. Баланс изображений не списан."
+        )
+        return
+
+    balance = await db.get_balance(user_id)
+    text_left = max(settings.trial_generations - balance.trial_used, 0) + balance.balance
+    await message.reply_text(
+        f"✅ Все изображения готовы!\n"
+        f"Потрачено: 1 текстовая генерация + {len(generated)} изображений\n"
+        f"Остаток: {text_left} текстовых / {image_balance} изображений",
+        reply_markup=build_after_image_generation_keyboard(),
+    )
+    _clear_image_session(context)
+
+
+async def _cancel_task(task: asyncio.Task[Any]) -> None:
+    if task.done():
+        with suppress(Exception):
+            task.result()
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
 def _serialize_image_concepts(concepts: list[ImageConcept]) -> str:
     import json
 
@@ -634,6 +802,75 @@ def _serialize_image_concepts(concepts: list[ImageConcept]) -> str:
         },
         ensure_ascii=False,
     )
+
+
+async def _generate_and_send_image_concepts(
+    message: Any,
+    context: Any,
+    concepts: list[ImageConcept],
+    photo_file_ids: list[str],
+    settings: Settings,
+) -> list[dict[str, Any]]:
+    total_count = len(concepts)
+    status_message = await message.reply_text(build_image_progress_message(total_count, 0, 0))
+    generated: list[dict[str, Any]] = []
+    tasks = [
+        _generate_single_image_result(
+            context=context,
+            concept=concept,
+            photo_file_ids=photo_file_ids,
+            settings=settings,
+        )
+        for concept in concepts
+    ]
+    generated_count = 0
+    sent_count = 0
+    next_to_send = 1
+    ready: dict[int, dict[str, Any]] = {}
+    failed: set[int] = set()
+    stop_progress = asyncio.Event()
+    progress_task = asyncio.create_task(
+        _image_generation_heartbeat(
+            status_message=status_message,
+            total_count=total_count,
+            get_counts=lambda: (generated_count, sent_count),
+            stop_event=stop_progress,
+        )
+    )
+
+    try:
+        for task in asyncio.as_completed(tasks):
+            result = await task
+            generated_count += 1
+            image_index = int(result["image_index"])
+
+            if result.get("ok"):
+                ready[image_index] = result
+            else:
+                failed.add(image_index)
+                logging.warning("Image %s generation failed: %s", image_index, result.get("error"))
+
+            while next_to_send in ready or next_to_send in failed:
+                if next_to_send in failed:
+                    await message.reply_text(
+                        f"Изображение {next_to_send}/{total_count} не удалось сгенерировать."
+                    )
+                    next_to_send += 1
+                    continue
+
+                image_record = await _send_generated_image_result(message, ready.pop(next_to_send))
+                generated.append(image_record)
+                sent_count += 1
+                await _safe_edit_message_text(
+                    status_message,
+                    build_image_progress_message(total_count, generated_count, sent_count),
+                )
+                next_to_send += 1
+    finally:
+        stop_progress.set()
+        await progress_task
+
+    return generated
 
 
 async def _image_generation_heartbeat(
@@ -717,6 +954,71 @@ async def _send_generated_image_result(message: Any, result: dict[str, Any]) -> 
     }
 
 
+async def _generate_and_send_text_card(
+    message: Any,
+    context: Any,
+    user_id: int,
+    user_input: str,
+    marketplace: str,
+    *,
+    final_markup: Any | None = None,
+    intro_text: str = "⏳ Генерирую карточку...",
+) -> CardGeneration | None:
+    settings = _get_settings(context)
+    db = _get_db(context)
+    usage_mode = await db.get_usage_mode(
+        user_id, trial_generations=settings.trial_generations
+    )
+    if usage_mode is UsageMode.BLOCKED:
+        await message.reply_text(
+            "Бесплатные генерации закончились.",
+            reply_markup=build_buy_keyboard(),
+        )
+        return None
+
+    if intro_text:
+        await message.reply_text(intro_text)
+
+    try:
+        card = await generate_card(
+            user_input,
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_model,
+            site_url=settings.site_url,
+            marketplace=marketplace,
+        )
+    except Exception:
+        logging.exception("LLM generation failed")
+        await message.reply_text(
+            "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
+        )
+        return None
+
+    try:
+        await db.save_successful_generation(
+            user_id,
+            user_input,
+            card,
+            usage_mode,
+            trial_generations=settings.trial_generations,
+        )
+    except Exception:
+        logging.exception("Failed to save generation")
+        await message.reply_text(
+            "Карточка создана, но не удалось сохранить историю. Попробуйте позже."
+        )
+        return None
+
+    messages = build_generation_messages(card)
+    for text in messages[:-1]:
+        await message.reply_text(text)
+    await message.reply_text(
+        messages[-1],
+        reply_markup=final_markup,
+    )
+    return card
+
+
 async def handle_text(update: Any, context: Any) -> None:
     user_id = await _ensure_user(update, context)
     if user_id is None or update.effective_message is None:
@@ -724,6 +1026,13 @@ async def handle_text(update: Any, context: Any) -> None:
 
     user_input = (update.effective_message.text or "").strip()
     if await _handle_image_description(update, context, user_input):
+        return
+
+    if context.user_data.get("generation_step") == "mode":
+        await update.effective_message.reply_text(
+            MODE_PROMPT,
+            reply_markup=build_generation_mode_keyboard(),
+        )
         return
 
     if len(user_input) < 3:
@@ -740,58 +1049,15 @@ async def handle_text(update: Any, context: Any) -> None:
         )
         return
 
-    settings = _get_settings(context)
-    db = _get_db(context)
-    usage_mode = await db.get_usage_mode(
-        user_id, trial_generations=settings.trial_generations
+    await _generate_and_send_text_card(
+        update.effective_message,
+        context,
+        user_id,
+        user_input,
+        marketplace,
+        final_markup=build_after_generation_keyboard(),
     )
-    if usage_mode is UsageMode.BLOCKED:
-        await update.effective_message.reply_text(
-            "Бесплатные генерации закончились.",
-            reply_markup=build_buy_keyboard(),
-        )
-        return
-
-    await update.effective_message.reply_text("⏳ Генерирую карточку...")
-
-    try:
-        card = await generate_card(
-            user_input,
-            api_key=settings.openrouter_api_key,
-            model=settings.openrouter_model,
-            site_url=settings.site_url,
-            marketplace=marketplace,
-        )
-    except Exception:
-        logging.exception("LLM generation failed")
-        await update.effective_message.reply_text(
-            "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
-        )
-        return
-
-    try:
-        await db.save_successful_generation(
-            user_id,
-            user_input,
-            card,
-            usage_mode,
-            trial_generations=settings.trial_generations,
-        )
-    except Exception:
-        logging.exception("Failed to save generation")
-        await update.effective_message.reply_text(
-            "Карточка создана, но не удалось сохранить историю. Попробуйте позже."
-        )
-        return
-
-    messages = build_generation_messages(card)
-    for text in messages[:-1]:
-        await update.effective_message.reply_text(text)
-    await update.effective_message.reply_text(
-        messages[-1],
-        reply_markup=build_after_generation_keyboard(),
-    )
-    context.user_data.pop("marketplace", None)
+    _clear_image_session(context)
 
 
 async def handle_callback(update: Any, context: Any) -> None:
@@ -801,7 +1067,8 @@ async def handle_callback(update: Any, context: Any) -> None:
 
     data = query.data or ""
     if data == "action:generate":
-        context.user_data.pop("marketplace", None)
+        _clear_image_session(context)
+        context.user_data["generation_step"] = "marketplace"
         await query.message.reply_text(
             MARKETPLACE_PROMPT,
             reply_markup=build_marketplace_keyboard(),
@@ -819,17 +1086,51 @@ async def handle_callback(update: Any, context: Any) -> None:
                 reply_markup=build_marketplace_keyboard(),
             )
             return
+        context.user_data["generation_step"] = "mode"
+        await query.message.reply_text(
+            MODE_PROMPT,
+            reply_markup=build_generation_mode_keyboard(),
+        )
+    elif data.startswith("mode:"):
+        mode = data.split(":", 1)[1]
+        if mode not in {"text_only", "text_and_images"}:
+            await query.message.reply_text(
+                MODE_PROMPT,
+                reply_markup=build_generation_mode_keyboard(),
+            )
+            return
+        context.user_data["mode"] = mode
+        if mode == "text_and_images":
+            user = update.effective_user
+            if user is None:
+                return
+            image_balance = await _get_db(context).get_image_balance(user.id)
+            if image_balance <= 0:
+                await query.message.reply_text(
+                    "У вас нет изображений на балансе.\n"
+                    "Купите пакет изображений чтобы использовать этот режим.",
+                    reply_markup=build_no_image_balance_keyboard(),
+                )
+                return
+            context.user_data["generation_step"] = "description"
+            await query.message.reply_text(IMAGE_DESCRIPTION_PROMPT)
+            return
+
+        context.user_data["generation_step"] = "description"
         await query.message.reply_text(GENERATE_PROMPT)
     elif data.startswith("img_marketplace:"):
         try:
-            context.user_data["img_marketplace"] = normalize_marketplace(data.split(":", 1)[1])
+            marketplace = normalize_marketplace(data.split(":", 1)[1])
+            context.user_data["marketplace"] = marketplace
+            context.user_data["img_marketplace"] = marketplace
         except Exception:
             await query.message.reply_text(
                 MARKETPLACE_PROMPT,
                 reply_markup=build_image_marketplace_keyboard(),
             )
             return
-        context.user_data["img_waiting_description"] = True
+        context.user_data["mode"] = "text_and_images"
+        context.user_data["generation_step"] = "description"
         await query.message.reply_text(IMAGE_DESCRIPTION_PROMPT)
     elif data == "img_add_more":
         await query.message.reply_text(IMAGE_PHOTO_PROMPT)
@@ -838,10 +1139,12 @@ async def handle_callback(update: Any, context: Any) -> None:
         if not photos:
             await query.message.reply_text(IMAGE_PHOTO_PROMPT)
             return
-        context.user_data["img_waiting_photos"] = False
+        context.user_data["generation_step"] = "count"
+        user = update.effective_user
+        image_balance = await _get_db(context).get_image_balance(user.id) if user is not None else 0
         await query.message.reply_text(
-            IMAGE_COUNT_PROMPT,
-            reply_markup=build_image_count_keyboard(),
+            build_image_count_prompt(image_balance),
+            reply_markup=build_image_count_keyboard(image_balance=image_balance),
         )
     elif data.startswith("img_count:"):
         user = update.effective_user
@@ -850,29 +1153,41 @@ async def handle_callback(update: Any, context: Any) -> None:
         try:
             images_count = int(data.split(":", 1)[1])
         except ValueError:
+            image_balance = await _get_db(context).get_image_balance(user.id)
             await query.message.reply_text(
-                IMAGE_COUNT_PROMPT,
-                reply_markup=build_image_count_keyboard(),
+                build_image_count_prompt(image_balance),
+                reply_markup=build_image_count_keyboard(image_balance=image_balance),
             )
             return
         if images_count < 1 or images_count > 9:
+            image_balance = await _get_db(context).get_image_balance(user.id)
             await query.message.reply_text(
-                IMAGE_COUNT_PROMPT,
-                reply_markup=build_image_count_keyboard(),
+                build_image_count_prompt(image_balance),
+                reply_markup=build_image_count_keyboard(image_balance=image_balance),
+            )
+            return
+        image_balance = await _get_db(context).get_image_balance(user.id)
+        if images_count > image_balance:
+            await query.message.reply_text(
+                build_image_count_prompt(image_balance),
+                reply_markup=build_image_count_keyboard(image_balance=image_balance),
             )
             return
         context.user_data["img_count"] = images_count
-        await _generate_images_for_user(update, context, user.id, images_count)
+        if context.user_data.get("mode") == "text_and_images":
+            await _generate_text_and_images_for_user(update, context, user.id, images_count)
+        else:
+            await _generate_images_for_user(update, context, user.id, images_count)
     elif data == "action:balance":
         await balance_command(update, context)
     elif data == "action:history":
         await history_command(update, context)
     elif data == "action:help":
         await query.message.reply_text(build_help_message(), reply_markup=build_main_menu())
-    elif data in {"action:buy", "action:buy_images"} or data.startswith(("buy:", "img_buy:")):
+    elif data in {"action:buy", "action:buy_text", "action:buy_images"} or data.startswith(("buy:", "img_buy:")):
         await query.message.reply_text(
             PAYMENT_UNAVAILABLE_MESSAGE,
-            reply_markup=build_image_packages_keyboard() if data.startswith("img_buy:") or data == "action:buy_images" else build_buy_keyboard(),
+            reply_markup=build_payment_stub_keyboard(data),
         )
 
 
@@ -884,7 +1199,6 @@ async def post_init(application: Any) -> None:
         [
             ("start", "Главное меню"),
             ("generate", "Сгенерировать карточку"),
-            ("images", "Создать изображения карточки"),
             ("balance", "Показать баланс"),
             ("history", "Последние 5 генераций"),
             ("buy", "Купить генерации"),

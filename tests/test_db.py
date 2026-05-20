@@ -53,7 +53,7 @@ def test_image_package_rows_match_image_tariffs():
 
     assert rows == [
         ("img_mini", "Мини", 5, 199, "5 изображений"),
-        ("img_standard", "Стандарт", 10, 390, "10 изображений"),
-        ("img_pro", "Про", 25, 790, "25 изображений"),
+        ("img_standard", "Стандарт", 10, 590, "10 изображений"),
+        ("img_pro", "Про", 25, 1290, "25 изображений"),
     ]
     assert IMAGE_PACKAGES["img_pro"]["images"] == 25
