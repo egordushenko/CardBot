@@ -139,7 +139,29 @@ def test_cardbot_offer_html_is_public_and_contains_contacts():
     assert "alterega@list.ru" in html
     assert "Telegram-бот CardBot" in html
     assert "615422982815" in html
+    assert "+244 931 150 124" in html
+    assert html.count("<h2") >= 10
+    for heading in [
+        "1. Общие положения",
+        "2. Предмет Договора",
+        "3. Права и обязанности Сторон",
+        "4. Цена и порядок расчетов",
+        "5. Порядок оказания цифровой услуги и возвраты",
+        "6. Конфиденциальность и безопасность",
+        "7. Форс-мажор",
+        "8. Ответственность Сторон",
+        "9. Срок действия настоящей Оферты",
+        "10. Дополнительные условия",
+        "Реквизиты Продавца",
+    ]:
+        assert heading in html
+    assert "@CaardMakerBot" in html
+    assert "Robokassa" in html
+    assert "Wildberries" in html
+    assert "Ozon" in html
     assert "AEGACut" not in html
+    assert "AEGA Panel" not in html
+    assert "AEGASync" not in html
 
 
 @pytest.mark.asyncio
