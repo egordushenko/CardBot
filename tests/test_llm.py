@@ -80,6 +80,38 @@ def test_parse_generation_payload_accepts_ozon_hashtags_field():
     assert result.keywords == "#tag #other"
 
 
+def test_parse_generation_payload_applies_ozon_marketplace_rules():
+    long_title = "Супер товар ™ акция скидка " + "оченьдлинноесловодлиннеедвадцатисемисимволов " * 8
+    payload = (
+        '{"title":'
+        + repr(long_title).replace("'", '"')
+        + ',"description":"Купить сейчас, скидка 30%. Подробнее https://example.com и @seller",'
+        + '"hashtags":"декор, #декор_для_дома #декор_для_дома #оченьдлинныйхэштегкоторыйточнодлиннеетридцати",'
+        + '"characteristics":"A: B"}'
+    )
+
+    result = parse_generation_payload(payload, marketplace="ozon")
+
+    assert len(result.title) <= 200
+    assert all(len(word) <= 27 for word in result.title.split())
+    assert "™" not in result.title
+    assert "акция" not in result.title.lower()
+    assert "скидка" not in result.description.lower()
+    assert "https://" not in result.description
+    assert "@seller" not in result.description
+    assert result.keywords == "#декор #декор_для_дома"
+
+
+def test_parse_generation_payload_applies_wb_title_limit():
+    result = parse_generation_payload(
+        '{"title":"Очень длинное название товара с цветом и размером для проверки ограничения Wildberries",'
+        '"description":"Описание","keywords":"ключ 1, ключ 2","characteristics":"A: B"}',
+        marketplace="wb",
+    )
+
+    assert len(result.title) <= 60
+
+
 def test_select_system_prompt_uses_marketplace_specific_rules():
     wb_prompt = select_system_prompt("wb")
     ozon_prompt = select_system_prompt("ozon")
@@ -88,7 +120,8 @@ def test_select_system_prompt_uses_marketplace_specific_rules():
     assert "не указывай пол и цвет" in wb_prompt
     assert "Ozon" in ozon_prompt
     assert "hashtags" in ozon_prompt
-    assert "600-900" in ozon_prompt
+    assert "200 символов" in ozon_prompt
+    assert "30 хештегов" in ozon_prompt
 
 
 def test_build_user_prompt_includes_marketplace_name():

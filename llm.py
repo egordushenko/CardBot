@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from marketplace_rules import sanitize_description, sanitize_ozon_hashtags, sanitize_title
 from prompts import DIRECTOR_SYSTEM_PROMPT, OZON_SYSTEM_PROMPT, WB_SYSTEM_PROMPT
 
 
@@ -138,9 +139,13 @@ def parse_generation_payload(
             raise LLMResponseError(f"LLM response is missing required field: {field}")
 
     return CardGeneration(
-        title=str(data["title"]).strip(),
-        description=str(data["description"]).strip(),
-        keywords=str(data[search_field]).strip(),
+        title=sanitize_title(str(data["title"]), normalized_marketplace),
+        description=sanitize_description(str(data["description"]), normalized_marketplace),
+        keywords=(
+            sanitize_ozon_hashtags(str(data[search_field]))
+            if normalized_marketplace == "ozon"
+            else str(data[search_field]).strip()
+        ),
         characteristics=str(data["characteristics"]).strip(),
         tokens_used=tokens_used,
         marketplace=normalized_marketplace,
