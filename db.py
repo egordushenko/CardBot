@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -117,6 +118,18 @@ CREATE TABLE IF NOT EXISTS generated_images (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS templates (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES users(id),
+    name TEXT NOT NULL,
+    marketplace TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    description TEXT NOT NULL,
+    photo_file_ids TEXT,
+    images_count INT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_generations_user_created
     ON generations(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_user_created
@@ -125,6 +138,8 @@ CREATE INDEX IF NOT EXISTS idx_image_sessions_user_created
     ON image_sessions(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generated_images_session
     ON generated_images(session_id, image_index);
+CREATE INDEX IF NOT EXISTS idx_templates_user_created
+    ON templates(user_id, created_at DESC);
 """
 
 
@@ -344,6 +359,120 @@ class Database:
                 limit,
             )
         return [dict(row) for row in rows]
+
+    async def save_template(
+        self,
+        user_id: int,
+        name: str,
+        marketplace: str,
+        mode: str,
+        description: str,
+        photo_file_ids: list[str] | str | None,
+        images_count: int | None,
+    ) -> int:
+        if isinstance(photo_file_ids, list):
+            photo_file_ids = json.dumps(photo_file_ids, ensure_ascii=False)
+        normalized_name = (name or "").strip()[:50] or "Шаблон"
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            return int(
+                await conn.fetchval(
+                    """
+                    INSERT INTO templates(
+                        user_id,
+                        name,
+                        marketplace,
+                        mode,
+                        description,
+                        photo_file_ids,
+                        images_count
+                    )
+                    VALUES($1, $2, $3, $4, $5, $6, $7)
+                    RETURNING id
+                    """,
+                    user_id,
+                    normalized_name,
+                    marketplace,
+                    mode,
+                    description,
+                    photo_file_ids,
+                    images_count,
+                )
+            )
+
+    async def get_templates_count(self, user_id: int) -> int:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            return int(
+                await conn.fetchval(
+                    "SELECT COUNT(*) FROM templates WHERE user_id = $1",
+                    user_id,
+                )
+                or 0
+            )
+
+    async def get_templates(
+        self,
+        user_id: int,
+        offset: int = 0,
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    id,
+                    name,
+                    marketplace,
+                    mode,
+                    description,
+                    photo_file_ids,
+                    images_count,
+                    created_at
+                FROM templates
+                WHERE user_id = $1
+                ORDER BY created_at DESC
+                OFFSET $2
+                LIMIT $3
+                """,
+                user_id,
+                max(offset, 0),
+                max(limit, 1),
+            )
+        return [dict(row) for row in rows]
+
+    async def get_template(self, template_id: int, user_id: int) -> dict[str, Any] | None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    id,
+                    user_id,
+                    name,
+                    marketplace,
+                    mode,
+                    description,
+                    photo_file_ids,
+                    images_count,
+                    created_at
+                FROM templates
+                WHERE id = $1 AND user_id = $2
+                """,
+                template_id,
+                user_id,
+            )
+        return dict(row) if row else None
+
+    async def delete_template(self, template_id: int, user_id: int) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM templates WHERE id = $1 AND user_id = $2",
+                template_id,
+                user_id,
+            )
 
     async def create_image_session(
         self,

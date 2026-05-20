@@ -1,5 +1,6 @@
 from bot import (
     PAYMENT_UNAVAILABLE_MESSAGE,
+    build_after_generation_keyboard,
     build_after_image_generation_keyboard,
     build_balance_keyboard,
     build_balance_message,
@@ -14,8 +15,15 @@ from bot import (
     build_photo_received_message,
     build_marketplace_keyboard,
     build_main_menu,
+    build_repeat_photos_keyboard,
+    build_template_delete_confirm_keyboard,
+    build_template_details_keyboard,
+    build_templates_keyboard,
+    combine_repeat_description,
     extract_image_file_id,
+    format_template_description_preview,
     is_supported_image_document,
+    truncate_template_name,
 )
 from db import TRIAL_GENERATIONS
 from llm import CardGeneration
@@ -55,7 +63,62 @@ def test_main_menu_uses_single_generation_entrypoint():
     flattened = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
     assert "action:generate" in flattened
+    assert "action:templates" in flattened
     assert "action:images" not in flattened
+
+
+def test_after_generation_keyboard_offers_template_and_repeat_actions():
+    text_keyboard = build_after_generation_keyboard()
+    image_keyboard = build_after_image_generation_keyboard()
+
+    text_callbacks = [button.callback_data for row in text_keyboard.inline_keyboard for button in row]
+    image_callbacks = [button.callback_data for row in image_keyboard.inline_keyboard for button in row]
+
+    assert text_callbacks == [
+        "action:generate",
+        "action:save_template",
+        "action:repeat_edit",
+        "action:buy",
+    ]
+    assert image_callbacks == [
+        "action:generate",
+        "action:save_template",
+        "action:repeat_edit",
+        "action:buy_images",
+    ]
+
+
+def test_template_keyboards_use_owner_safe_callbacks():
+    templates = [
+        {"id": 11, "name": "Lamp", "marketplace": "wb", "mode": "text_and_images"},
+        {"id": 12, "name": "Mat", "marketplace": "ozon", "mode": "text_only"},
+    ]
+
+    list_keyboard = build_templates_keyboard(templates, page=0, total=8)
+    details_keyboard = build_template_details_keyboard(11)
+    delete_keyboard = build_template_delete_confirm_keyboard(11)
+    repeat_keyboard = build_repeat_photos_keyboard()
+
+    list_callbacks = [button.callback_data for row in list_keyboard.inline_keyboard for button in row]
+    details_callbacks = [button.callback_data for row in details_keyboard.inline_keyboard for button in row]
+    delete_callbacks = [button.callback_data for row in delete_keyboard.inline_keyboard for button in row]
+    repeat_callbacks = [button.callback_data for row in repeat_keyboard.inline_keyboard for button in row]
+
+    assert "template_use:11" in list_callbacks
+    assert "template_use:12" in list_callbacks
+    assert "templates_page:1" in list_callbacks
+    assert "templates_delete:0" in list_callbacks
+    assert details_callbacks == ["template_run:11", "template_edit:11", "template_delete:11"]
+    assert delete_callbacks == ["template_delete_confirm:11", "template_delete_cancel:11"]
+    assert repeat_callbacks == ["repeat:same_photos", "repeat:new_photos"]
+
+
+def test_template_helpers_truncate_and_combine_description():
+    long_name = "x" * 80
+
+    assert truncate_template_name(long_name) == "x" * 50
+    assert combine_repeat_description("old", "new color") == "old\n\nИзменения: new color"
+    assert format_template_description_preview("a" * 130, limit=20) == ("a" * 20) + "..."
 
 
 def test_generation_mode_keyboard_offers_text_and_combined_modes():

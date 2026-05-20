@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+import json
 from contextlib import suppress
 from io import BytesIO
 from dataclasses import dataclass
@@ -32,6 +33,18 @@ IMAGE_PHOTO_PROMPT = (
     "Загрузите от 1 до 5 фото товара с разных ракурсов. "
     "Когда загрузите все — нажмите ✅ Готово"
 )
+TEMPLATE_NAME_PROMPT = (
+    "Введите название шаблона.\n"
+    "Например: \"Лампа спиральная\" или \"Коврик ЭВА\""
+)
+REPEAT_CHANGES_PROMPT = (
+    "Напишите только что изменилось.\n"
+    "Например: \"цвет чёрный\" или \"размер XL, вес 2 кг\"\n\n"
+    "Всё остальное останется как в предыдущей карточке."
+)
+REPEAT_PHOTOS_PROMPT = "Использовать те же фото или загрузить новые?"
+TEMPLATES_PAGE_SIZE = 5
+TEMPLATES_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -72,7 +85,10 @@ def build_main_menu() -> Any:
                 _button("📊 Мой баланс", "action:balance"),
             ],
             [
+                _button("📋 Мои шаблоны", "action:templates"),
                 _button("📋 История", "action:history"),
+            ],
+            [
                 _button("❓ Помощь", "action:help"),
             ],
         ]
@@ -245,8 +261,12 @@ def build_after_generation_keyboard() -> Any:
         [
             [
                 _button("🔄 Сгенерировать ещё", "action:generate"),
-                _button("💳 Купить генерации", "action:buy"),
-            ]
+                _button("💾 Сохранить как шаблон", "action:save_template"),
+            ],
+            [
+                _button("🔄 Изменить и повторить", "action:repeat_edit"),
+                _button("💳 Пополнить баланс", "action:buy"),
+            ],
         ]
     )
 
@@ -256,7 +276,100 @@ def build_after_image_generation_keyboard() -> Any:
         [
             [
                 _button("⚡ Сгенерировать ещё", "action:generate"),
+                _button("💾 Сохранить как шаблон", "action:save_template"),
+            ],
+            [
+                _button("🔄 Изменить и повторить", "action:repeat_edit"),
                 _button("💳 Пополнить баланс", "action:buy_images"),
+            ],
+        ]
+    )
+
+
+def truncate_template_name(name: str) -> str:
+    return (name or "").strip()[:50] or "Шаблон"
+
+
+def combine_repeat_description(previous_description: str, user_changes: str) -> str:
+    return f"{previous_description.strip()}\n\nИзменения: {user_changes.strip()}"
+
+
+def format_marketplace(marketplace: str) -> str:
+    return "Wildberries" if marketplace == "wb" else "Ozon"
+
+
+def format_template_mode(mode: str) -> str:
+    return "Текст + изображения" if mode == "text_and_images" else "Только текст"
+
+
+def format_template_description_preview(description: str, limit: int = 100) -> str:
+    normalized = " ".join((description or "").split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit] + "..."
+
+
+def build_repeat_photos_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("📎 Те же фото", "repeat:same_photos"),
+                _button("🖼 Загрузить новые", "repeat:new_photos"),
+            ]
+        ]
+    )
+
+
+def build_templates_keyboard(
+    templates: list[dict[str, Any]],
+    page: int,
+    total: int,
+) -> Any:
+    rows = [[_button(template["name"], f"template_use:{template['id']}")] for template in templates]
+    nav_row: list[Any] = []
+    if page > 0:
+        nav_row.append(_button("← Назад", f"templates_page:{page - 1}"))
+    if (page + 1) * TEMPLATES_PAGE_SIZE < total:
+        nav_row.append(_button("Вперёд →", f"templates_page:{page + 1}"))
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([_button("🗑 Удалить шаблон", f"templates_delete:{page}")])
+    return _keyboard(rows)
+
+
+def build_templates_delete_keyboard(
+    templates: list[dict[str, Any]],
+    page: int,
+    total: int,
+) -> Any:
+    rows = [[_button(template["name"], f"template_delete:{template['id']}")] for template in templates]
+    nav_row: list[Any] = []
+    if page > 0:
+        nav_row.append(_button("← Назад", f"templates_delete:{page - 1}"))
+    if (page + 1) * TEMPLATES_PAGE_SIZE < total:
+        nav_row.append(_button("Вперёд →", f"templates_delete:{page + 1}"))
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([_button("❌ Отмена", f"templates_page:{page}")])
+    return _keyboard(rows)
+
+
+def build_template_details_keyboard(template_id: int) -> Any:
+    return _keyboard(
+        [
+            [_button("⚡ Использовать как есть", f"template_run:{template_id}")],
+            [_button("✏️ Изменить и использовать", f"template_edit:{template_id}")],
+            [_button("🗑 Удалить шаблон", f"template_delete:{template_id}")],
+        ]
+    )
+
+
+def build_template_delete_confirm_keyboard(template_id: int) -> Any:
+    return _keyboard(
+        [
+            [
+                _button("✅ Да, удалить", f"template_delete_confirm:{template_id}"),
+                _button("❌ Отмена", f"template_delete_cancel:{template_id}"),
             ]
         ]
     )
@@ -294,6 +407,7 @@ def build_help_message() -> str:
         "Бот вернёт название, описание, ключевые слова и характеристики.\n\n"
         "/generate — создать карточку\n"
         "/balance — баланс\n"
+        "/templates — мои шаблоны\n"
         "/history — последние генерации\n"
         "/buy — пакеты генераций"
     )
@@ -326,8 +440,53 @@ def _clear_image_session(context: Any) -> None:
         "img_photos",
         "img_count",
         "img_media_groups",
+        "repeat_pending_generation",
+        "repeat_mode",
+        "repeat_images_count",
     ):
         context.user_data.pop(key, None)
+
+
+def _store_last_generation(
+    context: Any,
+    *,
+    marketplace: str,
+    mode: str,
+    description: str,
+    photo_file_ids: list[str] | None = None,
+    images_count: int | None = None,
+) -> None:
+    context.user_data["last_generation"] = {
+        "marketplace": marketplace,
+        "mode": mode,
+        "description": description,
+        "photo_file_ids": list(photo_file_ids or []),
+        "images_count": images_count,
+    }
+
+
+def _template_to_last_generation(template: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "marketplace": template["marketplace"],
+        "mode": template["mode"],
+        "description": template["description"],
+        "photo_file_ids": _parse_photo_file_ids(template.get("photo_file_ids")),
+        "images_count": template.get("images_count"),
+    }
+
+
+def _parse_photo_file_ids(raw_value: Any) -> list[str]:
+    if not raw_value:
+        return []
+    if isinstance(raw_value, list):
+        return [str(value) for value in raw_value]
+    try:
+        value = json.loads(str(raw_value))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
 
 
 async def _ensure_user(update: Any, context: Any) -> int | None:
@@ -393,6 +552,13 @@ async def help_command(update: Any, context: Any) -> None:
     await update.effective_message.reply_text(build_help_message(), reply_markup=build_main_menu())
 
 
+async def templates_command(update: Any, context: Any) -> None:
+    user_id = await _ensure_user(update, context)
+    if user_id is None:
+        return
+    await _show_templates(update.effective_message, context, user_id, page=0)
+
+
 async def history_command(update: Any, context: Any) -> None:
     user_id = await _ensure_user(update, context)
     if user_id is None:
@@ -414,6 +580,60 @@ async def history_command(update: Any, context: Any) -> None:
             f"📋 {generation['output_characteristics']}"
         )
         await update.effective_message.reply_text(text)
+
+
+async def _show_templates(message: Any, context: Any, user_id: int, page: int = 0) -> None:
+    page = max(page, 0)
+    db = _get_db(context)
+    total = await db.get_templates_count(user_id)
+    templates = await db.get_templates(
+        user_id,
+        offset=page * TEMPLATES_PAGE_SIZE,
+        limit=TEMPLATES_PAGE_SIZE,
+    )
+    context.user_data["template_page"] = page
+    if not templates:
+        await message.reply_text("📋 У вас пока нет шаблонов.")
+        return
+
+    lines = [f"📋 Ваши шаблоны ({total} из {TEMPLATES_LIMIT}):", ""]
+    for index, template in enumerate(templates, start=page * TEMPLATES_PAGE_SIZE + 1):
+        marketplace = format_marketplace(template["marketplace"])
+        mode = format_template_mode(template["mode"]).lower()
+        lines.append(f"{index}. {template['name']} ({marketplace}, {mode})")
+    await message.reply_text(
+        "\n".join(lines),
+        reply_markup=build_templates_keyboard(templates, page=page, total=total),
+    )
+
+
+async def _show_templates_delete_list(message: Any, context: Any, user_id: int, page: int = 0) -> None:
+    page = max(page, 0)
+    db = _get_db(context)
+    total = await db.get_templates_count(user_id)
+    templates = await db.get_templates(
+        user_id,
+        offset=page * TEMPLATES_PAGE_SIZE,
+        limit=TEMPLATES_PAGE_SIZE,
+    )
+    if not templates:
+        await message.reply_text("📋 У вас пока нет шаблонов.")
+        return
+
+    await message.reply_text(
+        "Выберите шаблон для удаления:",
+        reply_markup=build_templates_delete_keyboard(templates, page=page, total=total),
+    )
+
+
+def build_template_details_message(template: dict[str, Any]) -> str:
+    return (
+        f"📋 Шаблон: \"{template['name']}\"\n"
+        f"Маркетплейс: {format_marketplace(template['marketplace'])}\n"
+        f"Режим: {format_template_mode(template['mode'])}\n"
+        f"Описание: {format_template_description_preview(template['description'])}\n\n"
+        "Что сделать?"
+    )
 
 
 async def _start_image_flow(message: Any, context: Any, user_id: int) -> None:
@@ -772,6 +992,14 @@ async def _generate_text_and_images_for_user(
         f"Остаток: {text_left} текстовых / {image_balance} изображений",
         reply_markup=build_after_image_generation_keyboard(),
     )
+    _store_last_generation(
+        context,
+        marketplace=marketplace,
+        mode="text_and_images",
+        description=product_description,
+        photo_file_ids=photo_file_ids,
+        images_count=images_count,
+    )
     _clear_image_session(context)
 
 
@@ -963,6 +1191,9 @@ async def _generate_and_send_text_card(
     *,
     final_markup: Any | None = None,
     intro_text: str = "⏳ Генерирую карточку...",
+    mode: str = "text_only",
+    photo_file_ids: list[str] | None = None,
+    images_count: int | None = None,
 ) -> CardGeneration | None:
     settings = _get_settings(context)
     db = _get_db(context)
@@ -1016,7 +1247,136 @@ async def _generate_and_send_text_card(
         messages[-1],
         reply_markup=final_markup,
     )
+    _store_last_generation(
+        context,
+        marketplace=marketplace,
+        mode=mode,
+        description=user_input,
+        photo_file_ids=photo_file_ids,
+        images_count=images_count,
+    )
     return card
+
+
+async def _handle_template_name(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if not context.user_data.get("awaiting_template_name"):
+        return False
+
+    context.user_data.pop("awaiting_template_name", None)
+    last_generation = context.user_data.get("last_generation")
+    if not last_generation:
+        await update.effective_message.reply_text("Нет данных последней генерации для сохранения.")
+        return True
+
+    count = await _get_db(context).get_templates_count(user_id)
+    if count >= TEMPLATES_LIMIT:
+        await update.effective_message.reply_text(
+            "У вас уже 10 шаблонов — максимум. Удалите старый шаблон чтобы сохранить новый."
+        )
+        return True
+
+    name = truncate_template_name(user_input)
+    await _get_db(context).save_template(
+        user_id=user_id,
+        name=name,
+        marketplace=last_generation["marketplace"],
+        mode=last_generation["mode"],
+        description=last_generation["description"],
+        photo_file_ids=last_generation.get("photo_file_ids") or [],
+        images_count=last_generation.get("images_count"),
+    )
+    await update.effective_message.reply_text(
+        f"✅ Шаблон \"{name}\" сохранён.\nНайти его можно через /templates"
+    )
+    return True
+
+
+async def _handle_repeat_changes(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if not context.user_data.get("awaiting_repeat_changes"):
+        return False
+
+    context.user_data.pop("awaiting_repeat_changes", None)
+    previous = context.user_data.get("last_generation")
+    if not previous:
+        await update.effective_message.reply_text("Нет предыдущей генерации для повтора.")
+        return True
+
+    combined_description = combine_repeat_description(previous["description"], user_input)
+    marketplace = previous["marketplace"]
+    if previous["mode"] == "text_and_images":
+        context.user_data["repeat_pending_generation"] = {
+            "marketplace": marketplace,
+            "mode": "text_and_images",
+            "description": combined_description,
+            "photo_file_ids": list(previous.get("photo_file_ids") or []),
+            "images_count": previous.get("images_count") or 1,
+        }
+        await update.effective_message.reply_text(
+            REPEAT_PHOTOS_PROMPT,
+            reply_markup=build_repeat_photos_keyboard(),
+        )
+        return True
+
+    await _generate_and_send_text_card(
+        update.effective_message,
+        context,
+        user_id,
+        combined_description,
+        marketplace,
+        final_markup=build_after_generation_keyboard(),
+    )
+    _clear_image_session(context)
+    return True
+
+
+async def _run_last_generation_with_images(
+    update: Any,
+    context: Any,
+    user_id: int,
+    generation: dict[str, Any],
+) -> None:
+    photo_file_ids = list(generation.get("photo_file_ids") or [])
+    images_count = int(generation.get("images_count") or 1)
+    if not photo_file_ids:
+        await update.callback_query.message.reply_text(
+            "В шаблоне нет сохранённых фото. Загрузите новые фото для генерации."
+        )
+        context.user_data["marketplace"] = generation["marketplace"]
+        context.user_data["mode"] = "text_and_images"
+        context.user_data["img_description"] = generation["description"]
+        context.user_data["img_photos"] = []
+        context.user_data["generation_step"] = "photos"
+        context.user_data["repeat_images_count"] = images_count
+        await update.callback_query.message.reply_text(IMAGE_PHOTO_PROMPT)
+        return
+
+    context.user_data["marketplace"] = generation["marketplace"]
+    context.user_data["mode"] = "text_and_images"
+    context.user_data["img_description"] = generation["description"]
+    context.user_data["img_photos"] = photo_file_ids
+    context.user_data["img_count"] = images_count
+    await _generate_text_and_images_for_user(update, context, user_id, images_count)
+
+
+async def _run_saved_generation(
+    update: Any,
+    context: Any,
+    user_id: int,
+    generation: dict[str, Any],
+) -> None:
+    if generation["mode"] == "text_and_images":
+        await _run_last_generation_with_images(update, context, user_id, generation)
+        return
+
+    await _generate_and_send_text_card(
+        update.callback_query.message,
+        context,
+        user_id,
+        generation["description"],
+        generation["marketplace"],
+        final_markup=build_after_generation_keyboard(),
+    )
+    _clear_image_session(context)
 
 
 async def handle_text(update: Any, context: Any) -> None:
@@ -1025,6 +1385,10 @@ async def handle_text(update: Any, context: Any) -> None:
         return
 
     user_input = (update.effective_message.text or "").strip()
+    if await _handle_template_name(update, context, user_id, user_input):
+        return
+    if await _handle_repeat_changes(update, context, user_id, user_input):
+        return
     if await _handle_image_description(update, context, user_input):
         return
 
@@ -1062,10 +1426,11 @@ async def handle_text(update: Any, context: Any) -> None:
 
 async def handle_callback(update: Any, context: Any) -> None:
     query = update.callback_query
-    await query.answer()
-    await _ensure_user(update, context)
+    user_id = await _ensure_user(update, context)
 
     data = query.data or ""
+    if data != "action:save_template":
+        await query.answer()
     if data == "action:generate":
         _clear_image_session(context)
         context.user_data["generation_step"] = "marketplace"
@@ -1139,6 +1504,14 @@ async def handle_callback(update: Any, context: Any) -> None:
         if not photos:
             await query.message.reply_text(IMAGE_PHOTO_PROMPT)
             return
+        if context.user_data.get("repeat_images_count"):
+            user = update.effective_user
+            if user is None:
+                return
+            images_count = int(context.user_data.pop("repeat_images_count"))
+            context.user_data["img_count"] = images_count
+            await _generate_text_and_images_for_user(update, context, user.id, images_count)
+            return
         context.user_data["generation_step"] = "count"
         user = update.effective_user
         image_balance = await _get_db(context).get_image_balance(user.id) if user is not None else 0
@@ -1180,10 +1553,142 @@ async def handle_callback(update: Any, context: Any) -> None:
             await _generate_images_for_user(update, context, user.id, images_count)
     elif data == "action:balance":
         await balance_command(update, context)
+    elif data == "action:templates":
+        if user_id is not None:
+            await _show_templates(query.message, context, user_id, page=0)
     elif data == "action:history":
         await history_command(update, context)
     elif data == "action:help":
         await query.message.reply_text(build_help_message(), reply_markup=build_main_menu())
+    elif data == "action:save_template":
+        if user_id is None:
+            await query.answer()
+            return
+        if not context.user_data.get("last_generation"):
+            await query.answer()
+            await query.message.reply_text("Нет данных последней генерации для сохранения.")
+            return
+        count = await _get_db(context).get_templates_count(user_id)
+        if count >= TEMPLATES_LIMIT:
+            await query.answer(
+                "У вас уже 10 шаблонов — максимум. Удалите старый шаблон чтобы сохранить новый.",
+                show_alert=True,
+            )
+            return
+        await query.answer()
+        context.user_data["awaiting_template_name"] = True
+        await query.message.reply_text(TEMPLATE_NAME_PROMPT)
+    elif data == "action:repeat_edit":
+        if not context.user_data.get("last_generation"):
+            await query.message.reply_text("Нет предыдущей генерации для повтора.")
+            return
+        context.user_data["awaiting_repeat_changes"] = True
+        await query.message.reply_text(REPEAT_CHANGES_PROMPT)
+    elif data.startswith("repeat:"):
+        if user_id is None:
+            return
+        pending = context.user_data.get("repeat_pending_generation")
+        if not pending:
+            await query.message.reply_text("Сессия повтора устарела. Начните заново.")
+            return
+        repeat_mode = data.split(":", 1)[1]
+        context.user_data["repeat_mode"] = repeat_mode
+        if repeat_mode == "same_photos":
+            await _run_last_generation_with_images(update, context, user_id, pending)
+            return
+        if repeat_mode == "new_photos":
+            context.user_data["marketplace"] = pending["marketplace"]
+            context.user_data["mode"] = "text_and_images"
+            context.user_data["img_description"] = pending["description"]
+            context.user_data["img_photos"] = []
+            context.user_data["generation_step"] = "photos"
+            context.user_data["repeat_images_count"] = int(pending.get("images_count") or 1)
+            await query.message.reply_text(IMAGE_PHOTO_PROMPT)
+            return
+        await query.message.reply_text(REPEAT_PHOTOS_PROMPT, reply_markup=build_repeat_photos_keyboard())
+    elif data.startswith("templates_page:"):
+        if user_id is None:
+            return
+        try:
+            page = int(data.split(":", 1)[1])
+        except ValueError:
+            page = 0
+        await _show_templates(query.message, context, user_id, page=page)
+    elif data.startswith("templates_delete:"):
+        if user_id is None:
+            return
+        try:
+            page = int(data.split(":", 1)[1])
+        except ValueError:
+            page = 0
+        await _show_templates_delete_list(query.message, context, user_id, page=page)
+    elif data.startswith("template_use:"):
+        if user_id is None:
+            return
+        try:
+            template_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return
+        template = await _get_db(context).get_template(template_id, user_id)
+        if not template:
+            await query.message.reply_text("Шаблон не найден.")
+            return
+        await query.message.reply_text(
+            build_template_details_message(template),
+            reply_markup=build_template_details_keyboard(template_id),
+        )
+    elif data.startswith("template_run:"):
+        if user_id is None:
+            return
+        try:
+            template_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return
+        template = await _get_db(context).get_template(template_id, user_id)
+        if not template:
+            await query.message.reply_text("Шаблон не найден.")
+            return
+        await _run_saved_generation(update, context, user_id, _template_to_last_generation(template))
+    elif data.startswith("template_edit:"):
+        if user_id is None:
+            return
+        try:
+            template_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return
+        template = await _get_db(context).get_template(template_id, user_id)
+        if not template:
+            await query.message.reply_text("Шаблон не найден.")
+            return
+        context.user_data["last_generation"] = _template_to_last_generation(template)
+        context.user_data["awaiting_repeat_changes"] = True
+        await query.message.reply_text(REPEAT_CHANGES_PROMPT)
+    elif data.startswith("template_delete:"):
+        if user_id is None:
+            return
+        try:
+            template_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return
+        template = await _get_db(context).get_template(template_id, user_id)
+        if not template:
+            await query.message.reply_text("Шаблон не найден.")
+            return
+        await query.message.reply_text(
+            f"Удалить шаблон \"{template['name']}\"?",
+            reply_markup=build_template_delete_confirm_keyboard(template_id),
+        )
+    elif data.startswith("template_delete_confirm:"):
+        if user_id is None:
+            return
+        try:
+            template_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return
+        await _get_db(context).delete_template(template_id, user_id)
+        await query.message.reply_text("🗑 Шаблон удалён.")
+    elif data.startswith("template_delete_cancel:"):
+        await query.message.reply_text("Удаление отменено.")
     elif data in {"action:buy", "action:buy_text", "action:buy_images"} or data.startswith(("buy:", "img_buy:")):
         await query.message.reply_text(
             PAYMENT_UNAVAILABLE_MESSAGE,
@@ -1200,6 +1705,7 @@ async def post_init(application: Any) -> None:
             ("start", "Главное меню"),
             ("generate", "Сгенерировать карточку"),
             ("balance", "Показать баланс"),
+            ("templates", "Мои шаблоны"),
             ("history", "Последние 5 генераций"),
             ("buy", "Купить генерации"),
             ("help", "Помощь"),
@@ -1233,6 +1739,7 @@ def create_application(settings: Settings) -> Any:
     application.add_handler(CommandHandler("generate", generate_command))
     application.add_handler(CommandHandler("images", images_command))
     application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("templates", templates_command))
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("buy", buy_command))
     application.add_handler(CommandHandler("help", help_command))
