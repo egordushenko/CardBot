@@ -22,7 +22,7 @@ def test_validate_wb_generation_reports_missing_required_characteristics():
     assert "too_few_characteristics" in report["issues"]
 
 
-def test_apply_wb_generation_quality_adds_placeholders_and_clears_keywords():
+def test_apply_wb_generation_quality_does_not_add_unknown_characteristics():
     card = CardGeneration(
         title="Кроссовки женские летние со скидкой",
         description="Представляем вашему вниманию легкие кроссовки.",
@@ -40,8 +40,9 @@ def test_apply_wb_generation_quality_adds_placeholders_and_clears_keywords():
     result = apply_wb_generation_quality(card, profile)
 
     assert result.keywords == ""
-    assert "Пол: [укажите пол]" in result.characteristics
-    assert "Материал стельки: [укажите материал стельки]" in result.characteristics
+    assert "Пол:" not in result.characteristics
+    assert "Материал стельки:" not in result.characteristics
+    assert "Страна производства: Китай" in result.characteristics
     assert "скидк" not in result.title.lower()
     assert "Представляем вашему вниманию" not in result.description
 
@@ -79,8 +80,8 @@ def test_apply_wb_generation_quality_removes_secondary_placeholders_and_defaults
 
     assert result.title == "Настольная лампа LED спиральная белая USB 35 см"
     assert "Страна производства: Китай" in result.characteristics
-    assert "Материал изделия: [укажите материал]" in result.characteristics
-    assert "Комплектация:" not in result.characteristics
+    assert "Материал изделия:" not in result.characteristics
+    assert "Комплектация: Настольная лампа; USB-кабель" in result.characteristics
     assert "Длина упаковки:" not in result.characteristics
     assert "Требуется сборка:" not in result.characteristics
     assert "пластик" not in result.description.lower()
@@ -104,3 +105,20 @@ def test_apply_wb_generation_quality_preserves_explicit_country():
     )
 
     assert "Страна производства: Россия" in result.characteristics
+
+
+def test_apply_wb_generation_quality_does_not_infer_usb_kit_when_cable_excluded():
+    card = CardGeneration(
+        title="Настольная лампа LED USB",
+        description="Настольная лампа подключается по USB.",
+        keywords="",
+        characteristics="Тип лампы: LED",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        user_input="Настольная лампа USB, кабель не входит в комплект",
+    )
+
+    assert "Комплектация:" not in result.characteristics

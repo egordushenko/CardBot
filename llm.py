@@ -96,7 +96,7 @@ def build_category_profile_prompt_block(
             f"Обязательные характеристики: {_format_profile_value(category_profile.get('required_characteristics'))}\n"
             f"Желательные характеристики: {_format_profile_value(category_profile.get('recommended_characteristics'))}\n"
             f"Типичные слова в названии: {_format_profile_value(category_profile.get('top_title_words'))}\n"
-            "Если обязательное поле не следует из входа пользователя, добавь ключ с плейсхолдером вида [укажите значение]."
+            "Если поле не следует из входа пользователя и не имеет разрешенного дефолта, не выводи его."
         )
 
     return (
@@ -209,6 +209,8 @@ def sanitize_characteristics(value: str) -> str:
         key = key.strip()
         field_value = field_value.strip()
         if not key or not field_value:
+            continue
+        if field_value.casefold().startswith("[укажите"):
             continue
         lines.append(f"{key}: {field_value}")
     return "\n".join(lines).strip()

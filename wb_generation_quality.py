@@ -54,21 +54,6 @@ WB_DROP_DESCRIPTION_SENTENCE_PATTERNS = (
 
 WB_DEFAULT_COUNTRY = "Китай"
 
-WB_SECONDARY_PLACEHOLDER_FIELDS = (
-    "Длина упаковки",
-    "Высота упаковки",
-    "Ширина упаковки",
-    "Размер упаковки",
-    "Вес с упаковкой",
-    "Вес товара с упаковкой",
-    "Вес без упаковки",
-    "Вес товара без упаковки",
-    "Количество упаковок",
-    "Поверхность",
-    "Комплектация",
-    "Требуется сборка",
-)
-
 WB_UNVERIFIED_DESCRIPTION_PATTERNS = {
     "material": (
         r"\bпластик\w*\b",
@@ -124,10 +109,6 @@ def _format_characteristics(fields: dict[str, str]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in fields.items()).strip()
 
 
-def _field_placeholder(field: str) -> str:
-    return f"[укажите {field.casefold()}]"
-
-
 def _is_placeholder(value: str) -> bool:
     return value.strip().startswith("[укажите")
 
@@ -178,11 +159,6 @@ def _user_mentions_field(user_input: str, field: str) -> bool:
             ),
         )
     return field_lower in user_input.casefold()
-
-
-def _is_secondary_placeholder_field(field: str) -> bool:
-    field_lower = field.casefold()
-    return any(marker.casefold() in field_lower for marker in WB_SECONDARY_PLACEHOLDER_FIELDS)
 
 
 def _remove_forbidden_title_words(title: str) -> str:
@@ -242,6 +218,8 @@ def _remove_unverified_description_claims(
     kept: list[str] = []
     for sentence in _split_description_sentences(description):
         sentence_lower = sentence.casefold()
+        if _mentions_any(sentence_lower, (r"\bне\s+входит\s+в\s+комплект\b",)) and not user_mentions["kit"]:
+            continue
         should_drop = False
         for claim_type, patterns in WB_UNVERIFIED_DESCRIPTION_PATTERNS.items():
             if not _mentions_any(sentence_lower, patterns):
@@ -257,10 +235,8 @@ def _remove_unverified_description_claims(
 
 def _normalize_wb_characteristics(
     characteristics: dict[str, str],
-    required: list[str],
-    recommended: list[str],
-    target_min: int,
     user_input: str,
+    title: str,
 ) -> dict[str, str]:
     normalized: dict[str, str] = {}
     country_explicit = _user_mentions_country(user_input)
@@ -275,33 +251,62 @@ def _normalize_wb_characteristics(
             continue
         if clean_key == "Требуется сборка" and not _user_mentions_field(user_input, clean_key):
             continue
-        if _is_placeholder(clean_value) and _is_secondary_placeholder_field(clean_key):
+        if _is_placeholder(clean_value):
             continue
         normalized[clean_key] = clean_value
 
     normalized["Страна производства"] = (
         normalized.get("Страна производства") or WB_DEFAULT_COUNTRY
     )
-
-    for field in required:
-        if field == "Страна производства":
-            normalized.setdefault(field, WB_DEFAULT_COUNTRY)
-            continue
-        if _is_secondary_placeholder_field(field) and not _user_mentions_field(user_input, field):
-            continue
-        normalized.setdefault(field, _field_placeholder(field))
-
-    for field in recommended:
-        if len(normalized) >= target_min:
-            break
-        if field == "Страна производства":
-            normalized.setdefault(field, WB_DEFAULT_COUNTRY)
-            continue
-        if _is_secondary_placeholder_field(field) and not _user_mentions_field(user_input, field):
-            continue
-        normalized.setdefault(field, _field_placeholder(field))
+    inferred_kit = _infer_wb_kit(user_input, title)
+    if inferred_kit and "Комплектация" not in normalized:
+        normalized["Комплектация"] = inferred_kit
 
     return normalized
+
+
+def _infer_product_name_for_kit(title: str, user_input: str) -> str:
+    source = title.strip() or user_input.strip()
+    words = [
+        word.strip(" ,.;:-")
+        for word in source.split()
+        if word.strip(" ,.;:-")
+    ]
+    if not words:
+        return "товар"
+    stop_words = {
+        "usb",
+        "led",
+        "rgb",
+        "белая",
+        "белый",
+        "черная",
+        "черный",
+        "красная",
+        "красный",
+        "35",
+        "см",
+    }
+    product_words: list[str] = []
+    for word in words:
+        lowered = word.casefold()
+        if lowered in stop_words or re.fullmatch(r"\d+[a-zа-яё]*", lowered):
+            if product_words:
+                break
+            continue
+        product_words.append(word)
+        if len(product_words) >= 2:
+            break
+    return " ".join(product_words) if product_words else words[0]
+
+
+def _infer_wb_kit(user_input: str, title: str) -> str:
+    if not _mentions_any(user_input, (r"\busb\b", r"\bюсб\b", r"\btype-c\b", r"\bтайп-с\b")):
+        return ""
+    if _mentions_any(user_input, (r"\bбез\s+кабел\w*\b", r"\bкабел\w*\s+не\s+входит\b")):
+        return ""
+    product = _infer_product_name_for_kit(title, user_input)
+    return f"{product}; USB-кабель"
 
 
 def _profile_fields(profile: dict[str, Any] | None, key: str) -> list[str]:
@@ -353,16 +358,10 @@ def apply_wb_generation_quality(
         return card
 
     characteristics = parse_characteristics_text(card.characteristics)
-    required = _profile_fields(category_profile, "required_characteristics")
-    recommended = _profile_fields(category_profile, "recommended_characteristics")
-    target_min = int((category_profile or {}).get("characteristics_target_min") or 8)
-
     characteristics = _normalize_wb_characteristics(
         characteristics=characteristics,
-        required=required,
-        recommended=recommended,
-        target_min=target_min,
         user_input=user_input,
+        title=card.title,
     )
 
     title = sanitize_title(_remove_forbidden_title_words(card.title), "wb")

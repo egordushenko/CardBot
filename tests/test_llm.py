@@ -95,6 +95,16 @@ def test_parse_generation_payload_filters_characteristics_lines_without_colon():
     assert result.characteristics == "Material: cotton\nSize: XL"
 
 
+def test_parse_generation_payload_removes_unknown_characteristic_placeholders():
+    result = parse_generation_payload(
+        '{"title":"Title","description":"Description","keywords":"kw",'
+        '"characteristics":"Color: white\\nSurface: [укажите поверхность]\\nCountry: Китай"}',
+        marketplace="wb",
+    )
+
+    assert result.characteristics == "Color: white\nCountry: Китай"
+
+
 def test_parse_generation_payload_accepts_ozon_hashtags_field():
     result = parse_generation_payload(
         '{"title":"Title","description":"Description","hashtags":"#tag #other","characteristics":"A: B"}',
