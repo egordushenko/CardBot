@@ -1,0 +1,311 @@
+[
+  {
+    "id": "wb_women_tshirt_minimal",
+    "marketplace": "wb",
+    "user_input": "Женская футболка оверсайз черная",
+    "expected_category": "Женщинам / Одежда",
+    "raw_generation": {
+      "title": "Футболка женская оверсайз черная",
+      "description": "Женская футболка свободного кроя для повседневных образов.",
+      "keywords": "",
+      "characteristics": "Цвет: черный\nСостав: полиэстер\nШирина предмета: свободная\nВысота предмета: стандартная\nСостояние товара: новое"
+    },
+    "expected_present_fields": ["Цвет", "Страна производства", "Покрой"],
+    "expected_absent_fields": ["Состав", "Ширина предмета", "Высота предмета", "Состояние товара"],
+    "expected_field_values": {"Покрой": "свободный", "Страна производства": "Китай"}
+  },
+  {
+    "id": "wb_bath_mat_packaging",
+    "marketplace": "wb",
+    "user_input": "Коврик для ванной серый. Размер 50 на 80 см. Мягкий ворс, нескользящее основание.",
+    "expected_category": "Дом / Ванная / Коврики",
+    "raw_generation": {
+      "title": "Коврик для ванной серый противоскользящий 50x80",
+      "description": "Коврик для ванной комнаты с мягким ворсом.",
+      "keywords": "",
+      "characteristics": "Цвет: серый\nФорма коврика: прямоугольный\nРазмер коврика: 50x80 см\nОснова коврика: противоскользящая\nДлина упаковки: 50 см\nШирина упаковки: 10 см\nВысота упаковки: 10 см\nВес с упаковкой (кг): 0.4"
+    },
+    "expected_present_fields": ["Цвет", "Размер коврика", "Страна производства"],
+    "expected_absent_fields": ["Длина упаковки", "Ширина упаковки", "Высота упаковки", "Вес с упаковкой (кг)"]
+  },
+  {
+    "id": "wb_backpack_freeform",
+    "marketplace": "wb",
+    "user_input": "Рюкзак городской мужской черный. Объем 22 литра, размер 45x30x15 см. Материал полиэстер. Комплектация: рюкзак, USB-кабель.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Рюкзак городской мужской черный 22л 45x30x15 см",
+      "description": "Рюкзак для учебы, работы и поездок.",
+      "keywords": "",
+      "characteristics": "Цвет: черный\nМатериал: полиэстер\nОбъем (л): 22\nРазмер: 45x30x15 см\nКомплектация: рюкзак; USB-кабель\nМягкая спинка: Да\nКарман для бутылки: Да\nВодоотталкивающая пропитка: Да"
+    },
+    "expected_present_fields": ["Цвет", "Материал", "Объем (л)", "Размер", "Комплектация", "Страна производства"],
+    "expected_absent_fields": ["Мягкая спинка", "Карман для бутылки", "Водоотталкивающая пропитка"]
+  },
+  {
+    "id": "wb_usb_lamp_defaults",
+    "marketplace": "wb",
+    "user_input": "Настольная лампа LED спиральная белая. Подключение USB, мощность 5W. Высота 35 см. Цвет белый.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Настольная лампа LED спиральная белая USB 35 см",
+      "description": "Настольная лампа для рабочего стола и прикроватной тумбы.",
+      "keywords": "",
+      "characteristics": "Цвет: белый\nТип лампы: LED\nМощность: 5 Вт\nПодключение: USB\nМатериал изделия: [укажите материал]\nКомплектация: [укажите комплектацию]\nДлина упаковки: [укажите значение]"
+    },
+    "expected_present_fields": ["Цвет", "Тип лампы", "Мощность", "Подключение", "Комплектация", "Страна производства"],
+    "expected_absent_fields": ["Материал изделия", "Длина упаковки"]
+  },
+  {
+    "id": "wb_mens_tshirt_material_grounded",
+    "marketplace": "wb",
+    "user_input": "Мужская футболка базовая белая. Материал хлопок 95%, эластан 5%.",
+    "expected_category": "Мужчинам / Одежда",
+    "raw_generation": {
+      "title": "Футболка мужская базовая белая",
+      "description": "Базовая мужская футболка для повседневной носки.",
+      "keywords": "",
+      "characteristics": "Цвет: белый\nСостав: хлопок 95%, эластан 5%\nПол: Мужской\nВысота предмета: стандартная\nШирина предмета: свободная"
+    },
+    "expected_present_fields": ["Цвет", "Состав", "Пол", "Страна производства"],
+    "expected_absent_fields": ["Высота предмета", "Ширина предмета"]
+  },
+  {
+    "id": "wb_pet_food_weight_not_grounded",
+    "marketplace": "wb",
+    "user_input": "Корм для кошек сухой с курицей.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Корм для кошек сухой с курицей",
+      "description": "Сухой корм для взрослых кошек.",
+      "keywords": "",
+      "characteristics": "Тип: корм сухой\nВкус корма для животных: курица\nВес без упаковки (кг): 1\nВес с упаковкой (кг): 1.1\nСтрана производства: Китай"
+    },
+    "expected_present_fields": ["Тип", "Страна производства"],
+    "expected_absent_fields": ["Вес без упаковки (кг)", "Вес с упаковкой (кг)"]
+  },
+  {
+    "id": "wb_beauty_no_fake_shelf_life",
+    "marketplace": "wb",
+    "user_input": "Крем для рук увлажняющий 100 мл, аромат ваниль.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Крем для рук увлажняющий ваниль 100 мл",
+      "description": "Крем для ежедневного ухода за кожей рук.",
+      "keywords": "",
+      "characteristics": "Тип: крем\nОбъем, мл: 100\nАромат: ваниль\nСрок годности: 24 мес\nСертификат: EAC"
+    },
+    "expected_present_fields": ["Тип", "Страна производства"],
+    "expected_absent_fields": ["Сертификат"]
+  },
+  {
+    "id": "wb_toy_dimensions_numeric_kept_when_grounded",
+    "marketplace": "wb",
+    "user_input": "Игрушка антистресс кубик 8 см, цвет синий.",
+    "expected_category": "Игрушки / Антистресс",
+    "raw_generation": {
+      "title": "Игрушка антистресс кубик синий 8 см",
+      "description": "Компактная игрушка антистресс для рук.",
+      "keywords": "",
+      "characteristics": "Цвет: синий\nТип: антистресс\nВысота предмета: 8 см\nШирина предмета: 8 см\nСостояние товара: новое"
+    },
+    "expected_present_fields": ["Цвет", "Тип", "Высота предмета", "Ширина предмета", "Страна производства"],
+    "expected_absent_fields": ["Состояние товара"]
+  },
+  {
+    "id": "wb_kids_clothes_no_model_params",
+    "marketplace": "wb",
+    "user_input": "Детский костюм хлопковый бежевый, футболка и шорты.",
+    "expected_category": "Детям / Одежда",
+    "raw_generation": {
+      "title": "Костюм детский хлопковый бежевый",
+      "description": "Детский костюм для прогулок и дома.",
+      "keywords": "",
+      "characteristics": "Цвет: бежевый\nСостав: хлопок\nКомплектация: футболка; шорты\nРост модели на фото: 120 см\nПараметры модели на фото (ОГ-ОТ-ОБ): 60-50-60"
+    },
+    "expected_present_fields": ["Цвет", "Состав", "Комплектация", "Страна производства"],
+    "expected_absent_fields": ["Рост модели на фото", "Параметры модели на фото (ОГ-ОТ-ОБ)"]
+  },
+  {
+    "id": "wb_electronics_no_fake_warranty",
+    "marketplace": "wb",
+    "user_input": "Беспроводные наушники черные Bluetooth, шумоподавление, микрофон.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Беспроводные наушники черные Bluetooth",
+      "description": "Наушники для музыки и звонков.",
+      "keywords": "",
+      "characteristics": "Цвет: черный\nТип: наушники\nБеспроводные интерфейсы: Bluetooth\nГарантийный срок: 1 год\nСертификат: EAC"
+    },
+    "expected_present_fields": ["Цвет", "Тип", "Страна производства"],
+    "expected_absent_fields": ["Сертификат"]
+  },
+  {
+    "id": "wb_shoes_non_numeric_dimension_drop",
+    "marketplace": "wb",
+    "user_input": "Кроссовки мужские черные демисезонные, шнуровка.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Кроссовки мужские черные демисезонные",
+      "description": "Кроссовки для повседневной носки.",
+      "keywords": "",
+      "characteristics": "Цвет: черный\nПол: Мужской\nСезон: демисезон\nВысота предмета: средняя\nШирина предмета: стандартная"
+    },
+    "expected_present_fields": ["Цвет", "Пол", "Сезон", "Страна производства"],
+    "expected_absent_fields": ["Высота предмета", "Ширина предмета"]
+  },
+  {
+    "id": "wb_sport_no_packaging_count_guess",
+    "marketplace": "wb",
+    "user_input": "Эспандер кистевой черный, нагрузка 30 кг.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Эспандер кистевой черный 30 кг",
+      "description": "Эспандер для тренировки хвата.",
+      "keywords": "",
+      "characteristics": "Цвет: черный\nТип: эспандер\nКоличество предметов в упаковке: 2\nУпаковка: блистер"
+    },
+    "expected_present_fields": ["Цвет", "Тип", "Страна производства"],
+    "expected_absent_fields": ["Упаковка"]
+  },
+  {
+    "id": "ozon_bath_mat_service_fields",
+    "marketplace": "ozon",
+    "user_input": "Коврик для ванной серый. Размер 50 на 80 см.",
+    "expected_category": "Дом и сад",
+    "raw_generation": {
+      "title": "Коврик для ванной серый 50x80",
+      "description": "Коврик для ванной комнаты.",
+      "hashtags": "#коврик #для_ванной",
+      "characteristics": "Артикул: 123\nДобавить к сравнению: Да\nКитай: Китай\n20: 20\nЦвет: серый\nРазмер: 50x80 см\nУпаковка: пакет\nСтрана-изготовитель: Китай"
+    },
+    "expected_present_fields": ["Цвет", "Размер", "Страна-изготовитель"],
+    "expected_absent_fields": ["Артикул", "Добавить к сравнению", "Китай", "20", "Упаковка"]
+  },
+  {
+    "id": "ozon_backpack_freeform",
+    "marketplace": "ozon",
+    "user_input": "Рюкзак городской мужской черный. Объем 22 литра. Материал полиэстер.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Рюкзак городской мужской черный 22 л",
+      "description": "Рюкзак для города и поездок.",
+      "hashtags": "#рюкзак #городской",
+      "characteristics": "Цвет: черный\nМатериал: полиэстер\nОбъем, л: 22\nМягкая спинка: Да\nКарман для бутылки: Да\nВодоотталкивающая пропитка: Да"
+    },
+    "expected_present_fields": ["Цвет", "Материал", "Объем, л", "Страна-изготовитель"],
+    "expected_absent_fields": ["Мягкая спинка", "Карман для бутылки", "Водоотталкивающая пропитка"]
+  },
+  {
+    "id": "ozon_lamp_weight_not_grounded",
+    "marketplace": "ozon",
+    "user_input": "Настольная лампа LED белая USB, мощность 5W, высота 35 см.",
+    "expected_category": "Дом и сад",
+    "raw_generation": {
+      "title": "Настольная лампа LED белая USB 35 см",
+      "description": "Лампа для рабочего стола.",
+      "hashtags": "#лампа #настольная",
+      "characteristics": "Тип: настольная лампа\nЦвет: белый\nМощность, Вт: 5\nРазмер: 35 см\nВес товара, г: 400\nСтрана-изготовитель: Китай"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Мощность, Вт", "Размер", "Страна-изготовитель"],
+    "expected_absent_fields": ["Вес товара, г"]
+  },
+  {
+    "id": "ozon_clothes_no_article_brand",
+    "marketplace": "ozon",
+    "user_input": "Футболка женская оверсайз черная, хлопок.",
+    "expected_category": "Одежда",
+    "raw_generation": {
+      "title": "Футболка женская оверсайз черная хлопок",
+      "description": "Футболка для повседневных образов.",
+      "hashtags": "#футболка #женская",
+      "characteristics": "Артикул: 987\nБренд: No name\nТип: Футболка\nЦвет: черный\nМатериал: хлопок\nПол: Женский"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Материал", "Пол", "Страна-изготовитель"],
+    "expected_absent_fields": ["Артикул", "Бренд"]
+  },
+  {
+    "id": "ozon_beauty_no_fake_certificate",
+    "marketplace": "ozon",
+    "user_input": "Крем для рук увлажняющий 100 мл.",
+    "expected_category": "Красота и здоровье",
+    "raw_generation": {
+      "title": "Крем для рук увлажняющий 100 мл",
+      "description": "Крем для ухода за кожей рук.",
+      "hashtags": "#крем #для_рук",
+      "characteristics": "Тип: Крем для ухода за кожей\nОбъем, мл: 100\nСертификат: EAC\nНомер СГР: RU.77.99\nСтрана-изготовитель: Китай"
+    },
+    "expected_present_fields": ["Тип", "Объем, мл", "Страна-изготовитель"],
+    "expected_absent_fields": ["Сертификат", "Номер СГР"]
+  },
+  {
+    "id": "ozon_pet_food_no_packaging",
+    "marketplace": "ozon",
+    "user_input": "Корм для кошек сухой с курицей.",
+    "expected_category": "Товары для животных",
+    "raw_generation": {
+      "title": "Корм для кошек сухой с курицей",
+      "description": "Сухой корм для кошек.",
+      "hashtags": "#корм #для_кошек",
+      "characteristics": "Тип: Корм сухой\nВкус корма для животных: курица\nРазмер упаковки (Длина х Ширина х Высота), см: 20x10x30\nВес товара, г: 1000\nСтрана-изготовитель: Китай"
+    },
+    "expected_present_fields": ["Тип", "Страна-изготовитель"],
+    "expected_absent_fields": ["Размер упаковки (Длина х Ширина х Высота), см", "Вес товара, г"]
+  },
+  {
+    "id": "ozon_electronics_no_compare_country_key",
+    "marketplace": "ozon",
+    "user_input": "Беспроводные наушники черные Bluetooth с микрофоном.",
+    "expected_category": "Электроника",
+    "raw_generation": {
+      "title": "Беспроводные наушники черные Bluetooth",
+      "description": "Наушники для музыки и звонков.",
+      "hashtags": "#наушники #bluetooth",
+      "characteristics": "Тип: Наушники\nЦвет: черный\nBluetooth: Да\nДобавить к сравнению: Да\nКитай: Китай\nСтрана-изготовитель: Китай"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Страна-изготовитель"],
+    "expected_absent_fields": ["Добавить к сравнению", "Китай", "Bluetooth"]
+  },
+  {
+    "id": "ozon_food_shelf_life_not_grounded",
+    "marketplace": "ozon",
+    "user_input": "Чай черный листовой 100 г.",
+    "expected_category": "Продукты питания",
+    "raw_generation": {
+      "title": "Чай черный листовой 100 г",
+      "description": "Черный листовой чай для заваривания.",
+      "hashtags": "#чай #черный_чай",
+      "characteristics": "Тип: Чай\nВес товара, г: 100\nСрок годности в днях: 730\nУпаковка: коробка\nСтрана-изготовитель: Китай"
+    },
+    "expected_present_fields": ["Тип", "Вес товара, г", "Страна-изготовитель"],
+    "expected_absent_fields": ["Срок годности в днях", "Упаковка"]
+  },
+  {
+    "id": "ozon_construction_no_guessed_guarantee",
+    "marketplace": "ozon",
+    "user_input": "Клей строительный прозрачный 300 мл.",
+    "expected_category": "Строительство и ремонт",
+    "raw_generation": {
+      "title": "Клей строительный прозрачный 300 мл",
+      "description": "Клей для ремонтных работ.",
+      "hashtags": "#клей #строительный",
+      "characteristics": "Тип: Клей строительный\nЦвет: прозрачный\nОбъем, мл: 300\nГарантия: 12 месяцев\nСертификат: EAC"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Объем, мл", "Страна-изготовитель"],
+    "expected_absent_fields": ["Гарантия", "Сертификат"]
+  },
+  {
+    "id": "ozon_hobby_dimensions_grounded",
+    "marketplace": "ozon",
+    "user_input": "Лента декоративная белая, ширина 25 мм, длина 5 м.",
+    "expected_category": "Хобби и творчество",
+    "raw_generation": {
+      "title": "Лента декоративная белая 25 мм 5 м",
+      "description": "Декоративная лента для творчества.",
+      "hashtags": "#лента #творчество",
+      "characteristics": "Тип: Лента\nЦвет: белый\nШирина, мм: 25\nДлина, м: 5\nАртикул: 111"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Ширина, мм", "Длина, м", "Страна-изготовитель"],
+    "expected_absent_fields": ["Артикул"]
+  }
+]

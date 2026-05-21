@@ -13,9 +13,12 @@ OZON_DROP_FIELDS = {
     "Артикул",
     "Бренд",
     "Добавить к сравнению",
+    "Китай",
     "Код ТРУ",
+    "Литьевой",
     "Номер СГР",
     "Сертификат",
+    "Bluetooth",
     "IMEI",
 }
 
@@ -31,6 +34,16 @@ OZON_UNIVERSAL_FIELDS = {
     "Комплектация",
     "Страна-изготовитель",
     "Назначение",
+    "Вес товара, г",
+    "Длина, м",
+    "Длина, см",
+    "Длина, мм",
+    "Ширина, м",
+    "Ширина, см",
+    "Ширина, мм",
+    "Высота, м",
+    "Высота, см",
+    "Высота, мм",
     "Объем, мл",
     "Объем, л",
     "Мощность, Вт",
@@ -84,7 +97,7 @@ def _profile_fields(profile: dict[str, Any] | None) -> set[str]:
         value = profile.get(key)
         if isinstance(value, list):
             fields.update(str(item).strip() for item in value if str(item).strip())
-    return {field for field in fields if not _is_blocked_field(field)}
+    return fields
 
 
 def _mentions_any(text: str, patterns: tuple[str, ...]) -> bool:
