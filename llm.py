@@ -11,6 +11,10 @@ from prompts import DIRECTOR_SYSTEM_PROMPT, OZON_SYSTEM_PROMPT, WB_SYSTEM_PROMPT
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_FREE_SUFFIX = ":free"
+OPENROUTER_NO_REASONING_BODY = {
+    "reasoning": {"effort": "none", "exclude": True},
+    "include_reasoning": False,
+}
 
 
 class LLMResponseError(RuntimeError):
@@ -71,6 +75,43 @@ def build_openrouter_model_fallbacks(model: str) -> list[str]:
         if candidate and candidate not in result:
             result.append(candidate)
     return result
+
+
+async def request_chat_completion_with_fallback(
+    client: Any,
+    *,
+    model_candidates: list[str],
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    temperature: float,
+    extra_body: dict[str, Any] | None = None,
+    empty_response_retries: int = 1,
+) -> Any:
+    last_error: Exception | None = None
+    for candidate in model_candidates:
+        for _attempt in range(empty_response_retries + 1):
+            try:
+                response = await client.chat.completions.create(
+                    model=candidate,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    response_format={"type": "json_object"},
+                    extra_body=extra_body or OPENROUTER_NO_REASONING_BODY,
+                )
+            except Exception as exc:
+                last_error = exc
+                status_code = getattr(exc, "status_code", None)
+                if status_code == 429 and candidate != model_candidates[-1]:
+                    break
+                raise
+
+            content = response.choices[0].message.content
+            if content:
+                return response
+            last_error = LLMResponseError("LLM returned empty response")
+
+    raise LLMResponseError("LLM returned empty response") from last_error
 
 
 def build_category_profile_prompt_block(
@@ -330,30 +371,16 @@ async def generate_card(
         },
     ]
     model_candidates = build_openrouter_model_fallbacks(model)
-    response = None
-    last_error: Exception | None = None
-    for candidate in model_candidates:
-        try:
-            response = await client.chat.completions.create(
-                model=candidate,
-                messages=messages,
-                max_tokens=2200,
-                temperature=0.7,
-                response_format={"type": "json_object"},
-            )
-            break
-        except Exception as exc:
-            last_error = exc
-            status_code = getattr(exc, "status_code", None)
-            if status_code != 429 or candidate == model_candidates[-1]:
-                raise
-
-    if response is None:
-        raise LLMResponseError("LLM request failed") from last_error
+    response = await request_chat_completion_with_fallback(
+        client,
+        model_candidates=model_candidates,
+        messages=messages,
+        max_tokens=3500,
+        temperature=0.7,
+        extra_body=OPENROUTER_NO_REASONING_BODY,
+    )
 
     content = response.choices[0].message.content
-    if not content:
-        raise LLMResponseError("LLM returned empty response")
 
     usage: Any = getattr(response, "usage", None)
     tokens_used = int(getattr(usage, "total_tokens", 0) or 0)

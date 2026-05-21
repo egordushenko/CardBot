@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 from llm import (
     CardGeneration,
@@ -10,6 +11,7 @@ from llm import (
     build_image_director_user_prompt,
     parse_image_concepts_payload,
     parse_generation_payload,
+    request_chat_completion_with_fallback,
     select_system_prompt,
 )
 from prompts import DIRECTOR_SYSTEM_PROMPT
@@ -40,6 +42,107 @@ def test_build_openrouter_model_fallbacks_keeps_regular_model_single():
     assert build_openrouter_model_fallbacks("deepseek/deepseek-v4-flash") == [
         "deepseek/deepseek-v4-flash"
     ]
+
+
+def _chat_response(content: str | None):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        usage=SimpleNamespace(total_tokens=123),
+    )
+
+
+class _FakeCompletions:
+    def __init__(self, results):
+        self.results = list(results)
+        self.calls: list[str] = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs["model"])
+        self.last_kwargs = kwargs
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+class _FakeChat:
+    def __init__(self, results):
+        self.completions = _FakeCompletions(results)
+
+
+class _FakeClient:
+    def __init__(self, results):
+        self.chat = _FakeChat(results)
+
+
+class _RateLimitError(Exception):
+    status_code = 429
+
+
+@pytest.mark.asyncio
+async def test_request_chat_completion_retries_empty_response_on_same_model():
+    client = _FakeClient(
+        [
+            _chat_response(None),
+            _chat_response('{"title":"ok"}'),
+        ]
+    )
+
+    response = await request_chat_completion_with_fallback(
+        client,
+        model_candidates=["deepseek/deepseek-v4-flash"],
+        messages=[],
+        max_tokens=100,
+        temperature=0.7,
+    )
+
+    assert response.choices[0].message.content == '{"title":"ok"}'
+    assert client.chat.completions.calls == [
+        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash",
+    ]
+    assert client.chat.completions.last_kwargs["extra_body"] == {
+        "reasoning": {"effort": "none", "exclude": True},
+        "include_reasoning": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_request_chat_completion_uses_paid_fallback_after_rate_limit():
+    client = _FakeClient(
+        [
+            _RateLimitError(),
+            _chat_response('{"title":"ok"}'),
+        ]
+    )
+
+    response = await request_chat_completion_with_fallback(
+        client,
+        model_candidates=["deepseek/deepseek-v4-flash:free", "deepseek/deepseek-v4-flash"],
+        messages=[],
+        max_tokens=100,
+        temperature=0.7,
+    )
+
+    assert response.choices[0].message.content == '{"title":"ok"}'
+    assert client.chat.completions.calls == [
+        "deepseek/deepseek-v4-flash:free",
+        "deepseek/deepseek-v4-flash",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_request_chat_completion_raises_after_repeated_empty_response():
+    client = _FakeClient([_chat_response(""), _chat_response(None)])
+
+    with pytest.raises(LLMResponseError, match="empty response"):
+        await request_chat_completion_with_fallback(
+            client,
+            model_candidates=["deepseek/deepseek-v4-flash"],
+            messages=[],
+            max_tokens=100,
+            temperature=0.7,
+        )
 
 
 def test_parse_generation_payload_rejects_missing_ozon_hashtags():
