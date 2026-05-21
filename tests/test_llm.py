@@ -454,3 +454,12 @@ def test_director_system_prompt_requires_product_preservation_rules():
     assert "Do NOT add any buttons" in DIRECTOR_SYSTEM_PROMPT
     assert "The product must look IDENTICAL to the reference photo" in DIRECTOR_SYSTEM_PROMPT
     assert "Preserve exact product geometry" in DIRECTOR_SYSTEM_PROMPT
+
+
+def test_director_system_prompt_requires_varied_text_and_safe_closeups():
+    assert "Do NOT squash, stretch, compress or elongate the product" in DIRECTOR_SYSTEM_PROMPT
+    assert "Preserve original product color and material texture" in DIRECTOR_SYSTEM_PROMPT
+    assert "brown wood must remain brown wood" in DIRECTOR_SYSTEM_PROMPT
+    assert "For 3 or more generated images, include at least one close-up" in DIRECTOR_SYSTEM_PROMPT
+    assert "Do not repeat the same benefit phrase across images" in DIRECTOR_SYSTEM_PROMPT
+    assert "marketing benefit" in DIRECTOR_SYSTEM_PROMPT

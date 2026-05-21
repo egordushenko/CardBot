@@ -61,6 +61,8 @@ def test_build_safe_image_prompt_appends_product_preservation_rules():
     assert PRODUCT_PRESERVATION_SUFFIX in prompt
     assert "Do NOT add any buttons" in prompt
     assert "Preserve exact product geometry" in prompt
+    assert "Do NOT squash, stretch, compress or elongate the product" in prompt
+    assert "Preserve original product color and material texture" in prompt
 
 
 def test_generate_single_image_sends_safe_prompt_to_api(monkeypatch):

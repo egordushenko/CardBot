@@ -48,6 +48,23 @@ def test_missing_wb_country_defaults_to_china_for_any_category():
     assert resolved["Страна производства"] == "Китай"
 
 
+def test_missing_ozon_country_defaults_to_china_for_any_category():
+    resolved = resolve_fields({}, "Строительство и ремонт", "ozon", has_photo=True)
+
+    assert resolved["Страна-изготовитель"] == "Китай"
+
+
+def test_explicit_ozon_country_is_preserved():
+    resolved = resolve_fields(
+        {"Страна-изготовитель": "Россия"},
+        "Дом и сад",
+        "ozon",
+        has_photo=True,
+    )
+
+    assert resolved["Страна-изготовитель"] == "Россия"
+
+
 def test_womens_clothes_infer_gender_from_category():
     resolved = resolve_fields({}, "Женская одежда", "wb", has_photo=False)
 
