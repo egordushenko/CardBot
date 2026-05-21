@@ -1,4 +1,6 @@
 from bot import (
+    FEEDBACK_MESSAGE,
+    classify_generation_error,
     build_after_generation_keyboard,
     build_after_image_generation_keyboard,
     build_balance_keyboard,
@@ -82,13 +84,28 @@ def test_after_generation_keyboard_offers_template_and_repeat_actions():
         "action:save_template",
         "action:repeat_edit",
         "action:buy",
+        "action:feedback",
     ]
     assert image_callbacks == [
         "action:generate",
         "action:save_template",
         "action:repeat_edit",
         "action:buy_images",
+        "action:feedback",
     ]
+    assert "Не понравился результат" in text_keyboard.inline_keyboard[-1][0].text
+    assert "@alterega" in FEEDBACK_MESSAGE
+
+
+def test_classify_generation_error_returns_safe_reasons():
+    class RateLimit(Exception):
+        status_code = 429
+
+    assert classify_generation_error(Exception("LLM returned empty response")) == "empty_response"
+    assert classify_generation_error(RateLimit("too many")) == "429"
+    assert classify_generation_error(Exception("LLM returned invalid JSON")) == "parse_error"
+    assert classify_generation_error(Exception("missing required field: title")) == "parse_error"
+    assert classify_generation_error(Exception("other")) == "unknown"
 
 
 def test_template_keyboards_use_owner_safe_callbacks():

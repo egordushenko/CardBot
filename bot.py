@@ -39,6 +39,11 @@ GENERATE_PROMPT = (
     "Можно добавить материал, размер, цвет и особенности. "
     "Чем больше информации — тем лучше результат."
 )
+FEEDBACK_MESSAGE = (
+    "Не понравился результат?\n\n"
+    "Напишите, что именно не так: название, описание, хэштеги или характеристики. "
+    "Контакт для фидбэка: @alterega"
+)
 MARKETPLACE_PROMPT = "Выберите маркетплейс:"
 MODE_PROMPT = (
     "Что сгенерировать?\n\n"
@@ -341,6 +346,7 @@ def build_after_generation_keyboard() -> Any:
                 _button("🔄 Изменить и повторить", "action:repeat_edit"),
                 _button("💳 Пополнить баланс", "action:buy"),
             ],
+            [_button("💬 Не понравился результат?", "action:feedback")],
         ]
     )
 
@@ -356,6 +362,7 @@ def build_after_image_generation_keyboard() -> Any:
                 _button("🔄 Изменить и повторить", "action:repeat_edit"),
                 _button("💳 Пополнить баланс", "action:buy_images"),
             ],
+            [_button("💬 Не понравился результат?", "action:feedback")],
         ]
     )
 
@@ -458,6 +465,32 @@ def build_generation_messages(card: CardGeneration) -> list[str]:
     if card.marketplace == "ozon":
         messages.insert(2, f"🔖 ХЭШТЕГИ:\n{card.keywords}")
     return messages
+
+
+def classify_generation_error(exc: Exception) -> str:
+    if getattr(exc, "status_code", None) == 429:
+        return "429"
+    message = str(exc).casefold()
+    if "empty response" in message:
+        return "empty_response"
+    if "invalid json" in message or "missing required field" in message:
+        return "parse_error"
+    return "unknown"
+
+
+def log_generation_error(
+    exc: Exception,
+    *,
+    marketplace: str,
+    mode: str,
+    reason: str | None = None,
+) -> None:
+    logging.exception(
+        "generation_error reason=%s marketplace=%s mode=%s",
+        reason or classify_generation_error(exc),
+        marketplace,
+        mode,
+    )
 
 
 def build_balance_message(
@@ -1127,10 +1160,10 @@ async def _generate_text_and_images_for_user(
 
     try:
         card = await card_task
-    except Exception:
+    except Exception as exc:
         await _cancel_task(concepts_task)
         await db.set_image_session_status(session_id, "failed")
-        logging.exception("LLM generation failed")
+        log_generation_error(exc, marketplace=marketplace, mode="text_and_images")
         await message.reply_text(
             "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
         )
@@ -1144,10 +1177,15 @@ async def _generate_text_and_images_for_user(
             usage_mode,
             trial_generations=settings.trial_generations,
         )
-    except Exception:
+    except Exception as exc:
         await _cancel_task(concepts_task)
         await db.set_image_session_status(session_id, "failed")
-        logging.exception("Failed to save generation")
+        log_generation_error(
+            exc,
+            marketplace=marketplace,
+            mode="text_and_images",
+            reason="save_error",
+        )
         await message.reply_text(
             "Карточка создана, но не удалось сохранить историю. Баланс изображений не списан."
         )
@@ -1442,8 +1480,8 @@ async def _generate_and_send_text_card(
             category_profile=category_profile,
             resolved_fields=resolved_fields,
         )
-    except Exception:
-        logging.exception("LLM generation failed")
+    except Exception as exc:
+        log_generation_error(exc, marketplace=marketplace, mode=mode)
         await message.reply_text(
             "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
         )
@@ -1457,8 +1495,13 @@ async def _generate_and_send_text_card(
             usage_mode,
             trial_generations=settings.trial_generations,
         )
-    except Exception:
-        logging.exception("Failed to save generation")
+    except Exception as exc:
+        log_generation_error(
+            exc,
+            marketplace=marketplace,
+            mode=mode,
+            reason="save_error",
+        )
         await message.reply_text(
             "Карточка создана, но не удалось сохранить историю. Попробуйте позже."
         )
@@ -1794,6 +1837,8 @@ async def handle_callback(update: Any, context: Any) -> None:
             await _show_templates(query.message, context, user_id, page=0)
     elif data == "action:history":
         await history_command(update, context)
+    elif data == "action:feedback":
+        await query.message.reply_text(FEEDBACK_MESSAGE)
     elif data == "action:help":
         settings = _get_settings(context)
         await query.message.reply_text(
