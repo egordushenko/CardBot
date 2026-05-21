@@ -12,6 +12,55 @@ from typing import Any
 DEFAULT_DATASET_PATH = "data/wb_cards_dataset.json"
 DEFAULT_OUTPUT_PATH = "data/wb_category_profiles.json"
 
+WB_GENERATION_EXCLUDED_FIELD_MARKERS = (
+    "упаков",
+    "вес с упаков",
+    "вес товара с упаков",
+    "рост модели",
+    "параметры модели",
+    "размер на модели",
+    "imei",
+    "сертификат",
+    "гарантийный талон",
+)
+
+WB_GENERATION_EXCLUDED_FIELDS = {
+    "Состояние товара",
+}
+
+WB_MATCH_KEYWORD_STOPWORDS = {
+    "для",
+    "and",
+    "the",
+    "черный",
+    "черная",
+    "черные",
+    "белый",
+    "белая",
+    "белые",
+    "серый",
+    "серая",
+    "серые",
+    "красный",
+    "красная",
+    "синий",
+    "синяя",
+    "зеленый",
+    "зеленая",
+    "женский",
+    "женская",
+    "женские",
+    "мужской",
+    "мужская",
+    "мужские",
+    "городской",
+    "городская",
+    "базовый",
+    "базовая",
+    "новый",
+    "новая",
+}
+
 TITLE_FORMULAS = {
     "Женщинам": "тип + крой/посадка + материал/сезон + назначение",
     "Мужчинам": "тип + базовость/крой + материал/рукав/сезон",
@@ -55,7 +104,7 @@ def _profile_category(card: dict[str, Any]) -> str:
     if source and "/" in source:
         normalized_source = source.replace("\\", "/").strip("/")
         if not re.search(r"[a-z]", normalized_source, flags=re.IGNORECASE):
-            return " / ".join(part for part in normalized_source.split("/") if part)
+            return " / ".join(part.strip() for part in normalized_source.split("/") if part.strip())
     return category or _top_category(card)
 
 
@@ -92,6 +141,21 @@ def _characteristic_targets(parent: str, avg_count: float) -> tuple[int, int]:
     return max(8, min(12, round(avg_count * 0.75))), max(14, round(avg_count * 1.2))
 
 
+def _is_generation_safe_field(field: str) -> bool:
+    normalized = field.strip().casefold()
+    if not normalized or field in WB_GENERATION_EXCLUDED_FIELDS:
+        return False
+    return not any(marker in normalized for marker in WB_GENERATION_EXCLUDED_FIELD_MARKERS)
+
+
+def _generation_fields(fields: list[str]) -> list[str]:
+    result: list[str] = []
+    for field in fields:
+        if _is_generation_safe_field(field) and field not in result:
+            result.append(field)
+    return result
+
+
 def _build_profile(category: str, cards: list[dict[str, Any]]) -> dict[str, Any]:
     parent = _parent_category(category)
     field_counts: Counter[str] = Counter()
@@ -125,7 +189,13 @@ def _build_profile(category: str, cards: list[dict[str, Any]]) -> dict[str, Any]
         if count / len(cards) >= 0.6
     ][:12]
     recommended = [field for field, _ in field_counts.most_common(20)]
+    required_generation = _generation_fields(required)
+    recommended_generation = _generation_fields(recommended)
+    prompt_characteristics = _generation_fields(required + recommended)
     target_min, target_max = _characteristic_targets(parent, chars_avg)
+    if prompt_characteristics:
+        target_min = min(target_min, max(5, len(prompt_characteristics)))
+        target_max = min(target_max, max(target_min, len(prompt_characteristics) + 4))
     desc_target = DESCRIPTION_TARGETS.get(parent, (800, 1200))
 
     return {
@@ -142,11 +212,14 @@ def _build_profile(category: str, cards: list[dict[str, Any]]) -> dict[str, Any]
         "characteristics_target_max": target_max,
         "required_characteristics": required,
         "recommended_characteristics": recommended,
+        "required_generation_characteristics": required_generation,
+        "recommended_generation_characteristics": recommended_generation,
+        "prompt_characteristics": prompt_characteristics,
         "top_title_words": [word for word, _ in title_terms.most_common(15)],
         "match_keywords": [
             word
             for word, _ in (source_terms + title_terms).most_common(30)
-            if word not in {"для", "and", "the"}
+            if word not in WB_MATCH_KEYWORD_STOPWORDS
         ],
         "hashtags_target": 0,
         "stats": {

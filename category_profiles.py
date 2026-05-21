@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -50,24 +51,116 @@ def get_category_profile(
     return profile_copy
 
 
+WB_GENERIC_MATCH_TOKENS = {
+    "для",
+    "дом",
+    "дома",
+    "товар",
+    "товары",
+    "каталог",
+    "одежда",
+    "черный",
+    "черная",
+    "черные",
+    "белый",
+    "белая",
+    "белые",
+    "серый",
+    "серая",
+    "серые",
+    "красный",
+    "красная",
+    "синий",
+    "синяя",
+    "зеленый",
+    "зеленая",
+    "женский",
+    "женская",
+    "женские",
+    "мужской",
+    "мужская",
+    "мужские",
+    "городской",
+    "городская",
+    "базовый",
+    "базовая",
+    "новый",
+    "новая",
+}
+
+WB_CLOTHING_PRODUCT_TOKENS = {
+    "футболка",
+    "футболки",
+    "платье",
+    "платья",
+    "брюки",
+    "куртка",
+    "куртки",
+    "костюм",
+    "костюмы",
+    "худи",
+    "кофта",
+    "кофты",
+    "рубашка",
+    "рубашки",
+    "шорты",
+    "юбка",
+    "юбки",
+}
+
+
+def _tokens(value: str) -> set[str]:
+    return {
+        token.casefold()
+        for token in re.findall(r"[A-Za-zА-Яа-яЁё0-9]+", value)
+        if len(token) >= 3 and not token.isdigit()
+    }
+
+
+def _token_matches(token: str, text: str, text_tokens: set[str]) -> bool:
+    token = token.strip().casefold()
+    if len(token) < 3 or token in WB_GENERIC_MATCH_TOKENS:
+        return False
+    if token in text_tokens:
+        return True
+    if len(token) >= 5 and any(item.startswith(token[:5]) or token.startswith(item[:5]) for item in text_tokens):
+        return True
+    return token in text
+
+
+def _profile_depth(profile: dict[str, Any]) -> int:
+    category = str(profile.get("category") or "")
+    return len([part for part in category.split(" / ") if part.strip()])
+
+
 def _score_profile(profile: dict[str, Any], product_description: str) -> int:
     text = product_description.casefold()
+    text_tokens = _tokens(product_description)
     score = 0
     category = str(profile.get("category") or "")
     parent = str(profile.get("parent_category") or "")
     for part in (category, parent):
         for token in part.replace("/", " ").split():
-            token = token.strip().casefold()
-            if len(token) >= 3 and token in text:
+            if _token_matches(token, text, text_tokens):
                 score += 3
     for keyword in profile.get("match_keywords") or []:
-        token = str(keyword).strip().casefold()
-        if len(token) >= 3 and token in text:
+        if _token_matches(str(keyword), text, text_tokens):
             score += 2
     for keyword in profile.get("top_title_words") or []:
-        token = str(keyword).strip().casefold()
-        if len(token) >= 3 and token in text:
+        if _token_matches(str(keyword), text, text_tokens):
             score += 1
+
+    category_lower = category.casefold()
+    has_clothing_product = bool(text_tokens & WB_CLOTHING_PRODUCT_TOKENS)
+    if has_clothing_product and category_lower.startswith("женщинам") and text_tokens & {"женская", "женские", "женский"}:
+        score += 5
+    if has_clothing_product and category_lower.startswith("мужчинам") and text_tokens & {"мужская", "мужские", "мужской"}:
+        score += 5
+    if has_clothing_product and "одежда" in category_lower:
+        score += 4
+
+    if score >= 2:
+        score += max(0, _profile_depth(profile) - 1)
     return score
 
 
@@ -79,11 +172,9 @@ def detect_wb_category_profile(
     best_score = 0
     for profile in profiles.values():
         score = _score_profile(profile, product_description)
-        if score > best_score:
+        if score > best_score or (score == best_score and best_profile and _profile_depth(profile) > _profile_depth(best_profile)):
             best_score = score
             best_profile = profile
-    if best_profile:
+    if best_profile and best_score >= 2:
         return dict(best_profile)
-
-    fallback = profiles.get("Дом") or profiles.get("Женщинам")
-    return dict(fallback) if fallback else None
+    return None

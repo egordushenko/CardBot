@@ -86,6 +86,11 @@ def build_category_profile_prompt_block(
 
     normalized_marketplace = normalize_marketplace(marketplace)
     if normalized_marketplace == "wb":
+        prompt_characteristics = (
+            category_profile.get("prompt_characteristics")
+            or category_profile.get("recommended_generation_characteristics")
+            or category_profile.get("required_generation_characteristics")
+        )
         return (
             "\n\nКатегорийный профиль WB:\n"
             f"Категория товара: {category}\n"
@@ -93,10 +98,10 @@ def build_category_profile_prompt_block(
             f"Длина названия: {category_profile.get('title_target_min')}-{category_profile.get('title_target_max')} символов\n"
             f"Длина описания: {category_profile.get('description_target_min')}-{category_profile.get('description_target_max')} символов\n"
             f"Целевое количество характеристик: {category_profile.get('characteristics_target_min')}-{category_profile.get('characteristics_target_max')}\n"
-            f"Обязательные характеристики: {_format_profile_value(category_profile.get('required_characteristics'))}\n"
-            f"Желательные характеристики: {_format_profile_value(category_profile.get('recommended_characteristics'))}\n"
+            f"Разрешенные характеристики для генерации: {_format_profile_value(prompt_characteristics)}\n"
             f"Типичные слова в названии: {_format_profile_value(category_profile.get('top_title_words'))}\n"
-            "Если поле не следует из входа пользователя и не имеет разрешенного дефолта, не выводи его."
+            "Используй только разрешенные характеристики из профиля и очевидные универсальные поля вроде цвета, страны и комплектации. "
+            "Поля упаковки, веса и габаритов упаковки выводи только если пользователь явно дал эти данные."
         )
 
     return (

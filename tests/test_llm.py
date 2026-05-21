@@ -172,6 +172,7 @@ def test_wb_prompt_includes_category_profile():
             "description_target_max": 1200,
             "required_characteristics": ["Цвет", "Пол", "Сезон"],
             "recommended_characteristics": ["Материал стельки"],
+            "prompt_characteristics": ["Цвет", "Пол", "Сезон", "Материал стельки"],
             "characteristics_target_min": 8,
             "characteristics_target_max": 16,
         },
@@ -179,7 +180,7 @@ def test_wb_prompt_includes_category_profile():
 
     assert "Категорийный профиль WB" in prompt
     assert "Категория товара: Обувь" in prompt
-    assert "Обязательные характеристики: Цвет, Пол, Сезон" in prompt
+    assert "Разрешенные характеристики для генерации: Цвет, Пол, Сезон, Материал стельки" in prompt
     assert "Материал стельки" in prompt
 
 

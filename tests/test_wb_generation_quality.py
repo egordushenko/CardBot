@@ -149,6 +149,7 @@ def test_apply_wb_generation_quality_drops_non_numeric_dimension_fields():
     assert "Высота предмета:" not in result.characteristics
     assert "Состояние товара:" not in result.characteristics
     assert "Покрой: свободный" in result.characteristics
+    assert "Состав:" not in result.characteristics
 
 
 def test_apply_wb_generation_quality_keeps_numeric_dimension_fields():
@@ -168,3 +169,89 @@ def test_apply_wb_generation_quality_keeps_numeric_dimension_fields():
 
     assert "Высота предмета: 35 см" in result.characteristics
     assert "Ширина предмета: 12 см" in result.characteristics
+
+
+def test_apply_wb_generation_quality_drops_packaging_if_user_did_not_provide_packaging():
+    card = CardGeneration(
+        title="Коврик для ванной серый противоскользящий 50x80",
+        description="Коврик для ванной комнаты с мягким ворсом.",
+        keywords="",
+        characteristics=(
+            "Цвет: серый\n"
+            "Форма коврика: прямоугольный\n"
+            "Размер коврика: 50x80 см\n"
+            "Основа коврика: противоскользящая\n"
+            "Длина упаковки: 50 см\n"
+            "Ширина упаковки: 10 см\n"
+            "Высота упаковки: 10 см\n"
+            "Вес с упаковкой (кг): 0.4"
+        ),
+        marketplace="wb",
+    )
+    profile = {
+        "category": "Дом / Ванная / Коврики",
+        "prompt_characteristics": [
+            "Цвет",
+            "Форма коврика",
+            "Размер коврика",
+            "Основа коврика",
+        ],
+    }
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile=profile,
+        user_input="Коврик для ванной серый. Размер 50 на 80 см. Мягкий ворс, нескользящее основание.",
+    )
+
+    assert "Цвет: серый" in result.characteristics
+    assert "Форма коврика: прямоугольный" in result.characteristics
+    assert "Размер коврика: 50x80 см" in result.characteristics
+    assert "Длина упаковки:" not in result.characteristics
+    assert "Ширина упаковки:" not in result.characteristics
+    assert "Высота упаковки:" not in result.characteristics
+    assert "Вес с упаковкой" not in result.characteristics
+
+
+def test_apply_wb_generation_quality_drops_non_profile_freeform_backpack_fields():
+    card = CardGeneration(
+        title="Рюкзак городской мужской черный 22л 45x30x15 см",
+        description="Рюкзак для города, учебы и поездок.",
+        keywords="",
+        characteristics=(
+            "Цвет: черный\n"
+            "Материал: полиэстер\n"
+            "Объем (л): 22\n"
+            "Размер: 45x30x15 см\n"
+            "Тип застежки: молния\n"
+            "Страна производства: Китай\n"
+            "Комплектация: рюкзак; USB-кабель\n"
+            "Количество внешних карманов: 3\n"
+            "Карман для бутылки: Да\n"
+            "Мягкая спинка: Да\n"
+            "Водоотталкивающая пропитка: Да\n"
+            "Назначение: городские, поездки, учеба, работа"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile=None,
+        user_input=(
+            "Рюкзак городской мужской черный. Объем 22 литра, размер 45x30x15 см. "
+            "Материал полиэстер с водоотталкивающей пропиткой. Застежка молния. "
+            "Комплектация: рюкзак, съемный USB-кабель. Страна производства Китай."
+        ),
+    )
+
+    assert "Цвет: черный" in result.characteristics
+    assert "Материал: полиэстер" in result.characteristics
+    assert "Объем (л): 22" in result.characteristics
+    assert "Размер: 45x30x15 см" in result.characteristics
+    assert "Тип застежки: молния" in result.characteristics
+    assert "Комплектация: рюкзак; USB-кабель" in result.characteristics
+    assert "Назначение:" in result.characteristics
+    assert "Мягкая спинка:" not in result.characteristics
+    assert "Карман для бутылки:" not in result.characteristics
+    assert "Водоотталкивающая пропитка:" not in result.characteristics
