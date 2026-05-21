@@ -122,6 +122,33 @@ WB_SHOES_PRODUCT_TOKENS = {
     "обувь",
 }
 
+WB_BACKPACK_PRODUCT_TOKENS = {
+    "рюкзак",
+    "рюкзаки",
+    "ранец",
+    "портфель",
+}
+
+WB_LIGHTING_PRODUCT_TOKENS = {
+    "лампа",
+    "лампы",
+    "светильник",
+    "ночник",
+    "led",
+}
+
+WB_PET_PRODUCT_TOKENS = {
+    "корм",
+    "кошек",
+    "кошки",
+    "кота",
+    "котят",
+    "собак",
+    "собаки",
+    "щенков",
+    "питомцев",
+}
+
 
 def _tokens(value: str) -> set[str]:
     return {
@@ -167,15 +194,42 @@ def _score_profile(profile: dict[str, Any], product_description: str) -> int:
     category_lower = category.casefold()
     has_clothing_product = bool(text_tokens & WB_CLOTHING_PRODUCT_TOKENS)
     has_shoes_product = bool(text_tokens & WB_SHOES_PRODUCT_TOKENS)
+    has_backpack_product = bool(text_tokens & WB_BACKPACK_PRODUCT_TOKENS)
+    has_lighting_product = bool(text_tokens & WB_LIGHTING_PRODUCT_TOKENS)
+    has_pet_product = bool(text_tokens & WB_PET_PRODUCT_TOKENS)
+    has_female_marker = bool(text_tokens & {"женская", "женские", "женский", "женское"})
+    has_male_marker = bool(text_tokens & {"мужская", "мужские", "мужской", "мужское"})
+
+    if has_female_marker and category_lower.startswith("мужчинам"):
+        score -= 20
+    if has_male_marker and category_lower.startswith("женщинам"):
+        score -= 20
+
     if has_shoes_product and category_lower.startswith("обувь"):
         score += 8
     if has_shoes_product and (
         category_lower.startswith("женщинам") or category_lower.startswith("мужчинам")
     ):
         score -= 4
-    if has_clothing_product and category_lower.startswith("женщинам") and text_tokens & {"женская", "женские", "женский"}:
+    if has_backpack_product and category_lower == "аксессуары":
+        score += 10
+    if has_backpack_product and "маски для сна" in category_lower:
+        score -= 12
+    if has_lighting_product and category_lower.startswith("электроника"):
+        score += 10
+    if has_lighting_product and category_lower.startswith("бытовая техника"):
+        score += 4
+    if has_lighting_product and category_lower.startswith("красота"):
+        score -= 10
+    if has_pet_product and not (
+        category_lower.startswith("зоотовары")
+        or category_lower.startswith("товары для животных")
+    ):
+        score -= 10
+
+    if has_clothing_product and category_lower.startswith("женщинам") and has_female_marker:
         score += 5
-    if has_clothing_product and category_lower.startswith("мужчинам") and text_tokens & {"мужская", "мужские", "мужской"}:
+    if has_clothing_product and category_lower.startswith("мужчинам") and has_male_marker:
         score += 5
     if has_clothing_product and "одежда" in category_lower:
         score += 4

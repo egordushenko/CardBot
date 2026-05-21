@@ -134,6 +134,35 @@ def test_detect_wb_category_profile_prefers_shoes_over_womens_clothes_for_sneake
     assert profile["category"] == "Обувь"
 
 
+def test_detect_wb_category_profile_uses_gender_and_product_guards():
+    profiles = load_wb_category_profiles()
+
+    hoodie = detect_wb_category_profile(
+        profiles,
+        "Худи мужское на молнии черное, хлопок, свободный крой",
+    )
+    backpack = detect_wb_category_profile(
+        profiles,
+        "Рюкзак городской мужской черный, объем 22 литра, отделение для ноутбука",
+    )
+    lamp = detect_wb_category_profile(
+        profiles,
+        "Настольная лампа LED спиральная белая USB 5W, высота 35 см",
+    )
+    pet_food = detect_wb_category_profile(
+        profiles,
+        "Сухой корм для кошек с курицей 1 кг, для взрослых кошек",
+    )
+
+    assert hoodie is not None
+    assert hoodie["category"].startswith("Мужчинам")
+    assert backpack is not None
+    assert backpack["category"] == "Аксессуары"
+    assert lamp is not None
+    assert lamp["category"].startswith("Электроника")
+    assert pet_food is None
+
+
 def test_detect_wb_category_profile_prefers_specific_profile_and_has_no_unsafe_fallback(tmp_path: Path):
     path = tmp_path / "wb_category_profiles.json"
     path.write_text(

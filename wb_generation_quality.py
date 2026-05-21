@@ -94,6 +94,13 @@ WB_DROP_CHARACTERISTIC_FIELDS = {
     "Состояние товара",
 }
 
+WB_ITEM_DIMENSION_FIELDS = {
+    "Высота предмета",
+    "Ширина предмета",
+    "Длина предмета",
+    "Глубина предмета",
+}
+
 WB_UNIVERSAL_CHARACTERISTIC_FIELDS = {
     "Цвет",
     "Пол",
@@ -107,6 +114,8 @@ WB_UNIVERSAL_CHARACTERISTIC_FIELDS = {
     "Назначение",
     "Размер",
     "Размеры",
+    "Вес",
+    "Вес товара",
     "Объем",
     "Объем (л)",
     "Мощность",
@@ -349,6 +358,21 @@ def _normalize_wb_characteristics(
         if not clean_key or not clean_value:
             continue
         clean_key = WB_SAFE_FIELD_ALIASES.get(clean_key, clean_key)
+        if clean_key in WB_ITEM_DIMENSION_FIELDS:
+            alternative = _clothing_dimension_alternative(
+                clean_key,
+                clean_value,
+                user_input=user_input,
+                title=title,
+                category_profile=category_profile,
+            )
+            if alternative:
+                alt_key, alt_value = alternative
+                normalized.setdefault(alt_key, alt_value)
+                continue
+            if _has_digit(clean_value) and _user_mentions_field(user_input, clean_key):
+                normalized.setdefault("Размер", clean_value)
+            continue
         if clean_key in WB_DROP_CHARACTERISTIC_FIELDS:
             continue
         if _is_blocked_generation_field(clean_key) and not _user_mentions_field(user_input, clean_key):

@@ -152,7 +152,7 @@ def test_apply_wb_generation_quality_drops_non_numeric_dimension_fields():
     assert "Состав:" not in result.characteristics
 
 
-def test_apply_wb_generation_quality_keeps_numeric_dimension_fields():
+def test_apply_wb_generation_quality_converts_item_dimensions_to_size():
     card = CardGeneration(
         title="Настольная лампа LED",
         description="Настольная лампа.",
@@ -167,8 +167,9 @@ def test_apply_wb_generation_quality_keeps_numeric_dimension_fields():
         user_input="Настольная лампа высота 35 см ширина 12 см",
     )
 
-    assert "Высота предмета: 35 см" in result.characteristics
-    assert "Ширина предмета: 12 см" in result.characteristics
+    assert "Высота предмета:" not in result.characteristics
+    assert "Ширина предмета:" not in result.characteristics
+    assert "Размер: 35 см" in result.characteristics
 
 
 def test_apply_wb_generation_quality_keeps_ml_volume_when_grounded():
