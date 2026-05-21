@@ -198,7 +198,7 @@ def test_detect_wb_category_profile_uses_gender_and_product_guards():
     assert backpack is not None
     assert backpack["category"] == "Аксессуары"
     assert lamp is not None
-    assert lamp["category"].startswith("Электроника")
+    assert lamp["category"] == "Дом"
     assert pet_food is None
 
 
