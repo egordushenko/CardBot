@@ -1,3 +1,4 @@
+import sys
 import pytest
 from types import SimpleNamespace
 
@@ -9,6 +10,7 @@ from llm import (
     build_category_profile_prompt_block,
     build_user_prompt,
     build_image_director_user_prompt,
+    generate_image_prompts,
     parse_image_concepts_payload,
     parse_generation_payload,
     request_chat_completion_with_fallback,
@@ -407,6 +409,44 @@ def test_build_image_director_user_prompt_includes_counts_and_marketplace():
     assert "Маркетплейс: Wildberries" in prompt
     assert "Загружено фото: 3" in prompt
     assert "Нужно сгенерировать изображений: 5" in prompt
+
+
+@pytest.mark.asyncio
+async def test_generate_image_prompts_uses_paid_fallback_after_free_rate_limit(monkeypatch):
+    client = _FakeClient(
+        [
+            _RateLimitError(),
+            _chat_response(
+                '{"concepts":['
+                '{"image_index":1,"purpose":"main","photo_index":0,"prompt":"Prompt one"},'
+                '{"image_index":2,"purpose":"details","photo_index":1,"prompt":"Prompt two"},'
+                '{"image_index":3,"purpose":"lifestyle","photo_index":2,"prompt":"Prompt three"}'
+                ']}'
+            ),
+        ]
+    )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        SimpleNamespace(AsyncOpenAI=lambda **_kwargs: client),
+    )
+
+    result = await generate_image_prompts(
+        product_description="Песочные часы 5 минут",
+        marketplace="ozon",
+        photos_count=4,
+        images_count=3,
+        api_key="test-key",
+        model="deepseek/deepseek-v4-flash:free",
+        site_url="https://alterega.ru",
+    )
+
+    assert [concept.prompt for concept in result] == ["Prompt one", "Prompt two", "Prompt three"]
+    assert client.chat.completions.calls == [
+        "deepseek/deepseek-v4-flash:free",
+        "deepseek/deepseek-v4-flash",
+    ]
 
 
 def test_director_system_prompt_requires_product_preservation_rules():

@@ -423,23 +423,25 @@ async def generate_image_prompts(
         },
     )
 
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": DIRECTOR_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": build_image_director_user_prompt(
-                    product_description=product_description,
-                    marketplace=marketplace,
-                    photos_count=photos_count,
-                    images_count=images_count,
-                ),
-            },
-        ],
+    messages = [
+        {"role": "system", "content": DIRECTOR_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": build_image_director_user_prompt(
+                product_description=product_description,
+                marketplace=marketplace,
+                photos_count=photos_count,
+                images_count=images_count,
+            ),
+        },
+    ]
+    response = await request_chat_completion_with_fallback(
+        client,
+        model_candidates=build_openrouter_model_fallbacks(model),
+        messages=messages,
         max_tokens=2000,
         temperature=0.8,
-        response_format={"type": "json_object"},
+        extra_body=OPENROUTER_NO_REASONING_BODY,
     )
 
     content = response.choices[0].message.content
