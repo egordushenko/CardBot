@@ -14,7 +14,11 @@ def test_cardbot_packages_match_price_spec():
     assert PACKAGES["text_business_x5"].text_count == 30
     assert PACKAGES["text_business_x5"].images_per_card == 5
     assert PACKAGES["text_business_x5"].images_count == 150
-    assert PACKAGES["text_business_x5"].price_rub == 8690
+    assert PACKAGES["text_business_x5"].price_rub == 7940
+    assert PACKAGES["text_pro_x7"].images_count == 700
+    assert PACKAGES["text_pro_x7"].price_rub == 30990
+    assert PACKAGES["addon_img_50"].price_rub == 2750
+    assert PACKAGES["addon_img_150"].price_rub == 7500
     assert PACKAGES["promo_img_10"].images_count == 10
     assert PACKAGES["promo_img_10"].price_rub == 575
 

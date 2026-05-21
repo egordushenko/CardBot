@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,33 @@ _FORBIDDEN_PHRASES = (
     "подлинный",
 )
 
+_RULES_DOC_PATH = Path(__file__).resolve().parent / "docs" / "marketplace_rules.md"
+_BACKTICK_VALUE_RE = re.compile(r"`([^`]+)`")
+
+
+@lru_cache(maxsize=1)
+def _load_forbidden_phrases() -> tuple[str, ...]:
+    if not _RULES_DOC_PATH.exists():
+        return _FORBIDDEN_PHRASES
+
+    try:
+        text = _RULES_DOC_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return _FORBIDDEN_PHRASES
+
+    for line in text.splitlines():
+        lowered = line.lower()
+        if "запрещены рекламные" not in lowered and "рискованные формулировки" not in lowered:
+            continue
+        phrases = tuple(
+            phrase.strip()
+            for phrase in _BACKTICK_VALUE_RE.findall(line)
+            if phrase.strip()
+        )
+        if phrases:
+            return phrases
+    return _FORBIDDEN_PHRASES
+
 
 def _collapse_spaces(value: str) -> str:
     return _SPACES_RE.sub(" ", value).strip(" ,.;:-")
@@ -57,7 +86,7 @@ def _collapse_spaces(value: str) -> str:
 
 def _remove_forbidden_phrases(value: str) -> str:
     result = value
-    for phrase in _FORBIDDEN_PHRASES:
+    for phrase in _load_forbidden_phrases():
         result = re.sub(rf"(?iu)(?<!\w){re.escape(phrase)}(?!\w)", "", result)
     return _collapse_spaces(result)
 

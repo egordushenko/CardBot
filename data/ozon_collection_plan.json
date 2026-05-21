@@ -1,0 +1,1081 @@
+{
+  "source": "developer ТЗ in Codex thread",
+  "generated_at": "2026-05-20T22:07:03.355Z",
+  "target_total_cards": 200,
+  "existing_cards": 50,
+  "cards_to_collect": 150,
+  "quality_filter": {
+    "min_rating": 4.7,
+    "min_reviews": 1000,
+    "require_title": true,
+    "require_description": true,
+    "require_characteristics": true,
+    "require_hashtags": true
+  },
+  "guardrails": [
+    "Do not collect 10 nearly identical products from the same brand/type.",
+    "Prefer 2-3 cards per useful subcategory instead of a large chunk from one subcategory.",
+    "Skip Ozon fresh as a standalone category for this round.",
+    "Skip adult goods, antiques, music/video and digital goods unless explicitly requested later."
+  ],
+  "categories": [
+    {
+      "name": "Дом и сад",
+      "url": "https://www.ozon.ru/category/dom-i-sad-14500/",
+      "current_count": 0,
+      "collect_count": 18,
+      "target_count": 18,
+      "priority_hints": [
+        "посуда",
+        "текстиль",
+        "декор",
+        "освещение",
+        "хранение",
+        "ванн",
+        "дач"
+      ],
+      "subcategories": [
+        {
+          "name": "ПОСУДА И КУХОННЫЕ ПРИНАДЛЕЖНОСТИ",
+          "url": "https://www.ozon.ru/category/posuda-i-kuhonnye-prinadlezhnosti-14501/"
+        },
+        {
+          "name": "ТЕКСТИЛЬ",
+          "url": "https://www.ozon.ru/category/tekstil-15078/"
+        },
+        {
+          "name": "ДЕКОР И ИНТЕРЬЕР",
+          "url": "https://www.ozon.ru/category/dekor-i-interer-15044/"
+        },
+        {
+          "name": "ДАЧА И САД",
+          "url": "https://www.ozon.ru/category/tovary-dlya-dachi-14633/"
+        },
+        {
+          "name": "ОСВЕЩЕНИЕ",
+          "url": "https://www.ozon.ru/category/osveshchenie-15096/"
+        },
+        {
+          "name": "Хранение вещей",
+          "url": "https://www.ozon.ru/category/hranenie-veshchey-14759/"
+        },
+        {
+          "name": "Аксессуары для ванной",
+          "url": "https://www.ozon.ru/category/aksessuary-dlya-vannoy-14594/"
+        },
+        {
+          "name": "Цветы и растения",
+          "url": "https://www.ozon.ru/category/tsvety-i-rasteniya-14884/"
+        },
+        {
+          "name": "Религия и эзотерика",
+          "url": "https://www.ozon.ru/category/ritualnye-tovary-32805/"
+        }
+      ]
+    },
+    {
+      "name": "Электроника",
+      "url": "https://www.ozon.ru/category/elektronika-15500/",
+      "current_count": 8,
+      "collect_count": 12,
+      "target_count": 20,
+      "priority_hints": [
+        "смартфон",
+        "наушник",
+        "смарт",
+        "аксессуар",
+        "ноутбук",
+        "планшет",
+        "умный"
+      ],
+      "subcategories": [
+        {
+          "name": "ТЕЛЕФОНЫ И СМАРТ-ЧАСЫ",
+          "url": "https://www.ozon.ru/category/telefony-i-smart-chasy-15501/"
+        },
+        {
+          "name": "НОУТБУКИ И ПЛАНШЕТЫ",
+          "url": "https://www.ozon.ru/category/noutbuki-planshety-i-elektronnye-knigi-8730/"
+        },
+        {
+          "name": "НАУШНИКИ И АУДИОТЕХНИКА",
+          "url": "https://www.ozon.ru/category/audiotehnika-15543/"
+        },
+        {
+          "name": "Смартфоны",
+          "url": "https://www.ozon.ru/category/smartfony-15502/"
+        },
+        {
+          "name": "Планшеты",
+          "url": "https://www.ozon.ru/category/planshety-15525/"
+        },
+        {
+          "name": "Ноутбуки",
+          "url": "https://www.ozon.ru/category/noutbuki-15692/"
+        },
+        {
+          "name": "Смарт-часы",
+          "url": "https://www.ozon.ru/category/umnye-chasy-15516/"
+        },
+        {
+          "name": "Аксессуары для смартфонов",
+          "url": "https://www.ozon.ru/category/aksessuary-dlya-telefonov-15511/"
+        },
+        {
+          "name": "Умный дом",
+          "url": "https://www.ozon.ru/category/umnyy-dom-15849/"
+        },
+        {
+          "name": "ТЕЛЕВИЗОРЫ",
+          "url": "https://www.ozon.ru/category/televizory-15528/"
+        },
+        {
+          "name": "КОМПЬЮТЕРЫ",
+          "url": "https://www.ozon.ru/category/kompyutery-i-komplektuyushchie-15690/"
+        },
+        {
+          "name": "Фото и видеокамеры",
+          "url": "https://www.ozon.ru/category/foto-i-videokamery-15623/"
+        },
+        {
+          "name": "Офисная техника",
+          "url": "https://www.ozon.ru/category/ofisnaya-tehnika-15770/"
+        }
+      ]
+    },
+    {
+      "name": "Автотовары",
+      "url": "https://www.ozon.ru/category/avtotovary-8500/",
+      "current_count": 0,
+      "collect_count": 12,
+      "target_count": 12,
+      "priority_hints": [
+        "аксессуар",
+        "масл",
+        "автохим",
+        "шин",
+        "диск",
+        "уход",
+        "электрон",
+        "инструмент"
+      ],
+      "subcategories": [
+        {
+          "name": "АВТОАКСЕССУАРЫ И ПРИНАДЛЕЖНОСТИ",
+          "url": "https://www.ozon.ru/category/avtoaksessuary-i-oborudovanie-8608/"
+        },
+        {
+          "name": "МАСЛА И АВТОХИМИЯ",
+          "url": "https://www.ozon.ru/category/masla-i-avtohimiya-8514/"
+        },
+        {
+          "name": "ШИНЫ И ДИСКИ",
+          "url": "https://www.ozon.ru/category/shiny-i-diski-8501/"
+        },
+        {
+          "name": "Уход за автомобилем",
+          "url": "https://www.ozon.ru/category/uhod-za-avtomobilem-8523/"
+        },
+        {
+          "name": "Электроника для авто",
+          "url": "https://www.ozon.ru/category/elektronika-dlya-avto-8751/"
+        },
+        {
+          "name": "Автоинструменты",
+          "url": "https://www.ozon.ru/category/avtomobilnye-instrumenty-8576/"
+        },
+        {
+          "name": "ЗАПЧАСТИ ДЛЯ ЛЕГКОВЫХ АВТОМОБИЛЕЙ",
+          "url": "https://www.ozon.ru/category/avtozapchasti-8678/"
+        },
+        {
+          "name": "АВТОЗВУК",
+          "url": "https://www.ozon.ru/category/avtozvuk-8733/"
+        },
+        {
+          "name": "Транспортные средства",
+          "url": "https://www.ozon.ru/category/transportnye-sredstva-39798/"
+        },
+        {
+          "name": "Аккумуляторы",
+          "url": "https://www.ozon.ru/category/akkumulyatory-i-aksessuary-8685/"
+        },
+        {
+          "name": "Запчасти для грузовиков и спецтехники",
+          "url": "https://www.ozon.ru/category/zapchasti-dlya-spetstehniki-37159/"
+        },
+        {
+          "name": "Ароматизаторы автомобильные",
+          "url": "https://www.ozon.ru/category/aromatizatory-i-neytralizatory-zapaha-8524/"
+        },
+        {
+          "name": "Система очистки стекол и фар",
+          "url": "https://www.ozon.ru/category/sistemy-ochistki-stekol-i-far-34196/"
+        },
+        {
+          "name": "Тормозная система",
+          "url": "https://www.ozon.ru/category/tormoznaya-sistema-8703/"
+        },
+        {
+          "name": "Автомобили",
+          "url": "https://www.ozon.ru/category/avtomobili-39803/"
+        }
+      ]
+    },
+    {
+      "name": "Детские товары",
+      "url": "https://www.ozon.ru/category/detskie-tovary-7000/",
+      "current_count": 0,
+      "collect_count": 12,
+      "target_count": 12,
+      "priority_hints": [
+        "игруш",
+        "подгуз",
+        "гигиен",
+        "конструктор",
+        "комната",
+        "творч",
+        "обуч"
+      ],
+      "subcategories": [
+        {
+          "name": "ИГРУШКИ И ИГРЫ",
+          "url": "https://www.ozon.ru/category/igrushki-i-igry-7108/"
+        },
+        {
+          "name": "ПОДГУЗНИКИ И ГИГИЕНА",
+          "url": "https://www.ozon.ru/category/podguzniki-i-gigiena-7058/"
+        },
+        {
+          "name": "Конструктор",
+          "url": "https://www.ozon.ru/category/konstruktory-7174/"
+        },
+        {
+          "name": "Детская комната",
+          "url": "https://www.ozon.ru/category/detskaya-komnata-7041/"
+        },
+        {
+          "name": "Для творчества и обучения",
+          "url": "https://www.ozon.ru/category/tovary-dlya-shkoly-7182/"
+        },
+        {
+          "name": "СПОРТ И ИГРЫ НА УЛИЦЕ",
+          "url": "https://www.ozon.ru/category/sport-i-igry-na-ulitse-30726/"
+        },
+        {
+          "name": "КОЛЯСКИ И АВТОКРЕСЛА",
+          "url": "https://www.ozon.ru/category/kolyaski-i-avtokresla-30482/"
+        },
+        {
+          "name": "Детское питание",
+          "url": "https://www.ozon.ru/category/detskoe-pitanie-7030/"
+        },
+        {
+          "name": "Настольные игры",
+          "url": "https://www.ozon.ru/category/nastolnye-igry-dlya-detey-7172/"
+        }
+      ]
+    },
+    {
+      "name": "Одежда",
+      "url": "https://www.ozon.ru/category/odezhda-obuv-i-aksessuary-7500/",
+      "current_count": 8,
+      "collect_count": 10,
+      "target_count": 18,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "ЖЕНЩИНАМ",
+          "url": "https://www.ozon.ru/category/zhenskaya-odezhda-7501/"
+        },
+        {
+          "name": "МУЖЧИНАМ",
+          "url": "https://www.ozon.ru/category/muzhskaya-odezhda-7542/"
+        },
+        {
+          "name": "ДЕТЯМ",
+          "url": "https://www.ozon.ru/category/detskaya-odezhda-7580/"
+        },
+        {
+          "name": "УХОД ЗА ОДЕЖДОЙ",
+          "url": "https://www.ozon.ru/category/sredstva-dlya-uhoda-za-odezhdoy-7757/"
+        },
+        {
+          "name": "УНИФОРМА",
+          "url": "https://www.ozon.ru/category/spetsodezhda-i-sredstva-individualnoy-zashchity-10189/"
+        },
+        {
+          "name": "Обувь",
+          "url": "https://www.ozon.ru/category/obuv-17777/"
+        }
+      ]
+    },
+    {
+      "name": "Строительство и ремонт",
+      "url": "https://www.ozon.ru/category/stroitelstvo-i-remont-9700/",
+      "current_count": 0,
+      "collect_count": 10,
+      "target_count": 10,
+      "priority_hints": [
+        "инструмент",
+        "сантех",
+        "электр",
+        "креп",
+        "отдел",
+        "отопл"
+      ],
+      "subcategories": [
+        {
+          "name": "ИНСТРУМЕНТЫ ДЛЯ РЕМОНТА И СТРОИТЕЛЬСТВА",
+          "url": "https://www.ozon.ru/category/instrumenty-dlya-remonta-i-stroitelstva-9856/"
+        },
+        {
+          "name": "САНТЕХНИКА",
+          "url": "https://www.ozon.ru/category/santehnika-i-vodosnabzhenie-10255/"
+        },
+        {
+          "name": "ОТДЕЛОЧНЫЕ МАТЕРИАЛЫ",
+          "url": "https://www.ozon.ru/category/otdelochnye-materialy-9721/"
+        },
+        {
+          "name": "Электрика",
+          "url": "https://www.ozon.ru/category/elektrika-9826/"
+        },
+        {
+          "name": "Крепёж и фурнитура",
+          "url": "https://www.ozon.ru/category/krepezh-i-furnitura-9767/"
+        },
+        {
+          "name": "Отопление",
+          "url": "https://www.ozon.ru/category/otoplenie-10198/"
+        },
+        {
+          "name": "ВОДОСНАБЖЕНИЕ",
+          "url": "https://www.ozon.ru/category/vodosnabzhenie-31846/"
+        },
+        {
+          "name": "СТРОИТЕЛЬНЫЕ МАТЕРИАЛЫ",
+          "url": "https://www.ozon.ru/category/stroitelnye-i-otdelochnye-materialy-9701/"
+        },
+        {
+          "name": "Лакокрасочные материалы",
+          "url": "https://www.ozon.ru/category/kraski-laki-i-rastvoriteli-9804/"
+        },
+        {
+          "name": "Двери и окна",
+          "url": "https://www.ozon.ru/category/dveri-okna-elementy-domov-9746/"
+        },
+        {
+          "name": "Дача и сад",
+          "url": "https://www.ozon.ru/category/tovary-dlya-dachi-14633/"
+        },
+        {
+          "name": "Освещение",
+          "url": "https://www.ozon.ru/category/osveshchenie-15096/"
+        }
+      ]
+    },
+    {
+      "name": "Товары для животных",
+      "url": "https://www.ozon.ru/category/tovary-dlya-zhivotnyh-12300/",
+      "current_count": 0,
+      "collect_count": 10,
+      "target_count": 10,
+      "priority_hints": [
+        "кош",
+        "собак",
+        "грыз",
+        "аквари",
+        "вет",
+        "туалет",
+        "наполн"
+      ],
+      "subcategories": [
+        {
+          "name": "КОШКИ",
+          "url": "https://www.ozon.ru/category/dlya-koshek-12347/"
+        },
+        {
+          "name": "СОБАКИ",
+          "url": "https://www.ozon.ru/category/dlya-sobak-12301/"
+        },
+        {
+          "name": "ГРЫЗУНЫ",
+          "url": "https://www.ozon.ru/category/dlya-gryzunov-12429/"
+        },
+        {
+          "name": "ВЕТАПТЕКА",
+          "url": "https://www.ozon.ru/category/veterinarnaya-apteka-12387/"
+        },
+        {
+          "name": "Туалеты и наполнители",
+          "url": "https://www.ozon.ru/category/tualety-12365/"
+        },
+        {
+          "name": "ПТИЦЫ",
+          "url": "https://www.ozon.ru/category/dlya-ptits-12416/"
+        },
+        {
+          "name": "РЫБЫ И РЕПТИЛИИ",
+          "url": "https://www.ozon.ru/category/akvariumistika-12446/"
+        },
+        {
+          "name": "НАСЕКОМЫЕ",
+          "url": "https://www.ozon.ru/category/tovary-dlya-nasekomyh-35952/"
+        },
+        {
+          "name": "ФЕРМЕРСКОЕ ХОЗЯЙСТВО",
+          "url": "https://www.ozon.ru/category/tovary-dlya-fermerskogo-hozyaystva-34997/"
+        }
+      ]
+    },
+    {
+      "name": "Бытовая техника",
+      "url": "https://www.ozon.ru/category/bytovaya-tehnika-10500/",
+      "current_count": 1,
+      "collect_count": 9,
+      "target_count": 10,
+      "priority_hints": [
+        "кухн",
+        "дом",
+        "климат",
+        "красот",
+        "пылесос"
+      ],
+      "subcategories": [
+        {
+          "name": "ТЕХНИКА ДЛЯ КУХНИ",
+          "url": "https://www.ozon.ru/category/tehnika-dlya-kuhni-10523/"
+        },
+        {
+          "name": "ТЕХНИКА ДЛЯ ДОМА",
+          "url": "https://www.ozon.ru/category/tehnika-dlya-doma-10647/"
+        },
+        {
+          "name": "КЛИМАТИЧЕСКАЯ ТЕХНИКА",
+          "url": "https://www.ozon.ru/category/klimaticheskaya-tehnika-10711/"
+        },
+        {
+          "name": "ТЕХНИКА ДЛЯ КРАСОТЫ И ЗДОРОВЬЯ",
+          "url": "https://www.ozon.ru/category/tehnika-dlya-krasoty-i-zdorovya-10737/"
+        },
+        {
+          "name": "Посудомоечные машины",
+          "url": "https://www.ozon.ru/category/posudomoechnye-mashiny-10515/"
+        },
+        {
+          "name": "Пылесосы",
+          "url": "https://www.ozon.ru/category/pylesosy-i-aksessuary-10648/"
+        },
+        {
+          "name": "КРУПНАЯ БЫТОВАЯ ТЕХНИКА",
+          "url": "https://www.ozon.ru/category/krupnaya-bytovaya-tehnika-10501/"
+        },
+        {
+          "name": "Стиральные машины",
+          "url": "https://www.ozon.ru/category/stiralnye-mashiny-10507/"
+        },
+        {
+          "name": "Холодильники",
+          "url": "https://www.ozon.ru/category/holodilniki-10502/"
+        },
+        {
+          "name": "Плиты",
+          "url": "https://www.ozon.ru/category/plity-10509/"
+        },
+        {
+          "name": "Кондиционеры и сплит-системы",
+          "url": "https://www.ozon.ru/category/konditsionery-i-split-sistemy-10726/"
+        }
+      ]
+    },
+    {
+      "name": "Мебель",
+      "url": "https://www.ozon.ru/category/mebel-15000/",
+      "current_count": 0,
+      "collect_count": 9,
+      "target_count": 9,
+      "priority_hints": [
+        "стол",
+        "стул",
+        "хран",
+        "спаль",
+        "офис",
+        "сад"
+      ],
+      "subcategories": [
+        {
+          "name": "СТОЛЫ И СТУЛЬЯ",
+          "url": "https://www.ozon.ru/category/stoly-stulya-i-kresla-15027/"
+        },
+        {
+          "name": "КОМПЬЮТЕРНАЯ И ОФИСНАЯ МЕБЕЛЬ",
+          "url": "https://www.ozon.ru/category/kompyuternaya-i-ofisnaya-mebel-38449/"
+        },
+        {
+          "name": "МЕБЕЛЬ ДЛЯ ХРАНЕНИЯ",
+          "url": "https://www.ozon.ru/category/shkafy-komody-polki-15036/"
+        },
+        {
+          "name": "МЕБЕЛЬ ДЛЯ СПАЛЬНИ И КОМПЛЕКТУЮЩИЕ",
+          "url": "https://www.ozon.ru/category/mebel-dlya-spalni-15009/"
+        },
+        {
+          "name": "Садовая мебель",
+          "url": "https://www.ozon.ru/category/sadovaya-mebel-15155/"
+        },
+        {
+          "name": "МЯГКАЯ МЕБЕЛЬ",
+          "url": "https://www.ozon.ru/category/myagkaya-mebel-15017/"
+        },
+        {
+          "name": "Мебель для ванной",
+          "url": "https://www.ozon.ru/category/mebel-dlya-vannoy-15013/"
+        },
+        {
+          "name": "Мебель для кухни",
+          "url": "https://www.ozon.ru/category/mebel-dlya-kuhni-15008/"
+        },
+        {
+          "name": "Бескаркасная мебель",
+          "url": "https://www.ozon.ru/category/beskarkasnaya-mebel-35621/"
+        },
+        {
+          "name": "Детская мебель",
+          "url": "https://www.ozon.ru/category/detskaya-mebel-30883/"
+        },
+        {
+          "name": "Мебель для бизнеса",
+          "url": "https://www.ozon.ru/category/mebel-dlya-biznesa-34225/"
+        },
+        {
+          "name": "Сейфы и архивные шкафы",
+          "url": "https://www.ozon.ru/category/seyfy-15158/"
+        }
+      ]
+    },
+    {
+      "name": "Аптека",
+      "url": "https://www.ozon.ru/category/apteka-6000/",
+      "current_count": 2,
+      "collect_count": 6,
+      "target_count": 8,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "ЛЕКАРСТВА",
+          "url": "https://www.ozon.ru/category/lekarstvennye-sredstva-30000/"
+        },
+        {
+          "name": "ВИТАМИНЫ И БАД",
+          "url": "https://www.ozon.ru/category/vitaminy-bady-i-pishchevye-dobavki-6164/"
+        },
+        {
+          "name": "ОПТИКА",
+          "url": "https://www.ozon.ru/category/linzy-ochki-aksessuary-6295/"
+        },
+        {
+          "name": "ОРТОПЕДИЯ",
+          "url": "https://www.ozon.ru/category/ortopediya-6285/"
+        },
+        {
+          "name": "МЕДИЦИНСКИЕ ПРИБОРЫ",
+          "url": "https://www.ozon.ru/category/meditsinskie-pribory-6254/"
+        },
+        {
+          "name": "МЕД. ИЗДЕЛИЯ И РАСХОДНЫЕ МАТЕРИАЛЫ",
+          "url": "https://www.ozon.ru/category/meditsinskie-izdeliya-6209/"
+        },
+        {
+          "name": "Спортпит",
+          "url": "https://www.ozon.ru/category/sportivnoe-pitanie-11650/"
+        },
+        {
+          "name": "Средства реабилитации",
+          "url": "https://www.ozon.ru/category/sredstva-dlya-reabilitatsii-6249/"
+        }
+      ]
+    },
+    {
+      "name": "Спортивные товары",
+      "url": "https://www.ozon.ru/category/sport-i-otdyh-11000/",
+      "current_count": 9,
+      "collect_count": 5,
+      "target_count": 14,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "ФИТНЕС И ЙОГА",
+          "url": "https://www.ozon.ru/category/fitnes-i-yoga-38647/"
+        },
+        {
+          "name": "БОКС И ЕДИНОБОРСТВА",
+          "url": "https://www.ozon.ru/category/boks-i-edinoborstva-11778/"
+        },
+        {
+          "name": "ВИДЫ СПОРТА",
+          "url": "https://www.ozon.ru/category/vidy-sporta-8811/"
+        },
+        {
+          "name": "ТЕННИС И БАДМИНТОН",
+          "url": "https://www.ozon.ru/category/tennis-i-badminton-11276/"
+        },
+        {
+          "name": "АКТИВНЫЕ ВИДЫ ОТДЫХА",
+          "url": "https://www.ozon.ru/category/aktivnye-vidy-otdyha-8787/"
+        },
+        {
+          "name": "Электротранспорт",
+          "url": "https://www.ozon.ru/category/elektrotransport-38259/"
+        },
+        {
+          "name": "Силовые тренажёры",
+          "url": "https://www.ozon.ru/category/atleticheskie-skami-32530/"
+        },
+        {
+          "name": "Свободные веса",
+          "url": "https://www.ozon.ru/category/svobodnye-vesa-38639/"
+        },
+        {
+          "name": "Велоспорт",
+          "url": "https://www.ozon.ru/category/velosipedy-ekipirovka-i-zapchasti-11001/"
+        },
+        {
+          "name": "Кардиотренажёры",
+          "url": "https://www.ozon.ru/category/kardiotrenazhery-32524/"
+        },
+        {
+          "name": "Водный спорт",
+          "url": "https://www.ozon.ru/category/vodnyy-sport-i-otdyh-na-vode-34408/"
+        }
+      ]
+    },
+    {
+      "name": "Бытовая химия",
+      "url": "https://www.ozon.ru/category/bytovaya-himiya-14572/",
+      "current_count": 1,
+      "collect_count": 5,
+      "target_count": 6,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "СТИРКА",
+          "url": "https://www.ozon.ru/category/sredstva-dlya-stirki-14580/"
+        },
+        {
+          "name": "ЧИСТЯЩИЕ И МОЮЩИЕ СРЕДСТВА",
+          "url": "https://www.ozon.ru/category/chistyashchie-sredstva-14587/"
+        },
+        {
+          "name": "СРЕДСТВА ДЛЯ МЫТЬЯ ПОСУДЫ",
+          "url": "https://www.ozon.ru/category/sredstva-dlya-mytya-posudy-14591/"
+        },
+        {
+          "name": "ОСВЕЖИТЕЛИ И АРОМАТИЗАТОРЫ",
+          "url": "https://www.ozon.ru/category/osvezhiteli-i-aromatizatory-14579/"
+        },
+        {
+          "name": "ГИГИЕНА ПОЛОСТИ РТА",
+          "url": "https://www.ozon.ru/category/gigiena-polosti-rta-6318/"
+        },
+        {
+          "name": "Интимная гигиена",
+          "url": "https://www.ozon.ru/category/intimnaya-gigiena-32177/"
+        },
+        {
+          "name": "Для бритья",
+          "url": "https://www.ozon.ru/category/tovary-dlya-britya-36855/"
+        }
+      ]
+    },
+    {
+      "name": "Канцелярские товары",
+      "url": "https://www.ozon.ru/category/kantselyarskie-tovary-18000/",
+      "current_count": 0,
+      "collect_count": 5,
+      "target_count": 5,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "В ОФИС",
+          "url": "https://www.ozon.ru/category/ofisnye-prinadlezhnosti-30107/"
+        },
+        {
+          "name": "В ШКОЛУ",
+          "url": "https://www.ozon.ru/category/tovary-dlya-shkoly-7182/"
+        },
+        {
+          "name": "ДЛЯ ПИСЬМА",
+          "url": "https://www.ozon.ru/category/pismennye-prinadlezhnosti-18015/"
+        },
+        {
+          "name": "БУМАЖНАЯ ПРОДУКЦИЯ",
+          "url": "https://www.ozon.ru/category/bumazhnaya-produktsiya-18025/"
+        },
+        {
+          "name": "ПАПКИ И ФАЙЛЫ",
+          "url": "https://www.ozon.ru/category/papki-i-fayly-30106/"
+        },
+        {
+          "name": "ДЕМОНСТРАЦИОННЫЕ ДОСКИ",
+          "url": "https://www.ozon.ru/category/demonstratsionnye-doski-18095/"
+        },
+        {
+          "name": "Рюкзаки, ранцы, сумки",
+          "url": "https://www.ozon.ru/category/ryukzaki-rantsy-sumki-dlya-shkoly-7201/"
+        },
+        {
+          "name": "Тетради, дневники, блокноты",
+          "url": "https://www.ozon.ru/category/tetradi-bloknoty-dnevniki-7205/"
+        },
+        {
+          "name": "Письменные принадлежности",
+          "url": "https://www.ozon.ru/category/pismennye-prinadlezhnosti-7192/"
+        },
+        {
+          "name": "Канцелярские принадлежности",
+          "url": "https://www.ozon.ru/category/kantselyarskie-prinadlezhnosti-7184/"
+        },
+        {
+          "name": "Творчество в школе",
+          "url": "https://www.ozon.ru/category/tvorchestvo-v-shkole-31470/"
+        }
+      ]
+    },
+    {
+      "name": "Хобби и творчество",
+      "url": "https://www.ozon.ru/category/hobbi-i-tvorchestvo-13500/",
+      "current_count": 0,
+      "collect_count": 5,
+      "target_count": 5,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "ЛЕПКА И СКУЛЬПТУРА",
+          "url": "https://www.ozon.ru/category/lepka-13723/"
+        },
+        {
+          "name": "НАСТОЛЬНЫЕ ИГРЫ",
+          "url": "https://www.ozon.ru/category/nastolnye-i-kartochnye-igry-13506/"
+        },
+        {
+          "name": "ПАЗЛЫ И ГОЛОВОЛОМКИ",
+          "url": "https://www.ozon.ru/category/pazly-i-golovolomki-13501/"
+        },
+        {
+          "name": "Картины по номерам",
+          "url": "https://www.ozon.ru/category/kartiny-po-nomeram-13568/"
+        },
+        {
+          "name": "Алмазная мозаика",
+          "url": "https://www.ozon.ru/category/almaznye-mozaiki-13563/"
+        },
+        {
+          "name": "Пазлы",
+          "url": "https://www.ozon.ru/category/pazly-13502/"
+        },
+        {
+          "name": "Наборы для опытов",
+          "url": "https://www.ozon.ru/category/nabory-dlya-issledovaniy-i-opytov-13886/"
+        },
+        {
+          "name": "Бисер",
+          "url": "https://www.ozon.ru/category/biser-13648/"
+        }
+      ]
+    },
+    {
+      "name": "Туризм, рыбалка, охота",
+      "url": "https://www.ozon.ru/category/ohota-rybalka-turizm-33332/",
+      "current_count": 0,
+      "collect_count": 5,
+      "target_count": 5,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "ТУРИЗМ И ОТДЫХ НА ПРИРОДЕ",
+          "url": "https://www.ozon.ru/category/turizm-i-otdyh-na-prirode-11424/"
+        },
+        {
+          "name": "РЫБАЛКА",
+          "url": "https://www.ozon.ru/category/rybalka-33152/"
+        },
+        {
+          "name": "ЛОДКИ И ЛОДОЧНЫЕ МОТОРЫ",
+          "url": "https://www.ozon.ru/category/lodki-i-lodochnye-motory-11190/"
+        },
+        {
+          "name": "ОДЕЖДА ДЛЯ РЫБАЛКИ И ОХОТЫ",
+          "url": "https://www.ozon.ru/category/odezhda-dlya-rybalki-11334/"
+        },
+        {
+          "name": "Палатки, тенты и шатры",
+          "url": "https://www.ozon.ru/category/palatki-tenty-i-shatry-11425/"
+        },
+        {
+          "name": "Туристическая мебель",
+          "url": "https://www.ozon.ru/category/skladnaya-pohodnaya-mebel-32938/"
+        },
+        {
+          "name": "Средства связи",
+          "url": "https://www.ozon.ru/category/ratsii-i-radiostantsii-8753/"
+        },
+        {
+          "name": "Ножи, мультитулы, инструменты",
+          "url": "https://www.ozon.ru/category/multituly-11463/"
+        },
+        {
+          "name": "Катера и водная техника",
+          "url": "https://www.ozon.ru/category/vodnaya-tehnika-39800/"
+        },
+        {
+          "name": "Органические приманки",
+          "url": "https://www.ozon.ru/category/organicheskie-primanki-39966/"
+        }
+      ]
+    },
+    {
+      "name": "Красота и здоровье",
+      "url": "https://www.ozon.ru/category/krasota-i-zdorove-6500/",
+      "current_count": 16,
+      "collect_count": 4,
+      "target_count": 20,
+      "priority_hints": [
+        "парф",
+        "маник",
+        "волос",
+        "тела"
+      ],
+      "subcategories": [
+        {
+          "name": "УХОД ЗА ВОЛОСАМИ",
+          "url": "https://www.ozon.ru/category/uhod-za-volosami-6584/"
+        },
+        {
+          "name": "ПАРФЮМЕРИЯ",
+          "url": "https://www.ozon.ru/category/parfyumeriya-6662/"
+        },
+        {
+          "name": "МАНИКЮР И ПЕДИКЮР",
+          "url": "https://www.ozon.ru/category/nogti-6526/"
+        },
+        {
+          "name": "МАКИЯЖ",
+          "url": "https://www.ozon.ru/category/makiyazh-6501/"
+        },
+        {
+          "name": "УХОД ЗА ЛИЦОМ",
+          "url": "https://www.ozon.ru/category/uhod-za-litsom-6559/"
+        },
+        {
+          "name": "УХОД ЗА ТЕЛОМ",
+          "url": "https://www.ozon.ru/category/uhod-za-telom-6637/"
+        },
+        {
+          "name": "АРОМАТЕРАПИЯ",
+          "url": "https://www.ozon.ru/category/aromaterapiya-6671/"
+        }
+      ]
+    },
+    {
+      "name": "Продукты питания",
+      "url": "https://www.ozon.ru/category/produkty-pitaniya-9200/",
+      "current_count": 4,
+      "collect_count": 4,
+      "target_count": 8,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "ОВОЩИ И ФРУКТЫ",
+          "url": "https://www.ozon.ru/category/supermarket-ovoshchi-frukty-zelen-9201000/"
+        },
+        {
+          "name": "БАКАЛЕЯ",
+          "url": "https://www.ozon.ru/category/makarony-krupy-muka-30699/"
+        },
+        {
+          "name": "ЧАЙ И КОФЕ",
+          "url": "https://www.ozon.ru/category/chay-kofe-kakao-9370/"
+        },
+        {
+          "name": "НАПИТКИ",
+          "url": "https://www.ozon.ru/category/soki-vody-napitki-9467/"
+        },
+        {
+          "name": "ВЫПЕЧКА И СЛАДОСТИ",
+          "url": "https://www.ozon.ru/category/konditerskie-izdeliya-9378/"
+        },
+        {
+          "name": "ОРЕХИ, СНЭКИ",
+          "url": "https://www.ozon.ru/category/sneki-suhariki-chipsy-9355/"
+        },
+        {
+          "name": "МОЛОЧНЫЕ ПРОДУКТЫ",
+          "url": "https://www.ozon.ru/category/moloko-syr-yaytsa-9276/"
+        }
+      ]
+    },
+    {
+      "name": "Ювелирные украшения",
+      "url": "https://www.ozon.ru/category/yuvelirnye-ukrasheniya-50001/",
+      "current_count": 0,
+      "collect_count": 4,
+      "target_count": 4,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "СЕРЬГИ",
+          "url": "https://www.ozon.ru/category/sergi-yuvelirnye-50003/"
+        },
+        {
+          "name": "КОЛЬЦА",
+          "url": "https://www.ozon.ru/category/koltsa-yuvelirnye-50002/"
+        },
+        {
+          "name": "БРАСЛЕТЫ",
+          "url": "https://www.ozon.ru/category/braslety-yuvelirnye-50011/"
+        },
+        {
+          "name": "УКРАШЕНИЯ НА ШЕЮ",
+          "url": "https://www.ozon.ru/category/ukrasheniya-na-sheyu-50004/"
+        },
+        {
+          "name": "КОМПЛЕКТЫ",
+          "url": "https://www.ozon.ru/category/komplekty-yuvelirnyh-ukrasheniy-50013/"
+        },
+        {
+          "name": "ШАРМЫ",
+          "url": "https://www.ozon.ru/category/sharmy-yuvelirnye-50015/"
+        },
+        {
+          "name": "БРОШИ И ЗНАЧКИ",
+          "url": "https://www.ozon.ru/category/broshi-yuvelirnye-50014/"
+        },
+        {
+          "name": "ПИРСИНГ",
+          "url": "https://www.ozon.ru/category/pirsing-yuvelirnyy-50018/"
+        },
+        {
+          "name": "ЧАСЫ",
+          "url": "https://www.ozon.ru/category/chasy-yuvelirnye-50012/"
+        },
+        {
+          "name": "Бижутерия",
+          "url": "https://www.ozon.ru/category/bizhuternye-ukrasheniya-zhenskie-17022/"
+        }
+      ]
+    },
+    {
+      "name": "Книги",
+      "url": "https://www.ozon.ru/category/knigi-16500/",
+      "current_count": 0,
+      "collect_count": 3,
+      "target_count": 3,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "ХУДОЖЕСТВЕННЫЕ",
+          "url": "https://www.ozon.ru/category/hudozhestvennaya-literatura-16501/"
+        },
+        {
+          "name": "НЕХУДОЖЕСТВЕННЫЕ",
+          "url": "https://www.ozon.ru/category/nehudozhestvennaya-literatura-16511/"
+        },
+        {
+          "name": "БИЗНЕС-ЛИТЕРАТУРА",
+          "url": "https://www.ozon.ru/category/biznes-literatura-40024/"
+        },
+        {
+          "name": "ДЕТЯМ И РОДИТЕЛЯМ",
+          "url": "https://www.ozon.ru/category/detyam-i-roditelyam-40025/"
+        },
+        {
+          "name": "УЧЕБНИКИ",
+          "url": "https://www.ozon.ru/category/uchebnaya-literatura-40026/"
+        },
+        {
+          "name": "ПОДАРОЧНЫЕ ИЗДАНИЯ КНИГ",
+          "url": "https://www.ozon.ru/category/podarochnye-izdaniya-16547/"
+        },
+        {
+          "name": "Научная литература",
+          "url": "https://www.ozon.ru/category/nauchnaya-literatura-40021/"
+        },
+        {
+          "name": "Саморазвитие",
+          "url": "https://www.ozon.ru/category/samorazvitie-32618/"
+        },
+        {
+          "name": "Искусство и культура",
+          "url": "https://www.ozon.ru/category/iskusstvo-i-fotografiya-40013/"
+        },
+        {
+          "name": "Медицина",
+          "url": "https://www.ozon.ru/category/meditsina-16551/"
+        }
+      ]
+    },
+    {
+      "name": "Все для игр",
+      "url": "https://www.ozon.ru/category/igry-i-soft-13300/",
+      "current_count": 0,
+      "collect_count": 2,
+      "target_count": 2,
+      "priority_hints": [],
+      "subcategories": [
+        {
+          "name": "PLAYSTATION",
+          "url": "https://www.ozon.ru/category/playstation-31719/"
+        },
+        {
+          "name": "XBOX",
+          "url": "https://www.ozon.ru/category/xbox-31720/"
+        },
+        {
+          "name": "NINTENDO",
+          "url": "https://www.ozon.ru/category/nintendo-switch-31721/"
+        },
+        {
+          "name": "PC",
+          "url": "https://www.ozon.ru/category/pc-31718/"
+        },
+        {
+          "name": "MOBILE GAMING",
+          "url": "https://www.ozon.ru/category/mobile-gaming-31932/"
+        },
+        {
+          "name": "СУМКИ И ЧЕХЛЫ ДЛЯ ИГРОВЫХ ПРИСТАВОК",
+          "url": "https://www.ozon.ru/category/chehly-dlya-igrovyh-pristavok-15905/"
+        },
+        {
+          "name": "АКСЕССУАРЫ ДЛЯ ИГРОВЫХ ПРИСТАВОК",
+          "url": "https://www.ozon.ru/category/aksessuary-dlya-igrovyh-pristavok-15810/"
+        },
+        {
+          "name": "Игровые приставки",
+          "url": "https://www.ozon.ru/category/igrovye-pristavki-15801/"
+        },
+        {
+          "name": "Игровые консоли PlayStation",
+          "url": "https://www.ozon.ru/category/konsoli-playstation-31751/"
+        },
+        {
+          "name": "Очки виртуальной реальности",
+          "url": "https://www.ozon.ru/category/ochki-virtualnoy-realnosti-dlya-igr-15825/"
+        },
+        {
+          "name": "Игры для PlayStation 5",
+          "url": "https://www.ozon.ru/category/igry-dlya-playstation-5-38457/"
+        },
+        {
+          "name": "Геймпады",
+          "url": "https://www.ozon.ru/category/geympady-15823/"
+        },
+        {
+          "name": "Игровые рули и педали",
+          "url": "https://www.ozon.ru/category/igrovye-ruli-i-pedali-15829/"
+        }
+      ]
+    }
+  ]
+}

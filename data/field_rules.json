@@ -1,0 +1,11 @@
+{
+  "brand": "skip",
+  "article": "skip",
+  "color": "extract_from_image_or_placeholder",
+  "composition": "use_category_default",
+  "country": "use_category_default",
+  "care_instructions": "use_category_default",
+  "size": "skip",
+  "model_parameters": "skip",
+  "gender": "infer_from_category"
+}

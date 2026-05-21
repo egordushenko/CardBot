@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import Settings, load_settings
+from category_detector import detect_category
+from category_profiles import get_category_profile, load_category_profiles
+from core.field_resolver import resolve_fields
 from db import Database, UsageMode
 from image_generator import generate_marketplace_image
 from llm import CardGeneration, ImageConcept, generate_card, generate_image_prompts, normalize_marketplace
@@ -499,6 +502,54 @@ def _get_db(context: Any) -> Database:
 
 def _get_settings(context: Any) -> Settings:
     return context.application.bot_data["settings"]
+
+
+def _infer_wb_field_category(product_description: str) -> str:
+    text = product_description.casefold()
+    if any(marker in text for marker in ("женск", "платье", "юбка", "блузка")):
+        return "Женская одежда"
+    if any(marker in text for marker in ("мужск", "брюки", "рубашка", "поло")):
+        return "Мужская одежда"
+    if any(marker in text for marker in ("детск", "ребен", "мальчик", "девочк")):
+        return "Детская одежда"
+    return "Одежда"
+
+
+async def _resolve_generation_enrichment(
+    context: Any,
+    product_description: str,
+    marketplace: str,
+    *,
+    has_photo: bool,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    normalized_marketplace = normalize_marketplace(marketplace)
+    category_profile: dict[str, Any] | None = None
+
+    if normalized_marketplace == "ozon":
+        profiles = context.application.bot_data.get("category_profiles")
+        if profiles is None:
+            profiles = load_category_profiles()
+            context.application.bot_data["category_profiles"] = profiles
+
+        try:
+            category = await asyncio.to_thread(detect_category, product_description)
+        except Exception:
+            logging.exception("Ozon category detection failed")
+            category = "Одежда"
+
+        category_profile = get_category_profile(profiles, category)
+        if not category_profile:
+            logging.warning("Ozon category profile not found: %s", category)
+    else:
+        category = _infer_wb_field_category(product_description)
+
+    resolved_fields = resolve_fields(
+        {"description": product_description},
+        category=category,
+        marketplace=normalized_marketplace,
+        has_photo=has_photo,
+    )
+    return category_profile, resolved_fields
 
 
 def _clear_image_session(context: Any) -> None:
@@ -1028,6 +1079,12 @@ async def _generate_text_and_images_for_user(
     )
 
     await message.reply_text("⏳ Генерирую карточку...")
+    category_profile, resolved_fields = await _resolve_generation_enrichment(
+        context,
+        product_description,
+        marketplace,
+        has_photo=True,
+    )
     card_task = asyncio.create_task(
         generate_card(
             product_description,
@@ -1035,6 +1092,8 @@ async def _generate_text_and_images_for_user(
             model=settings.openrouter_model,
             site_url=settings.site_url,
             marketplace=marketplace,
+            category_profile=category_profile,
+            resolved_fields=resolved_fields,
         )
     )
     concepts_task = asyncio.create_task(
@@ -1351,12 +1410,20 @@ async def _generate_and_send_text_card(
         await message.reply_text(intro_text)
 
     try:
+        category_profile, resolved_fields = await _resolve_generation_enrichment(
+            context,
+            user_input,
+            marketplace,
+            has_photo=False,
+        )
         card = await generate_card(
             user_input,
             api_key=settings.openrouter_api_key,
             model=settings.openrouter_model,
             site_url=settings.site_url,
             marketplace=marketplace,
+            category_profile=category_profile,
+            resolved_fields=resolved_fields,
         )
     except Exception:
         logging.exception("LLM generation failed")
@@ -1916,6 +1983,7 @@ def create_application(settings: Settings) -> Any:
     )
     application.bot_data["settings"] = settings
     application.bot_data["db"] = Database(settings.cardbot_db_url)
+    application.bot_data["category_profiles"] = load_category_profiles()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("generate", generate_command))
     application.add_handler(CommandHandler("images", images_command))

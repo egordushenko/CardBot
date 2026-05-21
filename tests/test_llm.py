@@ -4,6 +4,7 @@ from llm import (
     CardGeneration,
     ImageConcept,
     LLMResponseError,
+    build_category_profile_prompt_block,
     build_user_prompt,
     build_image_director_user_prompt,
     parse_image_concepts_payload,
@@ -121,12 +122,80 @@ def test_select_system_prompt_uses_marketplace_specific_rules():
     assert "Ozon" in ozon_prompt
     assert "hashtags" in ozon_prompt
     assert "200 символов" in ozon_prompt
+    assert "900-1400 символов" in ozon_prompt
     assert "30 хештегов" in ozon_prompt
+
+
+def test_ozon_prompt_includes_beauty_category_profile():
+    prompt = select_system_prompt(
+        "ozon",
+        {
+            "category": "Красота и здоровье",
+            "title_target_chars": 87,
+            "desc_target_chars": 1400,
+            "top_characteristics": ["Тип", "Тип кожи", "Объем, мл"],
+            "top_hashtags": ["#крем", "#уход_за_кожей"],
+            "top_title_words": ["крем", "кожи", "уход"],
+        },
+    )
+
+    assert "Категория товара: Красота и здоровье" in prompt
+    assert "Тип кожи" in prompt
+    assert "#уход_за_кожей" in prompt
+
+
+def test_ozon_prompt_includes_clothes_category_profile():
+    block = build_category_profile_prompt_block(
+        {
+            "category": "Одежда",
+            "title_target_chars": 92,
+            "desc_target_chars": 1400,
+            "top_characteristics": ["Цвет", "Российский размер", "Материал"],
+            "top_hashtags": ["#платье", "#одежда"],
+            "top_title_words": ["платье", "женское"],
+        }
+    )
+
+    assert "Категория товара: Одежда" in block
+    assert "Цвет" in block
+
+
+def test_parse_generation_payload_removes_forbidden_title_words():
+    result = parse_generation_payload(
+        (
+            '{"title":"Крем для лица акция скидка original",'
+            '"description":"Описание товара",'
+            '"hashtags":"крем уход",'
+            '"characteristics":"Тип: Крем"}'
+        ),
+        marketplace="ozon",
+    )
+
+    lowered = result.title.lower()
+    assert "акция" not in lowered
+    assert "скидка" not in lowered
+    assert "original" not in lowered
 
 
 def test_build_user_prompt_includes_marketplace_name():
     assert build_user_prompt("wb", "товар").startswith("Маркетплейс: Wildberries")
     assert build_user_prompt("ozon", "товар").startswith("Маркетплейс: Ozon")
+
+
+def test_build_user_prompt_includes_resolved_fields_and_instructions():
+    prompt = build_user_prompt(
+        "ozon",
+        "крем для лица",
+        {
+            "Страна-изготовитель": "Россия",
+            "Цвет": "[укажите цвет]",
+            "__prompt_instructions": ["Извлеки цвет из изображения товара."],
+        },
+    )
+
+    assert "Страна-изготовитель: Россия" in prompt
+    assert "Цвет: [укажите цвет]" in prompt
+    assert "Извлеки цвет из изображения товара." in prompt
 
 
 def test_parse_image_concepts_payload_validates_and_clamps_photo_index():

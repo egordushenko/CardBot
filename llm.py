@@ -50,17 +50,79 @@ def normalize_marketplace(marketplace: str) -> str:
     raise LLMResponseError(f"Unsupported marketplace: {marketplace}")
 
 
-def select_system_prompt(marketplace: str) -> str:
+def _format_profile_value(value: Any) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value if str(item).strip())
+    return str(value or "").strip()
+
+
+def build_category_profile_prompt_block(category_profile: dict[str, Any] | None) -> str:
+    if not category_profile:
+        return ""
+
+    category = str(category_profile.get("category") or "").strip()
+    if not category:
+        return ""
+
+    return (
+        "\n\nКатегорийный профиль Ozon:\n"
+        f"Категория товара: {category}\n"
+        f"Длина названия: стремись к {category_profile.get('title_target_chars')} символам\n"
+        f"Длина описания: {category_profile.get('desc_target_chars')} символов\n"
+        f"Приоритетные характеристики: {_format_profile_value(category_profile.get('top_characteristics'))}\n"
+        f"Примеры релевантных хэштегов для категории: {_format_profile_value(category_profile.get('top_hashtags'))}\n"
+        f"Типичные SEO-слова для названий в этой категории: {_format_profile_value(category_profile.get('top_title_words'))}"
+    )
+
+
+def select_system_prompt(
+    marketplace: str,
+    category_profile: dict[str, Any] | None = None,
+) -> str:
     normalized = normalize_marketplace(marketplace)
     if normalized == "ozon":
-        return OZON_SYSTEM_PROMPT
+        return OZON_SYSTEM_PROMPT + build_category_profile_prompt_block(category_profile)
     return WB_SYSTEM_PROMPT
 
 
-def build_user_prompt(marketplace: str, user_input: str) -> str:
+def build_resolved_fields_prompt_block(resolved_fields: dict[str, Any] | None) -> str:
+    if not resolved_fields:
+        return ""
+
+    field_lines: list[str] = []
+    instructions: list[str] = []
+    for key, value in resolved_fields.items():
+        if key == "__prompt_instructions__":
+            if isinstance(value, list):
+                instructions.extend(str(item).strip() for item in value if str(item).strip())
+            elif str(value).strip():
+                instructions.append(str(value).strip())
+            continue
+        if str(value).strip():
+            field_lines.append(f"- {key}: {str(value).strip()}")
+
+    blocks: list[str] = []
+    if field_lines:
+        blocks.append("Обогащенные поля для карточки:\n" + "\n".join(field_lines))
+    if instructions:
+        blocks.append("Дополнительные инструкции:\n" + "\n".join(f"- {item}" for item in instructions))
+    if not blocks:
+        return ""
+    return "\n\n" + "\n\n".join(blocks)
+
+
+def build_user_prompt(
+    marketplace: str,
+    user_input: str,
+    resolved_fields: dict[str, Any] | None = None,
+) -> str:
     normalized = normalize_marketplace(marketplace)
     name = MARKETPLACE_NAMES[normalized]
-    return f"Маркетплейс: {name}\nТовар: {user_input.strip()}"
+    return (
+        f"Маркетплейс: {name}\n"
+        f"Товар: {user_input.strip()}"
+        f"{build_resolved_fields_prompt_block(resolved_fields)}"
+    )
 
 
 def build_image_director_user_prompt(
@@ -197,6 +259,8 @@ async def generate_card(
     model: str = "deepseek/deepseek-v4-flash",
     site_url: str = "https://alterega.ru",
     marketplace: str = "wb",
+    category_profile: dict[str, Any] | None = None,
+    resolved_fields: dict[str, Any] | None = None,
 ) -> CardGeneration:
     from openai import AsyncOpenAI
 
@@ -214,10 +278,16 @@ async def generate_card(
     response = await client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": select_system_prompt(marketplace)},
-            {"role": "user", "content": build_user_prompt(marketplace, user_input)},
+            {
+                "role": "system",
+                "content": select_system_prompt(marketplace, category_profile),
+            },
+            {
+                "role": "user",
+                "content": build_user_prompt(marketplace, user_input, resolved_fields),
+            },
         ],
-        max_tokens=1500,
+        max_tokens=2200,
         temperature=0.7,
         response_format={"type": "json_object"},
     )
