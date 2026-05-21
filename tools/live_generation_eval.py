@@ -52,11 +52,43 @@ def resolve_category_profile(case: dict[str, Any]) -> dict[str, Any] | None:
 async def run_live_eval(
     cases: list[dict[str, Any]],
     generator: Generator,
+    retries: int = 1,
+    retry_delay_seconds: float = 1,
 ) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for case in cases:
         category_profile = resolve_category_profile(case)
-        card = await generator(case, category_profile)
+        card: CardGeneration | None = None
+        generation_error: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                card = await generator(case, category_profile)
+                generation_error = None
+                break
+            except Exception as exc:  # pragma: no cover - exact provider errors vary.
+                generation_error = exc
+                if attempt < retries and retry_delay_seconds > 0:
+                    await asyncio.sleep(retry_delay_seconds)
+
+        if card is None:
+            issue = f"generation_error:{type(generation_error).__name__}"
+            results.append(
+                {
+                    "id": case.get("id"),
+                    "marketplace": normalize_marketplace(str(case.get("marketplace") or "")),
+                    "category": case.get("category") or (category_profile or {}).get("category"),
+                    "user_input": case.get("user_input"),
+                    "title": "",
+                    "description": "",
+                    "keywords": "",
+                    "characteristics": "",
+                    "score": 0,
+                    "issues": [issue],
+                    "error": str(generation_error),
+                }
+            )
+            continue
+
         quality = evaluate_card_quality(
             card,
             user_input=str(case.get("user_input") or ""),
@@ -162,7 +194,12 @@ async def _run_from_cli(args: argparse.Namespace) -> int:
             category_profile=category_profile,
         )
 
-    report = await run_live_eval(cases, api_generator)
+    report = await run_live_eval(
+        cases,
+        api_generator,
+        retries=args.retries,
+        retry_delay_seconds=args.retry_delay_seconds,
+    )
     json_path = Path(args.json_report)
     md_path = Path(args.md_report)
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -182,6 +219,8 @@ def main() -> int:
     parser.add_argument("--md-report", default=str(DEFAULT_MD_REPORT_PATH))
     parser.add_argument("--marketplace", choices=["wb", "ozon", "wildberries"])
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--retry-delay-seconds", type=float, default=1)
     parser.add_argument("--fail-on-issues", action="store_true")
     args = parser.parse_args()
     return asyncio.run(_run_from_cli(args))

@@ -72,6 +72,33 @@ async def test_run_live_eval_uses_generator_and_quality_gates():
     assert "description_too_short" in report["results"][1]["issues"]
 
 
+@pytest.mark.asyncio
+async def test_run_live_eval_records_generation_errors_after_retry():
+    calls = 0
+
+    async def broken_generator(case, category_profile):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("empty response")
+
+    report = await run_live_eval(
+        [
+            {
+                "id": "wb_error",
+                "marketplace": "wb",
+                "user_input": "Футболка женская черная",
+            }
+        ],
+        broken_generator,
+        retries=1,
+        retry_delay_seconds=0,
+    )
+
+    assert calls == 2
+    assert report["summary"]["failed"] == 1
+    assert "generation_error:RuntimeError" in report["results"][0]["issues"]
+
+
 def test_build_markdown_report_contains_summary_and_failed_cases():
     markdown = build_markdown_report(
         {
