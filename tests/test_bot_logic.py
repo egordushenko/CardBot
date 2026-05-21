@@ -216,6 +216,8 @@ def test_help_message_contains_contact_and_offer_link_button():
     keyboard = build_help_keyboard("https://alterega.ru/cardbot/offer")
 
     assert "alterega@list.ru" in text
+    assert "Самозанятый Дущенко Егор Владимирович" in text
+    assert "ИНН: 615422982815" in text
     assert "публичная оферта" in text.lower()
     assert keyboard.inline_keyboard[0][0].text == "Публичная оферта"
     assert keyboard.inline_keyboard[0][0].url == "https://alterega.ru/cardbot/offer"
