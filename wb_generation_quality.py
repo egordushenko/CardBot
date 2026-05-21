@@ -90,6 +90,36 @@ WB_UNVERIFIED_DESCRIPTION_PATTERNS = {
     ),
 }
 
+WB_DROP_CHARACTERISTIC_FIELDS = {
+    "Состояние товара",
+}
+
+WB_NUMERIC_VALUE_FIELDS = (
+    "Высота предмета",
+    "Ширина предмета",
+    "Длина предмета",
+    "Глубина предмета",
+    "Вес товара",
+    "Вес без упаковки",
+    "Вес с упаковкой",
+    "Длина упаковки",
+    "Высота упаковки",
+    "Ширина упаковки",
+)
+
+WB_CLOTHING_PROFILE_MARKERS = (
+    "женщинам",
+    "мужчинам",
+    "детям / одежда",
+    "одежда",
+    "футболка",
+    "платье",
+    "брюки",
+    "худи",
+    "кофта",
+    "костюм",
+)
+
 
 def parse_characteristics_text(value: str) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -111,6 +141,10 @@ def _format_characteristics(fields: dict[str, str]) -> str:
 
 def _is_placeholder(value: str) -> bool:
     return value.strip().startswith("[укажите")
+
+
+def _has_digit(value: str) -> bool:
+    return bool(re.search(r"\d", value))
 
 
 def _mentions_any(text: str, patterns: tuple[str, ...]) -> bool:
@@ -237,6 +271,7 @@ def _normalize_wb_characteristics(
     characteristics: dict[str, str],
     user_input: str,
     title: str,
+    category_profile: dict[str, Any] | None,
 ) -> dict[str, str]:
     normalized: dict[str, str] = {}
     country_explicit = _user_mentions_country(user_input)
@@ -245,6 +280,20 @@ def _normalize_wb_characteristics(
         clean_key = key.strip()
         clean_value = value.strip()
         if not clean_key or not clean_value:
+            continue
+        if clean_key in WB_DROP_CHARACTERISTIC_FIELDS:
+            continue
+        if _requires_numeric_value(clean_key) and not _has_digit(clean_value):
+            alternative = _clothing_dimension_alternative(
+                clean_key,
+                clean_value,
+                user_input=user_input,
+                title=title,
+                category_profile=category_profile,
+            )
+            if alternative:
+                alt_key, alt_value = alternative
+                normalized.setdefault(alt_key, alt_value)
             continue
         if clean_key == "Страна производства" and not country_explicit:
             normalized[clean_key] = WB_DEFAULT_COUNTRY
@@ -263,6 +312,40 @@ def _normalize_wb_characteristics(
         normalized["Комплектация"] = inferred_kit
 
     return normalized
+
+
+def _requires_numeric_value(field: str) -> bool:
+    field_lower = field.casefold()
+    return any(marker.casefold() in field_lower for marker in WB_NUMERIC_VALUE_FIELDS)
+
+
+def _is_clothing_context(
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> bool:
+    category = str((category_profile or {}).get("category") or "")
+    text = f"{category} {title} {user_input}".casefold()
+    return any(marker in text for marker in WB_CLOTHING_PROFILE_MARKERS)
+
+
+def _clothing_dimension_alternative(
+    field: str,
+    value: str,
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> tuple[str, str] | None:
+    if not _is_clothing_context(user_input, title, category_profile):
+        return None
+    if "ширина предмета" not in field.casefold():
+        return None
+    value_lower = value.casefold()
+    if "свобод" in value_lower:
+        return ("Покрой", "свободный")
+    if "оверсайз" in value_lower or "oversize" in value_lower:
+        return ("Покрой", "оверсайз")
+    return None
 
 
 def _infer_product_name_for_kit(title: str, user_input: str) -> str:
@@ -362,6 +445,7 @@ def apply_wb_generation_quality(
         characteristics=characteristics,
         user_input=user_input,
         title=card.title,
+        category_profile=category_profile,
     )
 
     title = sanitize_title(_remove_forbidden_title_words(card.title), "wb")

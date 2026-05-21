@@ -30,10 +30,10 @@ def test_missing_color_without_photo_adds_placeholder():
     assert resolved["Цвет"] == "[укажите цвет]"
 
 
-def test_missing_composition_for_mens_wb_uses_category_default():
+def test_missing_composition_for_wb_is_not_guessed_from_category_default():
     resolved = resolve_fields({}, "Мужская одежда", "wb", has_photo=False)
 
-    assert resolved["Состав"] == "хлопок 92%; эластан 8%"
+    assert "Состав" not in resolved
 
 
 def test_missing_wb_country_defaults_to_china_for_any_category():

@@ -122,3 +122,49 @@ def test_apply_wb_generation_quality_does_not_infer_usb_kit_when_cable_excluded(
     )
 
     assert "Комплектация:" not in result.characteristics
+
+
+def test_apply_wb_generation_quality_drops_non_numeric_dimension_fields():
+    card = CardGeneration(
+        title="Футболка женская оверсайз черная",
+        description="Женская футболка свободного кроя.",
+        keywords="",
+        characteristics=(
+            "Цвет: черный\n"
+            "Состав: полиэстер\n"
+            "Ширина предмета: свободная\n"
+            "Высота предмета: стандартная\n"
+            "Состояние товара: новое"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Женщинам / Одежда"},
+        user_input="Женская футболка оверсайз черная",
+    )
+
+    assert "Ширина предмета:" not in result.characteristics
+    assert "Высота предмета:" not in result.characteristics
+    assert "Состояние товара:" not in result.characteristics
+    assert "Покрой: свободный" in result.characteristics
+
+
+def test_apply_wb_generation_quality_keeps_numeric_dimension_fields():
+    card = CardGeneration(
+        title="Настольная лампа LED",
+        description="Настольная лампа.",
+        keywords="",
+        characteristics="Высота предмета: 35 см\nШирина предмета: 12 см",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Электроника"},
+        user_input="Настольная лампа высота 35 см ширина 12 см",
+    )
+
+    assert "Высота предмета: 35 см" in result.characteristics
+    assert "Ширина предмета: 12 см" in result.characteristics

@@ -133,8 +133,9 @@ def resolve_fields(
         if rule == "skip":
             continue
         if rule == "use_category_default":
-            if normalized_marketplace == "wb" and field_name == "Страна производства":
-                resolved[field_name] = "Китай"
+            if normalized_marketplace == "wb":
+                if field_name == "Страна производства":
+                    resolved[field_name] = "Китай"
                 continue
             default_value = category_default_values.get(field_name)
             if default_value is not None and str(default_value).strip():
