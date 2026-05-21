@@ -36,6 +36,12 @@ def test_missing_composition_for_mens_wb_uses_category_default():
     assert resolved["Состав"] == "хлопок 92%; эластан 8%"
 
 
+def test_missing_wb_country_defaults_to_china_for_any_category():
+    resolved = resolve_fields({}, "Здоровье", "wb", has_photo=False)
+
+    assert resolved["Страна производства"] == "Китай"
+
+
 def test_womens_clothes_infer_gender_from_category():
     resolved = resolve_fields({}, "Женская одежда", "wb", has_photo=False)
 

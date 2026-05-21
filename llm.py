@@ -354,7 +354,7 @@ async def generate_card(
     if normalize_marketplace(marketplace) == "wb":
         from wb_generation_quality import apply_wb_generation_quality
 
-        return apply_wb_generation_quality(card, category_profile)
+        return apply_wb_generation_quality(card, category_profile, user_input=user_input)
     return card
 
 
