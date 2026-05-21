@@ -42,15 +42,40 @@ def _normalize_category(raw_category: str, categories: list[str]) -> str | None:
     return None
 
 
+def _deterministic_category_override(product_description: str, categories: list[str]) -> str | None:
+    text = product_description.casefold()
+    if "Автотовары" in categories and any(
+        marker in text
+        for marker in (
+            "автомобильн",
+            "автоковрик",
+            "для автомобиля",
+            "для авто",
+            "в машину",
+            "lada",
+            "granta",
+            "toyota",
+        )
+    ):
+        return "Автотовары"
+
+    if "Дом и сад" in categories and "коврик" in text and any(
+        marker in text for marker in ("ванн", "душев", "туалет", "сануз")
+    ):
+        return "Дом и сад"
+
+    return None
+
+
 _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Автотовары", ("авто", "машин", "lada", "toyota", "коврик", "щетка стеклоочистителя")),
+    ("Автотовары", ("авто", "машин", "lada", "toyota", "автоковрик", "щетка стеклоочистителя")),
     ("Аптека", ("аптеч", "лекар", "витамин", "таблет", "капсул", "бинт")),
     ("Бытовая техника", ("пылесос", "чайник", "микроволнов", "блендер", "утюг", "кофемашин")),
     ("Бытовая химия", ("стираль", "моющее", "чистящее", "порошок", "кондиционер для белья")),
     ("Бытовая химия и гигиена", ("гигиен", "салфетки", "подгузник", "зубная паста", "мыло")),
     ("Все для игр", ("игров", "геймпад", "настольная игра", "playstation", "xbox")),
     ("Детские товары", ("детск", "ребен", "малыш", "коляска", "игрушк")),
-    ("Дом и сад", ("лампа", "светильник", "плед", "посуда", "сад", "декор")),
+    ("Дом и сад", ("лампа", "светильник", "плед", "посуда", "сад", "декор", "ванн", "душев", "туалет", "коврик для ванной")),
     ("Канцелярские товары", ("ручка", "карандаш", "тетрад", "блокнот", "канцеляр")),
     ("Книги", ("книга", "роман", "учебник", "комикс")),
     ("Красота и здоровье", ("крем", "сыворот", "шампун", "маска для лица", "кожа", "макияж")),
@@ -71,6 +96,10 @@ _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 def _heuristic_detect_category(product_description: str, categories: list[str]) -> str:
+    override = _deterministic_category_override(product_description, categories)
+    if override:
+        return override
+
     text = product_description.casefold()
     best_category = ""
     best_score = 0
@@ -164,6 +193,10 @@ def detect_category(product_description: str) -> str:
     description = product_description.strip()
     if not description:
         return categories[0]
+
+    override = _deterministic_category_override(description, categories)
+    if override:
+        return override
 
     if os.environ.get("CARDBOT_DISABLE_LLM_CATEGORY") == "1":
         return _heuristic_detect_category(description, categories)
