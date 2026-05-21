@@ -321,6 +321,32 @@ def test_ozon_prompt_includes_beauty_category_profile():
     assert "#уход_за_кожей" in prompt
 
 
+def test_ozon_prompt_includes_v2_category_profile_targets():
+    prompt = select_system_prompt(
+        "ozon",
+        {
+            "category": "Электроника / Наушники и аудиотехника / Наушники",
+            "title_target_min": 40,
+            "title_target_max": 70,
+            "description_target_min": 900,
+            "description_target_max": 1400,
+            "characteristics_target_min": 6,
+            "characteristics_target_max": 12,
+            "prompt_characteristics": ["Тип", "Цвет", "Конструкция наушников", "Тип беспроводной связи"],
+            "top_hashtags": ["#наушники", "#bluetooth"],
+            "top_title_words": ["наушники", "беспроводные"],
+        },
+    )
+
+    assert "Категорийный профиль Ozon" in prompt
+    assert "Категория товара: Электроника / Наушники и аудиотехника / Наушники" in prompt
+    assert "Длина названия: 40-70 символов" in prompt
+    assert "Длина описания: 900-1400 символов" in prompt
+    assert "Целевое количество характеристик: 6-12" in prompt
+    assert "Конструкция наушников" in prompt
+    assert "#bluetooth" in prompt
+
+
 def test_ozon_prompt_includes_clothes_category_profile():
     block = build_category_profile_prompt_block(
         {

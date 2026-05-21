@@ -10,6 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_CATEGORY_PROFILES_PATH = BASE_DIR / "data" / "category_profiles.json"
 DEFAULT_WB_CATEGORY_PROFILES_PATH = BASE_DIR / "data" / "wb_category_profiles.json"
 DEFAULT_WB_CATEGORIES_PATH = BASE_DIR / "data" / "wb_categories.json"
+DEFAULT_OZON_CATEGORIES_PATH = BASE_DIR / "data" / "ozon_categories_full.json"
 
 
 def load_category_profiles(
@@ -40,6 +41,19 @@ def load_wb_category_profiles(
 
 
 def load_wb_categories(path: str | Path = DEFAULT_WB_CATEGORIES_PATH) -> dict[str, Any]:
+    categories_path = Path(path)
+    if not categories_path.exists():
+        return {"categories": []}
+    raw = json.loads(categories_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return {"categories": []}
+    categories = raw.get("categories")
+    if not isinstance(categories, list):
+        raw["categories"] = []
+    return raw
+
+
+def load_ozon_categories(path: str | Path = DEFAULT_OZON_CATEGORIES_PATH) -> dict[str, Any]:
     categories_path = Path(path)
     if not categories_path.exists():
         return {"categories": []}
@@ -352,6 +366,199 @@ def detect_wb_category_path(
             best_path = path
     if best_score >= 4:
         return best_path
+    return None
+
+
+OZON_LIGHTING_PRODUCT_TOKENS = {"лампа", "лампы", "светильник", "ночник", "led"}
+OZON_AUDIO_PRODUCT_TOKENS = {"наушники", "наушник", "гарнитура", "bluetooth", "колонка", "микрофон"}
+OZON_BATH_MAT_PRODUCT_TOKENS = {"коврик", "коврики", "ванной", "ванная", "душ", "туалет"}
+OZON_BACKPACK_PRODUCT_TOKENS = {"рюкзак", "рюкзаки", "ранец", "портфель"}
+OZON_CLOTHING_PRODUCT_TOKENS = WB_CLOTHING_PRODUCT_TOKENS
+OZON_SHOES_PRODUCT_TOKENS = WB_SHOES_PRODUCT_TOKENS
+
+
+def _ozon_catalog_category_score(item: dict[str, Any], product_description: str) -> int:
+    text = product_description.casefold()
+    text_tokens = _tokens(product_description)
+    path = str(item.get("path") or "")
+    name = str(item.get("name") or "")
+    path_lower = path.casefold()
+    score = 0
+
+    for token in _tokens(path):
+        if _token_matches(token, text, text_tokens):
+            score += 3
+    for token in _tokens(name):
+        if _token_matches(token, text, text_tokens):
+            score += 4
+
+    if bool(text_tokens & OZON_AUDIO_PRODUCT_TOKENS) and "наушники" in path_lower:
+        score += 35
+    if bool(text_tokens & OZON_AUDIO_PRODUCT_TOKENS) and "аудиотехника" in path_lower:
+        score += 15
+    if "смартфон" in text and "смартфоны" in path_lower:
+        score += 40
+    if "смартфон" in text and "аксессуары" in path_lower:
+        score -= 25
+    if bool(text_tokens & OZON_LIGHTING_PRODUCT_TOKENS) and any(marker in path_lower for marker in ("освещение", "светильник", "ламп")):
+        score += 28
+    if bool(text_tokens & OZON_BATH_MAT_PRODUCT_TOKENS) and any(marker in path_lower for marker in ("ванн", "коврик", "текстиль")):
+        score += 30
+    if bool(text_tokens & OZON_BACKPACK_PRODUCT_TOKENS) and any(marker in path_lower for marker in ("рюкзак", "сумк", "аксессуар")):
+        score += 25
+    if bool(text_tokens & OZON_CLOTHING_PRODUCT_TOKENS) and any(marker in path_lower for marker in ("одеж", "женщ", "мужч", "детск")):
+        score += 18
+    if bool(text_tokens & OZON_SHOES_PRODUCT_TOKENS) and "обув" in path_lower:
+        score += 25
+    if "корм" in text and any(marker in text for marker in ("кош", "собак", "питом")) and "животн" in path_lower:
+        score += 30
+    if any(marker in text for marker in ("витамин", "бад", "капсул", "омега")) and any(marker in path_lower for marker in ("аптека", "витамин", "бад")):
+        score += 28
+    if "книга" in text and "книг" in path_lower:
+        score += 25
+
+    if item.get("is_leaf"):
+        score += 2
+    if score >= 2:
+        score += max(0, _category_depth(path) - 1)
+    return score
+
+
+def detect_ozon_category_path(
+    product_description: str,
+    ozon_categories: dict[str, Any] | None = None,
+) -> str | None:
+    catalog = ozon_categories if ozon_categories is not None else load_ozon_categories()
+    categories = catalog.get("categories") if isinstance(catalog, dict) else None
+    if not isinstance(categories, list):
+        return None
+
+    best_path: str | None = None
+    best_score = 0
+    for item in categories:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "").strip()
+        if not path:
+            continue
+        score = _ozon_catalog_category_score(item, product_description)
+        if score > best_score or (
+            score == best_score and best_path and _category_depth(path) > _category_depth(best_path)
+        ):
+            best_score = score
+            best_path = path
+    if best_score >= 4:
+        return best_path
+    return None
+
+
+OZON_PARENT_ALIASES = {
+    "Товары для животных": ("Товары для животных", "Зоотовары"),
+    "Канцелярские товары": ("Канцелярские товары", "Канцелярия"),
+    "Продукты питания": ("Продукты питания", "Продукты"),
+    "Спорт и отдых": ("Спорт и отдых", "Спорт"),
+    "Строительство и ремонт": ("Строительство и ремонт", "Для ремонта"),
+    "Игры и консоли": ("Игры и консоли", "Все для игр"),
+}
+
+
+def _ozon_catalog_profile_candidates(category_path: str) -> list[str]:
+    parts = [part.strip() for part in category_path.split(" / ") if part.strip()]
+    candidates: list[str] = []
+    for size in range(len(parts), 0, -1):
+        candidates.append(" / ".join(parts[:size]))
+    if parts:
+        for alias in OZON_PARENT_ALIASES.get(parts[0], ()):
+            if alias not in candidates:
+                candidates.append(alias)
+    return candidates
+
+
+def _profile_from_ozon_catalog_path(
+    profiles: dict[str, dict[str, Any]],
+    category_path: str,
+) -> dict[str, Any] | None:
+    profiles_by_casefold = {category.casefold(): profile for category, profile in profiles.items()}
+    for candidate in _ozon_catalog_profile_candidates(category_path):
+        profile = profiles.get(candidate) or profiles_by_casefold.get(candidate.casefold())
+        if profile:
+            profile_copy = dict(profile)
+            if candidate.casefold() != category_path.casefold():
+                profile_copy["source_profile_category"] = profile_copy.get("category") or candidate
+                profile_copy["category"] = category_path
+                profile_copy["parent_category"] = category_path.split(" / ", 1)[0].strip()
+            return profile_copy
+
+    top = category_path.split(" / ", 1)[0].strip()
+    if top:
+        top_lower = top.casefold()
+        descendants = [
+            profile
+            for category, profile in profiles.items()
+            if category.casefold() == top_lower or category.casefold().startswith(f"{top_lower} / ")
+        ]
+        if descendants:
+            profile_copy = dict(sorted(descendants, key=_profile_depth)[0])
+            profile_copy["source_profile_category"] = profile_copy.get("category") or top
+            profile_copy["category"] = category_path
+            profile_copy["parent_category"] = top
+            return profile_copy
+    return None
+
+
+def _score_ozon_profile(profile: dict[str, Any], product_description: str) -> int:
+    text = product_description.casefold()
+    text_tokens = _tokens(product_description)
+    score = 0
+    category = str(profile.get("category") or "")
+    parent = str(profile.get("parent_category") or "")
+    for part in (category, parent):
+        for token in part.replace("/", " ").split():
+            if _token_matches(token, text, text_tokens):
+                score += 3
+    for keyword in profile.get("match_keywords") or []:
+        if _token_matches(str(keyword), text, text_tokens):
+            score += 3
+    for keyword in profile.get("top_title_words") or []:
+        if _token_matches(str(keyword), text, text_tokens):
+            score += 1
+
+    category_lower = category.casefold()
+    if bool(text_tokens & OZON_AUDIO_PRODUCT_TOKENS) and "наушники" in category_lower:
+        score += 14
+    if bool(text_tokens & OZON_BATH_MAT_PRODUCT_TOKENS) and any(marker in category_lower for marker in ("ванн", "коврик")):
+        score += 14
+    if bool(text_tokens & OZON_LIGHTING_PRODUCT_TOKENS) and any(marker in category_lower for marker in ("освещение", "ламп", "светильник")):
+        score += 12
+    if bool(text_tokens & OZON_BACKPACK_PRODUCT_TOKENS) and any(marker in category_lower for marker in ("рюкзак", "сумк", "аксессуар")):
+        score += 10
+
+    if score >= 2:
+        score += max(0, _profile_depth(profile) - 1)
+    return score
+
+
+def detect_ozon_category_profile(
+    profiles: dict[str, dict[str, Any]],
+    product_description: str,
+    ozon_categories: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    catalog_path = detect_ozon_category_path(product_description, ozon_categories)
+    if catalog_path:
+        profile = _profile_from_ozon_catalog_path(profiles, catalog_path)
+        if profile:
+            profile["detected_category_path"] = catalog_path
+            return profile
+
+    best_profile: dict[str, Any] | None = None
+    best_score = 0
+    for profile in profiles.values():
+        score = _score_ozon_profile(profile, product_description)
+        if score > best_score or (score == best_score and best_profile and _profile_depth(profile) > _profile_depth(best_profile)):
+            best_score = score
+            best_profile = profile
+    if best_profile and best_score >= 3:
+        return dict(best_profile)
     return None
 
 

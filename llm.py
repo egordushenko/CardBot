@@ -145,6 +145,26 @@ def build_category_profile_prompt_block(
             "Поля упаковки, веса и габаритов упаковки выводи только если пользователь явно дал эти данные."
         )
 
+    prompt_characteristics = category_profile.get("prompt_characteristics") or category_profile.get("top_characteristics")
+    if category_profile.get("title_target_min") and category_profile.get("title_target_max"):
+        characteristics_target = ""
+        if category_profile.get("characteristics_target_min") and category_profile.get("characteristics_target_max"):
+            characteristics_target = (
+                f"Целевое количество характеристик: {category_profile.get('characteristics_target_min')}-{category_profile.get('characteristics_target_max')}\n"
+            )
+        return (
+            "\n\nКатегорийный профиль Ozon:\n"
+            f"Категория товара: {category}\n"
+            f"Длина названия: {category_profile.get('title_target_min')}-{category_profile.get('title_target_max')} символов\n"
+            f"Длина описания: {category_profile.get('description_target_min')}-{category_profile.get('description_target_max')} символов\n"
+            f"{characteristics_target}"
+            f"Разрешенные характеристики для генерации: {_format_profile_value(prompt_characteristics)}\n"
+            f"Примеры релевантных хэштегов для категории: {_format_profile_value(category_profile.get('top_hashtags'))}\n"
+            f"Типичные SEO-слова для названий в этой категории: {_format_profile_value(category_profile.get('top_title_words'))}\n"
+            "Используй только разрешенные характеристики из профиля и очевидные универсальные поля. "
+            "Поля упаковки, веса, габаритов предмета и габаритов упаковки выводи только если пользователь явно дал эти данные."
+        )
+
     return (
         "\n\nКатегорийный профиль Ozon:\n"
         f"Категория товара: {category}\n"

@@ -12,9 +12,11 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from category_profiles import (
+    detect_ozon_category_profile,
     detect_wb_category_profile,
     get_category_profile,
     load_category_profiles,
+    load_ozon_categories,
     load_wb_category_profiles,
 )
 from config import load_settings
@@ -43,10 +45,15 @@ def resolve_category_profile(case: dict[str, Any]) -> dict[str, Any] | None:
     if marketplace == "wb":
         return detect_wb_category_profile(load_wb_category_profiles(), user_input)
 
+    profiles = load_category_profiles()
+    detected_profile = detect_ozon_category_profile(profiles, user_input, load_ozon_categories())
+    if detected_profile:
+        return detected_profile
+
     category = str(case.get("category") or "").strip()
     if not category:
         return None
-    return get_category_profile(load_category_profiles(), category)
+    return get_category_profile(profiles, category)
 
 
 async def run_live_eval(

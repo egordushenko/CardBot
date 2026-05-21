@@ -11,9 +11,11 @@ from typing import Any
 from config import Settings, load_settings
 from category_detector import detect_category
 from category_profiles import (
+    detect_ozon_category_profile,
     detect_wb_category_profile,
     get_category_profile,
     load_category_profiles,
+    load_ozon_categories,
     load_wb_category_profiles,
 )
 from core.field_resolver import resolve_fields
@@ -572,14 +574,22 @@ async def _resolve_generation_enrichment(
         if profiles is None:
             profiles = load_category_profiles()
             context.application.bot_data["category_profiles"] = profiles
+        ozon_categories = context.application.bot_data.get("ozon_categories")
+        if ozon_categories is None:
+            ozon_categories = load_ozon_categories()
+            context.application.bot_data["ozon_categories"] = ozon_categories
 
-        try:
-            category = await asyncio.to_thread(detect_category, product_description)
-        except Exception:
-            logging.exception("Ozon category detection failed")
-            category = "Одежда"
+        category_profile = detect_ozon_category_profile(profiles, product_description, ozon_categories)
+        if category_profile:
+            category = str(category_profile.get("category") or category_profile.get("parent_category") or "")
+        else:
+            try:
+                category = await asyncio.to_thread(detect_category, product_description)
+            except Exception:
+                logging.exception("Ozon category detection failed")
+                category = "??????"
 
-        category_profile = get_category_profile(profiles, category)
+            category_profile = get_category_profile(profiles, category)
         if not category_profile:
             logging.warning("Ozon category profile not found: %s", category)
     else:
@@ -2125,6 +2135,7 @@ def create_application(settings: Settings) -> Any:
     application.bot_data["settings"] = settings
     application.bot_data["db"] = Database(settings.cardbot_db_url)
     application.bot_data["category_profiles"] = load_category_profiles()
+    application.bot_data["ozon_categories"] = load_ozon_categories()
     application.bot_data["wb_category_profiles"] = load_wb_category_profiles()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("generate", generate_command))
