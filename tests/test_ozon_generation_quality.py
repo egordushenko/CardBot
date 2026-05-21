@@ -93,3 +93,71 @@ def test_apply_ozon_generation_quality_drops_unmentioned_isbn():
     assert "Тип: Книга" in result.characteristics
     assert "ISBN:" not in result.characteristics
     assert "Автор:" not in result.characteristics
+
+
+def test_apply_ozon_generation_quality_limits_and_deduplicates_similar_hashtags():
+    repeated_tags = " ".join(
+        [
+            "#коврик_для_ванной",
+            "#коврик_для_ванной_комнаты",
+            "#коврик_для_ванны",
+            "#коврик_для_душа",
+            "#коврик_для_душевой",
+            "#серый_коврик",
+            "#коврик_серый",
+            "#мягкий_ворс",
+            "#коврик_с_ворсом",
+            "#нескользящий_коврик",
+            "#коврик_против_скольжения",
+            "#впитывающий_коврик",
+            "#коврик_впитывающий",
+            "#ванная_комната",
+            "#безопасность_в_ванной",
+            "#текстиль_для_ванной",
+            "#коврик_для_пола",
+            "#коврик_на_пол",
+            "#коврик_для_унитаза",
+            "#коврик_для_раковины",
+        ]
+    )
+    card = CardGeneration(
+        title="Коврик для ванной серый 50x80 см",
+        description="Коврик для ванной комнаты.",
+        keywords=repeated_tags,
+        characteristics="Тип: Коврик для ванной\nЦвет: Серый",
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        user_input="Коврик для ванной серый. Размер 50 на 80 см.",
+    )
+
+    tags = result.keywords.split()
+    assert 12 <= len(tags) <= 18
+    assert "#коврик_для_ванной_комнаты" not in tags
+    assert "#коврик_для_ванны" not in tags
+    assert "#коврик_серый" not in tags
+    assert "#коврик_для_душевой" not in tags
+    assert "#коврик_на_пол" not in tags
+
+
+def test_apply_ozon_generation_quality_adds_safe_purpose_and_kit_from_input():
+    card = CardGeneration(
+        title="Коврик для ванной серый 50x80 см",
+        description="Коврик для ванной комнаты.",
+        keywords="#коврик #ванная #серый",
+        characteristics="Тип: Коврик для ванной\nЦвет: Серый\nРазмер: 50x80 см",
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        user_input=(
+            "Коврик для ванной серый. Размер 50 на 80 см. Подходит для ванной комнаты, "
+            "душевой зоны и туалета."
+        ),
+    )
+
+    assert "Назначение: для ванной комнаты, душевой зоны и туалета" in result.characteristics
+    assert "Комплектация: коврик" in result.characteristics

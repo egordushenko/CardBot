@@ -232,6 +232,33 @@ def test_apply_wb_generation_quality_drops_packaging_if_user_did_not_provide_pac
     assert "Вес с упаковкой" not in result.characteristics
 
 
+def test_apply_wb_generation_quality_drops_generic_size_when_specific_rug_size_exists():
+    card = CardGeneration(
+        title="Коврик для ванной серый противоскользящий 50x80",
+        description="Коврик для ванной комнаты с мягким ворсом.",
+        keywords="",
+        characteristics=(
+            "Цвет: серый\n"
+            "Размер коврика: 50x80 см\n"
+            "Размер: 50 см\n"
+            "Страна производства: Китай"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={
+            "category": "Дом / Ванная / Коврики",
+            "prompt_characteristics": ["Цвет", "Размер коврика"],
+        },
+        user_input="Коврик для ванной серый. Размер 50 на 80 см.",
+    )
+
+    assert "Размер коврика: 50x80 см" in result.characteristics
+    assert "Размер: 50 см" not in result.characteristics
+
+
 def test_apply_wb_generation_quality_drops_non_profile_freeform_backpack_fields():
     card = CardGeneration(
         title="Рюкзак городской мужской черный 22л 45x30x15 см",

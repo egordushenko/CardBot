@@ -86,10 +86,47 @@ OZON_VALUE_LIKE_FIELD_RE = re.compile(
     r"^\d+(?:[.,]\d+)?(?:\s*(?:шт|г|кг|мл|л|см|мм|м|дней|месяц(?:ев|а)?|год(?:а)?))?$",
     re.IGNORECASE,
 )
+OZON_HASHTAGS_MIN = 12
+OZON_HASHTAGS_MAX = 18
 
 
 def _format_characteristics(fields: dict[str, str]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in fields.items()).strip()
+
+
+def _normalize_hashtag_key(tag: str) -> str:
+    words = [word for word in tag.lstrip("#").casefold().split("_") if word]
+    stop_words = {"для", "с", "со", "на", "в", "во", "комната", "комнаты"}
+    words = [word for word in words if word not in stop_words]
+    synonyms = {
+        "ванны": "ванной",
+        "душевой": "душа",
+        "пол": "пола",
+        "ворсом": "ворс",
+        "впитывающий": "впитывающий",
+        "влаговпитывающий": "впитывающий",
+        "серый": "серый",
+    }
+    normalized = sorted(synonyms.get(word, word) for word in words)
+    return "_".join(normalized)
+
+
+def _trim_ozon_hashtags(value: str) -> str:
+    tags = [tag.strip() for tag in value.split() if tag.strip().startswith("#")]
+    kept: list[str] = []
+    seen_tags: set[str] = set()
+    seen_keys: set[str] = set()
+    for tag in tags:
+        lowered = tag.casefold()
+        key = _normalize_hashtag_key(tag)
+        if lowered in seen_tags or key in seen_keys:
+            continue
+        kept.append(tag)
+        seen_tags.add(lowered)
+        seen_keys.add(key)
+        if len(kept) >= OZON_HASHTAGS_MAX:
+            break
+    return " ".join(kept)
 
 
 def _profile_fields(profile: dict[str, Any] | None) -> set[str]:
@@ -140,6 +177,33 @@ def _user_mentions_field(user_input: str, field: str) -> bool:
     return False
 
 
+def _infer_ozon_purpose(user_input: str) -> str:
+    lowered = user_input.casefold()
+    purposes: list[str] = []
+    if "ванн" in lowered:
+        purposes.append("для ванной комнаты")
+    if "душев" in lowered or "душ" in lowered:
+        purposes.append("душевой зоны")
+    if "туалет" in lowered:
+        purposes.append("туалета")
+    if len(purposes) > 1:
+        return ", ".join(purposes[:-1]) + " и " + purposes[-1]
+    if purposes:
+        return ", ".join(purposes)
+    return ""
+
+
+def _infer_ozon_kit(user_input: str) -> str:
+    lowered = user_input.casefold()
+    if "коврик" in lowered:
+        return "коврик"
+    if "рюкзак" in lowered:
+        return "рюкзак"
+    if "лампа" in lowered:
+        return "лампа"
+    return ""
+
+
 def _is_blocked_field(field: str) -> bool:
     lowered = field.casefold()
     if field in OZON_DROP_FIELDS:
@@ -182,11 +246,19 @@ def apply_ozon_generation_quality(
 
     if "Страна-изготовитель" not in normalized:
         normalized["Страна-изготовитель"] = OZON_DEFAULT_COUNTRY
+    if "Назначение" not in normalized:
+        purpose = _infer_ozon_purpose(user_input)
+        if purpose:
+            normalized["Назначение"] = purpose
+    if "Комплектация" not in normalized:
+        kit = _infer_ozon_kit(user_input)
+        if kit:
+            normalized["Комплектация"] = kit
 
     return CardGeneration(
         title=card.title,
         description=card.description,
-        keywords=card.keywords,
+        keywords=_trim_ozon_hashtags(card.keywords),
         characteristics=_format_characteristics(normalized),
         tokens_used=card.tokens_used,
         marketplace=card.marketplace,

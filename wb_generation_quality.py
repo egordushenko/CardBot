@@ -409,6 +409,7 @@ def _normalize_wb_characteristics(
     if inferred_kit and "Комплектация" not in normalized:
         normalized["Комплектация"] = inferred_kit
     normalized.update(_infer_wb_pet_food_characteristics(user_input))
+    _drop_redundant_generic_size(normalized)
 
     return normalized
 
@@ -562,6 +563,23 @@ def _infer_wb_pet_food_characteristics(user_input: str) -> dict[str, str]:
         inferred["Вкус"] = "индейка"
 
     return inferred
+
+
+def _drop_redundant_generic_size(characteristics: dict[str, str]) -> None:
+    generic_size = characteristics.get("Размер")
+    if not generic_size:
+        return
+    generic_lower = generic_size.casefold()
+    for key, value in characteristics.items():
+        if key == "Размер" or "размер" not in key.casefold():
+            continue
+        value_lower = value.casefold()
+        if "x" in value_lower or "х" in value_lower or "×" in value_lower:
+            del characteristics["Размер"]
+            return
+        if generic_lower and generic_lower in value_lower and value_lower != generic_lower:
+            del characteristics["Размер"]
+            return
 
 
 def _profile_fields(profile: dict[str, Any] | None, key: str) -> list[str]:
