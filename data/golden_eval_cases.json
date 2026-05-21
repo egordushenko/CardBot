@@ -307,5 +307,117 @@
     },
     "expected_present_fields": ["Тип", "Цвет", "Ширина, мм", "Длина, м", "Страна-изготовитель"],
     "expected_absent_fields": ["Артикул"]
+  },
+  {
+    "id": "wb_beauty_ml_volume_grounded",
+    "marketplace": "wb",
+    "user_input": "Шампунь увлажняющий 400 мл для волос.",
+    "expected_category": null,
+    "raw_generation": {
+      "title": "Шампунь увлажняющий 400 мл",
+      "description": "Шампунь для ухода за волосами.",
+      "keywords": "",
+      "characteristics": "Тип: шампунь\nОбъем: 400 мл\nСертификат: EAC\nСтрана производства: Китай"
+    },
+    "expected_present_fields": ["Тип", "Объем", "Страна производства"],
+    "expected_absent_fields": ["Сертификат"]
+  },
+  {
+    "id": "wb_shoes_no_packaging_dimensions",
+    "marketplace": "wb",
+    "user_input": "Кроссовки женские белые, размер 38, сезон лето. Материал стельки текстиль.",
+    "expected_category": "Обувь",
+    "raw_generation": {
+      "title": "Кроссовки женские белые летние размер 38",
+      "description": "Кроссовки для прогулок и повседневной носки.",
+      "keywords": "",
+      "characteristics": "Цвет: белый\nПол: Женский\nСезон: лето\nМатериал стельки: текстиль\nРазмер: 38\nШирина упаковки: 20 см\nВысота упаковки: 12 см"
+    },
+    "expected_present_fields": ["Цвет", "Пол", "Сезон", "Материал стельки", "Размер", "Страна производства"],
+    "expected_absent_fields": ["Ширина упаковки", "Высота упаковки"]
+  },
+  {
+    "id": "wb_electronics_no_warranty_imei",
+    "marketplace": "wb",
+    "user_input": "Смартфон черный 128 ГБ, экран 6.5 дюйма.",
+    "expected_category": "Электроника / Смартфоны и телефоны / Смартфоны",
+    "raw_generation": {
+      "title": "Смартфон черный 128 ГБ 6.5 дюйма",
+      "description": "Смартфон для связи, приложений и просмотра видео.",
+      "keywords": "",
+      "characteristics": "Тип: смартфон\nЦвет: черный\nОбъем встроенной памяти (Гб): 128\nГарантийный срок: 12 месяцев\nIMEI: 123456\nВес с упаковкой (кг): 0.4"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Страна производства"],
+    "expected_absent_fields": ["Гарантийный срок", "IMEI", "Вес с упаковкой (кг)"]
+  },
+  {
+    "id": "wb_toy_numeric_dimensions_grounded",
+    "marketplace": "wb",
+    "user_input": "Игрушка антистресс кубик синий, размер 8 см.",
+    "expected_category": "Игрушки / Антистресс",
+    "raw_generation": {
+      "title": "Игрушка антистресс кубик синий 8 см",
+      "description": "Игрушка для рук и развития моторики.",
+      "keywords": "",
+      "characteristics": "Цвет: синий\nТип: антистресс\nВысота предмета: 8 см\nШирина предмета: 8 см\nСостояние товара: новое"
+    },
+    "expected_present_fields": ["Цвет", "Тип", "Высота предмета", "Ширина предмета", "Страна производства"],
+    "expected_absent_fields": ["Состояние товара"]
+  },
+  {
+    "id": "ozon_books_no_fake_isbn_author",
+    "marketplace": "ozon",
+    "user_input": "Книга по саморазвитию в мягкой обложке.",
+    "expected_category": "Книги",
+    "raw_generation": {
+      "title": "Книга по саморазвитию в мягкой обложке",
+      "description": "Книга для чтения и личного развития.",
+      "hashtags": "#книга #чтение #саморазвитие",
+      "characteristics": "Тип: Книга\nISBN: 978-5-00000-000-0\nАвтор: Иван Иванов\nСтрана-изготовитель: Китай"
+    },
+    "expected_present_fields": ["Тип", "Страна-изготовитель"],
+    "expected_absent_fields": ["ISBN", "Автор"]
+  },
+  {
+    "id": "ozon_auto_compatibility_grounded",
+    "marketplace": "ozon",
+    "user_input": "Автомобильные коврики резиновые черные для Lada Granta, комплект 4 штуки.",
+    "expected_category": "Автотовары",
+    "raw_generation": {
+      "title": "Коврики автомобильные резиновые Lada Granta черные",
+      "description": "Коврики для защиты салона автомобиля.",
+      "hashtags": "#коврики #автоковрики #lada_granta",
+      "characteristics": "Тип: Коврики автомобильные\nЦвет: черный\nСовместимость: Lada Granta\nКоличество, шт: 4\nГарантия: 12 месяцев"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Совместимость", "Количество, шт", "Страна-изготовитель"],
+    "expected_absent_fields": ["Гарантия"]
+  },
+  {
+    "id": "ozon_furniture_dimensions_grounded",
+    "marketplace": "ozon",
+    "user_input": "Стол письменный белый, размер 120x60x75 см, материал ЛДСП.",
+    "expected_category": "Мебель",
+    "raw_generation": {
+      "title": "Стол письменный белый 120x60x75 см",
+      "description": "Письменный стол для работы и учебы.",
+      "hashtags": "#стол #письменный_стол #мебель",
+      "characteristics": "Тип: Стол письменный\nЦвет: белый\nМатериал: ЛДСП\nШирина, см: 120\nГлубина, см: 60\nВысота, см: 75\nВес товара, г: 25000"
+    },
+    "expected_present_fields": ["Тип", "Цвет", "Материал", "Ширина, см", "Высота, см", "Страна-изготовитель"],
+    "expected_absent_fields": ["Вес товара, г"]
+  },
+  {
+    "id": "ozon_sport_bar_no_shelf_life",
+    "marketplace": "ozon",
+    "user_input": "Протеиновый батончик шоколадный без сахара, 60 г.",
+    "expected_category": "Спорт и отдых",
+    "raw_generation": {
+      "title": "Протеиновый батончик шоколадный без сахара 60 г",
+      "description": "Батончик для перекуса после тренировки.",
+      "hashtags": "#протеин #батончик #спортпит",
+      "characteristics": "Тип: Протеиновый батончик\nВес товара, г: 60\nВкусовой акцент (вкус): шоколад\nСрок годности в днях: 365\nУпаковка: флоу-пак"
+    },
+    "expected_present_fields": ["Тип", "Вес товара, г", "Страна-изготовитель"],
+    "expected_absent_fields": ["Срок годности в днях", "Упаковка"]
   }
 ]

@@ -171,6 +171,24 @@ def test_apply_wb_generation_quality_keeps_numeric_dimension_fields():
     assert "Ширина предмета: 12 см" in result.characteristics
 
 
+def test_apply_wb_generation_quality_keeps_ml_volume_when_grounded():
+    card = CardGeneration(
+        title="Шампунь увлажняющий 400 мл",
+        description="Шампунь для ухода за волосами.",
+        keywords="",
+        characteristics="Тип: шампунь\nОбъем: 400 мл\nСтрана производства: Китай",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Красота"},
+        user_input="Шампунь увлажняющий 400 мл для волос",
+    )
+
+    assert "Объем: 400 мл" in result.characteristics
+
+
 def test_apply_wb_generation_quality_drops_packaging_if_user_did_not_provide_packaging():
     card = CardGeneration(
         title="Коврик для ванной серый противоскользящий 50x80",

@@ -19,6 +19,9 @@ OZON_DROP_FIELDS = {
     "Номер СГР",
     "Сертификат",
     "Bluetooth",
+    "ISBN",
+    "Автор",
+    "Автор на обложке",
     "IMEI",
 }
 
@@ -114,6 +117,10 @@ def _user_mentions_field(user_input: str, field: str) -> bool:
         return _mentions_any(user_input, (r"\bсрок\w*\s+годн\w*\b", r"\bгоден\b", r"\bмесяц\w*\b", r"\bдн(?:ей|я)\b"))
     if "гарант" in field_lower:
         return _mentions_any(user_input, (r"\bгарант\w*\b",))
+    if "isbn" in field_lower:
+        return _mentions_any(user_input, (r"\bisbn\b", r"\bисбн\b"))
+    if "автор" in field_lower:
+        return _mentions_any(user_input, (r"\bавтор\w*\b",))
     if "материал" in field_lower or "состав" in field_lower:
         return _mentions_any(user_input, (r"\bматериал\w*\b", r"\bсостав\w*\b", r"\bпластик\w*\b", r"\bметалл\w*\b", r"\bполиэстер\w*\b", r"\bхлоп\w*\b"))
     if "цвет" in field_lower:

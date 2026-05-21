@@ -9,7 +9,7 @@ def test_golden_eval_fixture_has_meaningful_coverage():
     marketplaces = {case["marketplace"] for case in cases}
     case_ids = {case["id"] for case in cases}
 
-    assert len(cases) >= 20
+    assert len(cases) >= 30
     assert marketplaces == {"wb", "ozon"}
     assert len(case_ids) == len(cases)
 

@@ -124,6 +124,16 @@ def test_load_wb_category_profiles_and_detect_profile(tmp_path: Path):
     assert profile["category"] == "Обувь"
 
 
+def test_detect_wb_category_profile_prefers_shoes_over_womens_clothes_for_sneakers():
+    profile = detect_wb_category_profile(
+        load_wb_category_profiles(),
+        "Кроссовки женские белые, размер 38, сезон лето. Материал стельки текстиль.",
+    )
+
+    assert profile is not None
+    assert profile["category"] == "Обувь"
+
+
 def test_detect_wb_category_profile_prefers_specific_profile_and_has_no_unsafe_fallback(tmp_path: Path):
     path = tmp_path / "wb_category_profiles.json"
     path.write_text(

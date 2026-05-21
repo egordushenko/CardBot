@@ -108,6 +108,20 @@ WB_CLOTHING_PRODUCT_TOKENS = {
     "юбки",
 }
 
+WB_SHOES_PRODUCT_TOKENS = {
+    "кроссовки",
+    "кроссовок",
+    "кеды",
+    "ботинки",
+    "туфли",
+    "сапоги",
+    "сандалии",
+    "босоножки",
+    "лоферы",
+    "тапочки",
+    "обувь",
+}
+
 
 def _tokens(value: str) -> set[str]:
     return {
@@ -152,6 +166,13 @@ def _score_profile(profile: dict[str, Any], product_description: str) -> int:
 
     category_lower = category.casefold()
     has_clothing_product = bool(text_tokens & WB_CLOTHING_PRODUCT_TOKENS)
+    has_shoes_product = bool(text_tokens & WB_SHOES_PRODUCT_TOKENS)
+    if has_shoes_product and category_lower.startswith("обувь"):
+        score += 8
+    if has_shoes_product and (
+        category_lower.startswith("женщинам") or category_lower.startswith("мужчинам")
+    ):
+        score -= 4
     if has_clothing_product and category_lower.startswith("женщинам") and text_tokens & {"женская", "женские", "женский"}:
         score += 5
     if has_clothing_product and category_lower.startswith("мужчинам") and text_tokens & {"мужская", "мужские", "мужской"}:

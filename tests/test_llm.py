@@ -160,6 +160,18 @@ def test_select_system_prompt_uses_marketplace_specific_rules():
     assert "30 хештегов" in ozon_prompt
 
 
+def test_marketplace_prompts_require_selling_description_pattern():
+    wb_prompt = select_system_prompt("wb")
+    ozon_prompt = select_system_prompt("ozon")
+
+    for prompt in (wb_prompt, ozon_prompt):
+        lowered = prompt.lower()
+        assert "Не начинай описание с клише" in prompt
+        assert "переводи характеристику в выгоду" in lowered
+        assert "не дублируй блок характеристик" in lowered
+        assert "сценарии применения" in lowered
+
+
 def test_wb_prompt_includes_category_profile():
     prompt = select_system_prompt(
         "wb",

@@ -66,3 +66,30 @@ def test_apply_ozon_generation_quality_drops_freeform_fields_not_in_profile():
     assert "Мягкая спинка:" not in result.characteristics
     assert "Карман для бутылки:" not in result.characteristics
     assert "Водоотталкивающая пропитка:" not in result.characteristics
+
+
+def test_apply_ozon_generation_quality_drops_unmentioned_isbn():
+    card = CardGeneration(
+        title="Книга по саморазвитию",
+        description="Книга для чтения.",
+        keywords="#книга #чтение #саморазвитие",
+        characteristics=(
+            "Тип: Книга\n"
+            "ISBN: 978-5-00000-000-0\n"
+            "Автор: Иван Иванов\n"
+            "Страна-изготовитель: Китай"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "prompt_characteristics": ["Тип", "ISBN", "Автор", "Страна-изготовитель"],
+        },
+        user_input="Книга по саморазвитию в мягкой обложке",
+    )
+
+    assert "Тип: Книга" in result.characteristics
+    assert "ISBN:" not in result.characteristics
+    assert "Автор:" not in result.characteristics

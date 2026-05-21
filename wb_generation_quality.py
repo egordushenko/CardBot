@@ -250,7 +250,7 @@ def _user_mentions_field(user_input: str, field: str) -> bool:
     if "мощност" in field_lower:
         return _mentions_any(user_input, (r"\b\d+\s*(w|вт|ватт)\b", r"\bмощност\w*\b"))
     if "объем" in field_lower or "объём" in field_lower:
-        return _mentions_any(user_input, (r"\b\d+\s*(л|литр)\w*\b", r"\bоб[ъь]ем\w*\b"))
+        return _mentions_any(user_input, (r"\b\d+\s*(мл|л|литр)\w*\b", r"\bоб[ъь]ем\w*\b"))
     if any(marker in field_lower for marker in ("размер", "длина", "ширина", "высота")):
         return _mentions_any(user_input, (r"\b\d+\s*[xх×]\s*\d+", r"\b\d+\s*(см|мм|м)\b", r"\bразмер\w*\b", r"\bдлин\w*\b", r"\bширин\w*\b", r"\bвысот\w*\b"))
     if "цвет" in field_lower:
