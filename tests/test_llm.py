@@ -192,12 +192,14 @@ def test_ozon_prompt_includes_beauty_category_profile():
             "title_target_chars": 87,
             "desc_target_chars": 1400,
             "top_characteristics": ["Тип", "Тип кожи", "Объем, мл"],
+            "prompt_characteristics": ["Тип", "Тип кожи", "Объем, мл"],
             "top_hashtags": ["#крем", "#уход_за_кожей"],
             "top_title_words": ["крем", "кожи", "уход"],
         },
     )
 
     assert "Категория товара: Красота и здоровье" in prompt
+    assert "Разрешенные характеристики для генерации: Тип, Тип кожи, Объем, мл" in prompt
     assert "Тип кожи" in prompt
     assert "#уход_за_кожей" in prompt
 

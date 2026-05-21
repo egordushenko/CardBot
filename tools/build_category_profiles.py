@@ -16,6 +16,7 @@ DESC_TARGET_CHARS = 1400
 HASHTAGS_TARGET = 8
 
 _WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё0-9]+")
+_VALUE_LIKE_FIELD_RE = re.compile(r"^\d+(?:[.,]\d+)?(?:\s*(?:шт|г|кг|мл|л|см|мм|м|дней|месяц(?:ев|а)?|год(?:а)?))?$", re.IGNORECASE)
 _STOPWORDS = {
     "для",
     "или",
@@ -36,6 +37,30 @@ _STOPWORDS = {
     "мм",
     "кг",
 }
+
+_PROFILE_EXCLUDED_FIELDS = {
+    "Артикул",
+    "Бренд",
+    "Добавить к сравнению",
+    "Код ТРУ",
+    "Номер СГР",
+    "Сертификат",
+    "Гарантия",
+    "Китай",
+    "Россия",
+    "70 дней",
+}
+
+_PROFILE_EXCLUDED_MARKERS = (
+    "упаков",
+    "срок годности",
+    "сертификат",
+    "номер сгр",
+    "код тру",
+    "артикул",
+    "бренд",
+    "гарант",
+)
 
 
 def _category_of(card: dict[str, Any]) -> str:
@@ -88,6 +113,24 @@ def _iter_title_words(title: str) -> list[str]:
     return words
 
 
+def _is_generation_safe_characteristic(field: str) -> bool:
+    clean = field.strip()
+    lowered = clean.casefold()
+    if not clean or clean in _PROFILE_EXCLUDED_FIELDS:
+        return False
+    if _VALUE_LIKE_FIELD_RE.fullmatch(clean):
+        return False
+    return not any(marker in lowered for marker in _PROFILE_EXCLUDED_MARKERS)
+
+
+def _generation_characteristics(fields: list[str]) -> list[str]:
+    result: list[str] = []
+    for field in fields:
+        if _is_generation_safe_characteristic(field) and field not in result:
+            result.append(field)
+    return result
+
+
 def build_category_profiles(cards: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for card in cards:
@@ -111,8 +154,12 @@ def build_category_profiles(cards: list[dict[str, Any]]) -> dict[str, dict[str, 
             characteristic_counts.update(_iter_characteristic_keys(card.get("characteristics")))
             hashtag_counts.update(_iter_hashtags(card.get("hashtags")))
 
+        top_characteristics = [key for key, _ in characteristic_counts.most_common(16)]
+        prompt_characteristics = _generation_characteristics(top_characteristics)[:8]
+
         profiles[category] = {
             "top_characteristics": [key for key, _ in characteristic_counts.most_common(8)],
+            "prompt_characteristics": prompt_characteristics,
             "top_hashtags": [tag for tag, _ in hashtag_counts.most_common(8)],
             "top_title_words": [word for word, _ in title_word_counts.most_common(5)],
             "desc_target_chars": DESC_TARGET_CHARS,

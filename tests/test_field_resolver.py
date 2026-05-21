@@ -36,6 +36,12 @@ def test_missing_composition_for_wb_is_not_guessed_from_category_default():
     assert "Состав" not in resolved
 
 
+def test_missing_composition_for_ozon_is_not_guessed_from_category_default():
+    resolved = resolve_fields({}, "Спортивные товары", "ozon", has_photo=False)
+
+    assert "Состав" not in resolved
+
+
 def test_missing_wb_country_defaults_to_china_for_any_category():
     resolved = resolve_fields({}, "Здоровье", "wb", has_photo=False)
 

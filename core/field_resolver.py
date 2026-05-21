@@ -133,6 +133,8 @@ def resolve_fields(
         if rule == "skip":
             continue
         if rule == "use_category_default":
+            if normalized_marketplace == "ozon" and field_name != "Страна-изготовитель":
+                continue
             if normalized_marketplace == "wb":
                 if field_name == "Страна производства":
                     resolved[field_name] = "Китай"

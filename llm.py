@@ -109,7 +109,7 @@ def build_category_profile_prompt_block(
         f"Категория товара: {category}\n"
         f"Длина названия: стремись к {category_profile.get('title_target_chars')} символам\n"
         f"Длина описания: {category_profile.get('desc_target_chars')} символов\n"
-        f"Приоритетные характеристики: {_format_profile_value(category_profile.get('top_characteristics'))}\n"
+        f"Разрешенные характеристики для генерации: {_format_profile_value(category_profile.get('prompt_characteristics') or category_profile.get('top_characteristics'))}\n"
         f"Примеры релевантных хэштегов для категории: {_format_profile_value(category_profile.get('top_hashtags'))}\n"
         f"Типичные SEO-слова для названий в этой категории: {_format_profile_value(category_profile.get('top_title_words'))}"
     )
@@ -362,6 +362,10 @@ async def generate_card(
         from wb_generation_quality import apply_wb_generation_quality
 
         return apply_wb_generation_quality(card, category_profile, user_input=user_input)
+    if normalize_marketplace(marketplace) == "ozon":
+        from ozon_generation_quality import apply_ozon_generation_quality
+
+        return apply_ozon_generation_quality(card, category_profile, user_input=user_input)
     return card
 
 
