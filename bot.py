@@ -10,7 +10,12 @@ from typing import Any
 
 from config import Settings, load_settings
 from category_detector import detect_category
-from category_profiles import get_category_profile, load_category_profiles
+from category_profiles import (
+    detect_wb_category_profile,
+    get_category_profile,
+    load_category_profiles,
+    load_wb_category_profiles,
+)
 from core.field_resolver import resolve_fields
 from db import Database, UsageMode
 from image_generator import generate_marketplace_image
@@ -444,13 +449,14 @@ def build_template_delete_confirm_keyboard(template_id: int) -> Any:
 
 
 def build_generation_messages(card: CardGeneration) -> list[str]:
-    search_label = "🔖 ХЭШТЕГИ" if card.marketplace == "ozon" else "🔑 КЛЮЧЕВЫЕ СЛОВА"
-    return [
+    messages = [
         f"📌 НАЗВАНИЕ:\n{card.title}",
         f"📝 ОПИСАНИЕ:\n{card.description}",
-        f"{search_label}:\n{card.keywords}",
         f"📋 ХАРАКТЕРИСТИКИ:\n{card.characteristics}",
     ]
+    if card.marketplace == "ozon":
+        messages.insert(2, f"🔖 ХЭШТЕГИ:\n{card.keywords}")
+    return messages
 
 
 def build_balance_message(
@@ -541,7 +547,15 @@ async def _resolve_generation_enrichment(
         if not category_profile:
             logging.warning("Ozon category profile not found: %s", category)
     else:
-        category = _infer_wb_field_category(product_description)
+        profiles = context.application.bot_data.get("wb_category_profiles")
+        if profiles is None:
+            profiles = load_wb_category_profiles()
+            context.application.bot_data["wb_category_profiles"] = profiles
+        category_profile = detect_wb_category_profile(profiles, product_description)
+        if category_profile:
+            category = str(category_profile.get("category") or category_profile.get("parent_category") or "")
+        else:
+            category = _infer_wb_field_category(product_description)
 
     resolved_fields = resolve_fields(
         {"description": product_description},
@@ -1984,6 +1998,7 @@ def create_application(settings: Settings) -> Any:
     application.bot_data["settings"] = settings
     application.bot_data["db"] = Database(settings.cardbot_db_url)
     application.bot_data["category_profiles"] = load_category_profiles()
+    application.bot_data["wb_category_profiles"] = load_wb_category_profiles()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("generate", generate_command))
     application.add_handler(CommandHandler("images", images_command))

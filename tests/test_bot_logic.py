@@ -44,11 +44,10 @@ def test_build_generation_messages_returns_four_copyable_blocks():
 
     messages = build_generation_messages(card)
 
-    assert len(messages) == 4
+    assert len(messages) == 3
     assert messages[0].startswith("📌 НАЗВАНИЕ:")
     assert messages[1].startswith("📝 ОПИСАНИЕ:")
-    assert messages[2].startswith("🔑 КЛЮЧЕВЫЕ СЛОВА:")
-    assert messages[3].startswith("📋 ХАРАКТЕРИСТИКИ:")
+    assert messages[2].startswith("📋 ХАРАКТЕРИСТИКИ:")
 
 
 def test_marketplace_keyboard_contains_wb_and_ozon_choices():

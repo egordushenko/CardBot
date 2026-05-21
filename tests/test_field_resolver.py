@@ -33,7 +33,7 @@ def test_missing_color_without_photo_adds_placeholder():
 def test_missing_composition_for_mens_wb_uses_category_default():
     resolved = resolve_fields({}, "Мужская одежда", "wb", has_photo=False)
 
-    assert resolved["Состав"] == "хлопок 95%, эластан 5%"
+    assert resolved["Состав"] == "хлопок 92%; эластан 8%"
 
 
 def test_womens_clothes_infer_gender_from_category():

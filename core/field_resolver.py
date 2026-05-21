@@ -74,8 +74,22 @@ def _category_defaults(
     if isinstance(direct, dict):
         return direct
 
+    category_lower = category.casefold()
+    aliases: list[str] = []
+    if marketplace == "wb":
+        if "женск" in category_lower:
+            aliases.append("Женщинам")
+        if "мужск" in category_lower:
+            aliases.append("Мужчинам")
+        if "детск" in category_lower:
+            aliases.append("Детям")
+    for alias in aliases:
+        alias_defaults = marketplace_defaults.get(alias)
+        if isinstance(alias_defaults, dict):
+            return alias_defaults
+
     generic = marketplace_defaults.get("Одежда")
-    if isinstance(generic, dict) and "одеж" in category.casefold():
+    if isinstance(generic, dict) and "одеж" in category_lower:
         return generic
     return {}
 

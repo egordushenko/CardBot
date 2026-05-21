@@ -56,13 +56,31 @@ def _format_profile_value(value: Any) -> str:
     return str(value or "").strip()
 
 
-def build_category_profile_prompt_block(category_profile: dict[str, Any] | None) -> str:
+def build_category_profile_prompt_block(
+    category_profile: dict[str, Any] | None,
+    marketplace: str = "ozon",
+) -> str:
     if not category_profile:
         return ""
 
     category = str(category_profile.get("category") or "").strip()
     if not category:
         return ""
+
+    normalized_marketplace = normalize_marketplace(marketplace)
+    if normalized_marketplace == "wb":
+        return (
+            "\n\nКатегорийный профиль WB:\n"
+            f"Категория товара: {category}\n"
+            f"Формула названия: {category_profile.get('title_formula')}\n"
+            f"Длина названия: {category_profile.get('title_target_min')}-{category_profile.get('title_target_max')} символов\n"
+            f"Длина описания: {category_profile.get('description_target_min')}-{category_profile.get('description_target_max')} символов\n"
+            f"Целевое количество характеристик: {category_profile.get('characteristics_target_min')}-{category_profile.get('characteristics_target_max')}\n"
+            f"Обязательные характеристики: {_format_profile_value(category_profile.get('required_characteristics'))}\n"
+            f"Желательные характеристики: {_format_profile_value(category_profile.get('recommended_characteristics'))}\n"
+            f"Типичные слова в названии: {_format_profile_value(category_profile.get('top_title_words'))}\n"
+            "Если обязательное поле не следует из входа пользователя, добавь ключ с плейсхолдером вида [укажите значение]."
+        )
 
     return (
         "\n\nКатегорийный профиль Ozon:\n"
@@ -81,8 +99,8 @@ def select_system_prompt(
 ) -> str:
     normalized = normalize_marketplace(marketplace)
     if normalized == "ozon":
-        return OZON_SYSTEM_PROMPT + build_category_profile_prompt_block(category_profile)
-    return WB_SYSTEM_PROMPT
+        return OZON_SYSTEM_PROMPT + build_category_profile_prompt_block(category_profile, "ozon")
+    return WB_SYSTEM_PROMPT + build_category_profile_prompt_block(category_profile, "wb")
 
 
 def build_resolved_fields_prompt_block(resolved_fields: dict[str, Any] | None) -> str:
@@ -195,10 +213,12 @@ def parse_generation_payload(
     if "characteristics" in data:
         data["characteristics"] = sanitize_characteristics(str(data["characteristics"]))
 
-    required = ("title", "description", search_field, "characteristics")
+    required = ("title", "description", "characteristics")
     for field in required:
         if not str(data.get(field, "")).strip():
             raise LLMResponseError(f"LLM response is missing required field: {field}")
+    if normalized_marketplace == "ozon" and not str(data.get(search_field, "")).strip():
+        raise LLMResponseError(f"LLM response is missing required field: {search_field}")
 
     return CardGeneration(
         title=sanitize_title(str(data["title"]), normalized_marketplace),
@@ -206,7 +226,7 @@ def parse_generation_payload(
         keywords=(
             sanitize_ozon_hashtags(str(data[search_field]))
             if normalized_marketplace == "ozon"
-            else str(data[search_field]).strip()
+            else str(data.get(search_field, "")).strip()
         ),
         characteristics=str(data["characteristics"]).strip(),
         tokens_used=tokens_used,
@@ -298,7 +318,12 @@ async def generate_card(
 
     usage: Any = getattr(response, "usage", None)
     tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
-    return parse_generation_payload(content, tokens_used=tokens_used, marketplace=marketplace)
+    card = parse_generation_payload(content, tokens_used=tokens_used, marketplace=marketplace)
+    if normalize_marketplace(marketplace) == "wb":
+        from wb_generation_quality import apply_wb_generation_quality
+
+        return apply_wb_generation_quality(card, category_profile)
+    return card
 
 
 async def generate_image_prompts(

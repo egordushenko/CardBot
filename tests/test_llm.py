@@ -28,11 +28,21 @@ def test_parse_generation_payload_accepts_valid_json():
     )
 
 
-def test_parse_generation_payload_rejects_missing_required_field():
-    with pytest.raises(LLMResponseError, match="keywords"):
+def test_parse_generation_payload_rejects_missing_ozon_hashtags():
+    with pytest.raises(LLMResponseError, match="hashtags"):
         parse_generation_payload(
-            '{"title":"Название","description":"Описание","characteristics":"Материал: хлопок"}'
+            '{"title":"Title","description":"Description","characteristics":"Material: cotton"}',
+            marketplace="ozon",
         )
+
+
+def test_parse_generation_payload_allows_wb_without_keywords():
+    result = parse_generation_payload(
+        '{"title":"Title","description":"Description","characteristics":"Material: cotton"}',
+        marketplace="wb",
+    )
+
+    assert result.keywords == ""
 
 
 def test_parse_generation_payload_removes_characteristics_service_tail():
@@ -118,12 +128,35 @@ def test_select_system_prompt_uses_marketplace_specific_rules():
     ozon_prompt = select_system_prompt("ozon")
 
     assert "Wildberries" in wb_prompt
-    assert "не указывай пол и цвет" in wb_prompt
+    assert "Пол и цвет можно указывать" in wb_prompt
     assert "Ozon" in ozon_prompt
     assert "hashtags" in ozon_prompt
     assert "200 символов" in ozon_prompt
     assert "900-1400 символов" in ozon_prompt
     assert "30 хештегов" in ozon_prompt
+
+
+def test_wb_prompt_includes_category_profile():
+    prompt = select_system_prompt(
+        "wb",
+        {
+            "category": "Обувь",
+            "title_formula": "тип обуви + пол + сезон",
+            "title_target_min": 25,
+            "title_target_max": 50,
+            "description_target_min": 700,
+            "description_target_max": 1200,
+            "required_characteristics": ["Цвет", "Пол", "Сезон"],
+            "recommended_characteristics": ["Материал стельки"],
+            "characteristics_target_min": 8,
+            "characteristics_target_max": 16,
+        },
+    )
+
+    assert "Категорийный профиль WB" in prompt
+    assert "Категория товара: Обувь" in prompt
+    assert "Обязательные характеристики: Цвет, Пол, Сезон" in prompt
+    assert "Материал стельки" in prompt
 
 
 def test_ozon_prompt_includes_beauty_category_profile():
