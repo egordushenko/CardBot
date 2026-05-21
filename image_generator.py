@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -13,6 +14,18 @@ OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions
 
 class ImageGenerationError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class ImageGenerationUsage:
+    model: str
+    cost_usd: float
+
+
+@dataclass(frozen=True)
+class GeneratedImage:
+    image_bytes: bytes
+    usage: ImageGenerationUsage
 
 
 def build_safe_image_prompt(prompt: str) -> str:
@@ -35,6 +48,19 @@ def extract_openrouter_image_bytes(payload: dict[str, Any]) -> bytes:
     raise ImageGenerationError("OpenRouter returned external image URL")
 
 
+def extract_openrouter_image_usage(
+    payload: dict[str, Any],
+    fallback_model: str,
+) -> ImageGenerationUsage:
+    model = str(payload.get("model") or fallback_model).strip() or fallback_model
+    raw_cost = payload.get("usage")
+    try:
+        cost_usd = float(raw_cost or 0)
+    except (TypeError, ValueError):
+        cost_usd = 0.0
+    return ImageGenerationUsage(model=model, cost_usd=cost_usd)
+
+
 def _extract_image_url(payload: dict[str, Any]) -> str:
     try:
         return payload["choices"][0]["message"]["images"][0]["image_url"]["url"]
@@ -47,13 +73,13 @@ def _extract_image_url(payload: dict[str, Any]) -> str:
         raise ImageGenerationError("OpenRouter response does not contain images") from exc
 
 
-async def generate_single_image(
+async def generate_single_image_result(
     prompt: str,
     reference_photo_bytes: bytes,
     api_key: str,
     model: str,
     site_url: str = "https://alterega.ru",
-) -> bytes:
+) -> GeneratedImage:
     photo_b64 = base64.b64encode(reference_photo_bytes).decode("ascii")
     safe_prompt = build_safe_image_prompt(prompt)
     payload = {
@@ -96,7 +122,46 @@ async def generate_single_image(
         response.raise_for_status()
         result = response.json()
 
-    return extract_openrouter_image_bytes(result)
+    return GeneratedImage(
+        image_bytes=extract_openrouter_image_bytes(result),
+        usage=extract_openrouter_image_usage(result, fallback_model=model),
+    )
+
+
+async def generate_single_image(
+    prompt: str,
+    reference_photo_bytes: bytes,
+    api_key: str,
+    model: str,
+    site_url: str = "https://alterega.ru",
+) -> bytes:
+    result = await generate_single_image_result(
+        prompt=prompt,
+        reference_photo_bytes=reference_photo_bytes,
+        api_key=api_key,
+        model=model,
+        site_url=site_url,
+    )
+    return result.image_bytes
+
+
+async def generate_marketplace_image_result(
+    prompt: str,
+    reference_photo_file_id: str,
+    bot: Any,
+    api_key: str,
+    model: str,
+    site_url: str = "https://alterega.ru",
+) -> GeneratedImage:
+    telegram_file = await bot.get_file(reference_photo_file_id)
+    photo_bytes = await telegram_file.download_as_bytearray()
+    return await generate_single_image_result(
+        prompt=prompt,
+        reference_photo_bytes=bytes(photo_bytes),
+        api_key=api_key,
+        model=model,
+        site_url=site_url,
+    )
 
 
 async def generate_marketplace_image(
@@ -107,15 +172,15 @@ async def generate_marketplace_image(
     model: str,
     site_url: str = "https://alterega.ru",
 ) -> bytes:
-    telegram_file = await bot.get_file(reference_photo_file_id)
-    photo_bytes = await telegram_file.download_as_bytearray()
-    return await generate_single_image(
+    result = await generate_marketplace_image_result(
         prompt=prompt,
-        reference_photo_bytes=bytes(photo_bytes),
+        reference_photo_file_id=reference_photo_file_id,
+        bot=bot,
         api_key=api_key,
         model=model,
         site_url=site_url,
     )
+    return result.image_bytes
 
 
 async def generate_all_images(

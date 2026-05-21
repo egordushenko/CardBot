@@ -22,6 +22,7 @@ from bot import (
     build_marketplace_keyboard,
     build_main_menu,
     build_repeat_photos_keyboard,
+    _aggregate_image_generation_cost,
     build_template_delete_confirm_keyboard,
     build_template_details_keyboard,
     build_templates_keyboard,
@@ -106,6 +107,24 @@ def test_classify_generation_error_returns_safe_reasons():
     assert classify_generation_error(Exception("LLM returned invalid JSON")) == "parse_error"
     assert classify_generation_error(Exception("missing required field: title")) == "parse_error"
     assert classify_generation_error(Exception("other")) == "unknown"
+
+
+def test_aggregate_image_generation_cost_counts_failed_images():
+    summary = _aggregate_image_generation_cost(
+        [
+            {"model": "openai/gpt-5.4-image-2", "cost_usd": 0.2},
+            {"model": "openai/gpt-5.4-image-2", "cost_usd": 0.198001},
+        ],
+        requested_count=3,
+        fallback_model="fallback",
+    )
+
+    assert summary == {
+        "model": "openai/gpt-5.4-image-2",
+        "cost_usd": 0.398001,
+        "image_count": 2,
+        "failed_count": 1,
+    }
 
 
 def test_template_keyboards_use_owner_safe_callbacks():

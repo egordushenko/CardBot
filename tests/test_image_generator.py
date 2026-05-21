@@ -9,6 +9,7 @@ from image_generator import (
     PRODUCT_PRESERVATION_SUFFIX,
     build_safe_image_prompt,
     extract_openrouter_image_bytes,
+    extract_openrouter_image_usage,
 )
 
 
@@ -52,6 +53,18 @@ def test_extract_openrouter_image_bytes_reads_legacy_data_shape():
 def test_extract_openrouter_image_bytes_rejects_missing_images():
     with pytest.raises(ImageGenerationError, match="images"):
         extract_openrouter_image_bytes({"choices": [{"message": {}}]})
+
+
+def test_extract_openrouter_image_usage_reads_model_and_cost():
+    payload = {
+        "model": "openai/gpt-5.4-image-2-20260421",
+        "usage": 0.200231,
+    }
+
+    usage = extract_openrouter_image_usage(payload, fallback_model="fallback")
+
+    assert usage.model == "openai/gpt-5.4-image-2-20260421"
+    assert usage.cost_usd == 0.200231
 
 
 def test_build_safe_image_prompt_appends_product_preservation_rules():

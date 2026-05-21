@@ -121,6 +121,17 @@ CREATE TABLE IF NOT EXISTS generated_images (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS image_generation_costs (
+    id SERIAL PRIMARY KEY,
+    session_id INT REFERENCES image_sessions(id),
+    user_id BIGINT REFERENCES users(id),
+    model TEXT NOT NULL,
+    cost_usd NUMERIC(12,6) DEFAULT 0,
+    image_count INT DEFAULT 0,
+    failed_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS templates (
     id SERIAL PRIMARY KEY,
     user_id BIGINT REFERENCES users(id),
@@ -141,6 +152,8 @@ CREATE INDEX IF NOT EXISTS idx_image_sessions_user_created
     ON image_sessions(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generated_images_session
     ON generated_images(session_id, image_index);
+CREATE INDEX IF NOT EXISTS idx_image_generation_costs_session
+    ON image_generation_costs(session_id);
 CREATE INDEX IF NOT EXISTS idx_templates_user_created
     ON templates(user_id, created_at DESC);
 """
@@ -706,3 +719,35 @@ class Database:
                     )
                     or 0
                 )
+
+    async def save_image_generation_cost(
+        self,
+        *,
+        session_id: int,
+        user_id: int,
+        model: str,
+        cost_usd: float,
+        image_count: int,
+        failed_count: int,
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO image_generation_costs(
+                    session_id,
+                    user_id,
+                    model,
+                    cost_usd,
+                    image_count,
+                    failed_count
+                )
+                VALUES($1, $2, $3, $4, $5, $6)
+                """,
+                session_id,
+                user_id,
+                model,
+                round(float(cost_usd or 0), 6),
+                max(0, int(image_count or 0)),
+                max(0, int(failed_count or 0)),
+            )

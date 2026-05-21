@@ -146,7 +146,11 @@ def test_build_markdown_report_contains_summary_and_failed_cases():
                 {
                     "id": "bad",
                     "marketplace": "ozon",
+                    "user_input": "input text",
                     "title": "Товар",
+                    "description": "description text",
+                    "keywords": "#tag",
+                    "characteristics": "type: value",
                     "issues": ["description_too_short"],
                     "score": 90,
                 }
@@ -157,3 +161,8 @@ def test_build_markdown_report_contains_summary_and_failed_cases():
     assert "# Live generation quality eval" in markdown
     assert "Passed: 1 / 2" in markdown
     assert "description_too_short" in markdown
+    assert "Input:" in markdown
+    assert "input text" in markdown
+    assert "Description:" in markdown
+    assert "Keywords / hashtags:" in markdown
+    assert "Characteristics:" in markdown

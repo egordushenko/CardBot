@@ -18,7 +18,7 @@ from category_profiles import (
 )
 from core.field_resolver import resolve_fields
 from db import Database, UsageMode
-from image_generator import generate_marketplace_image
+from image_generator import generate_marketplace_image_result
 from llm import CardGeneration, ImageConcept, generate_card, generate_image_prompts, normalize_marketplace
 from payments import (
     IMAGE_ADDON_CODES,
@@ -1067,6 +1067,14 @@ async def _generate_images_for_user(
             user_id=user_id,
             generated_images=generated,
         )
+        await _save_image_generation_cost_log(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            generated=generated,
+            requested_count=images_count,
+            fallback_model=settings.gpt_image_model,
+        )
     except Exception:
         logging.exception("Failed to save generated images")
         await db.set_image_session_status(session_id, "failed")
@@ -1230,6 +1238,14 @@ async def _generate_text_and_images_for_user(
             user_id=user_id,
             generated_images=generated,
         )
+        await _save_image_generation_cost_log(
+            db,
+            session_id=session_id,
+            user_id=user_id,
+            generated=generated,
+            requested_count=images_count,
+            fallback_model=settings.gpt_image_model,
+        )
     except Exception:
         logging.exception("Failed to save generated images")
         await db.set_image_session_status(session_id, "failed")
@@ -1355,6 +1371,65 @@ async def _generate_and_send_image_concepts(
     return generated
 
 
+def _aggregate_image_generation_cost(
+    generated: list[dict[str, Any]],
+    requested_count: int,
+    fallback_model: str,
+) -> dict[str, Any]:
+    model_costs: dict[str, float] = {}
+    for item in generated:
+        model = str(item.get("model") or fallback_model).strip() or fallback_model
+        model_costs[model] = model_costs.get(model, 0.0) + float(item.get("cost_usd") or 0)
+
+    if model_costs:
+        model = max(model_costs.items(), key=lambda entry: entry[1])[0]
+    else:
+        model = fallback_model
+
+    return {
+        "model": model,
+        "cost_usd": round(sum(model_costs.values()), 6),
+        "image_count": len(generated),
+        "failed_count": max(0, int(requested_count) - len(generated)),
+    }
+
+
+async def _save_image_generation_cost_log(
+    db: Database,
+    *,
+    session_id: int,
+    user_id: int,
+    generated: list[dict[str, Any]],
+    requested_count: int,
+    fallback_model: str,
+) -> None:
+    summary = _aggregate_image_generation_cost(
+        generated,
+        requested_count=requested_count,
+        fallback_model=fallback_model,
+    )
+    try:
+        await db.save_image_generation_cost(
+            session_id=session_id,
+            user_id=user_id,
+            model=summary["model"],
+            cost_usd=summary["cost_usd"],
+            image_count=summary["image_count"],
+            failed_count=summary["failed_count"],
+        )
+        logging.info(
+            "Image generation cost: session_id=%s user_id=%s model=%s cost_usd=%.6f image_count=%s failed_count=%s",
+            session_id,
+            user_id,
+            summary["model"],
+            summary["cost_usd"],
+            summary["image_count"],
+            summary["failed_count"],
+        )
+    except Exception:
+        logging.exception("Failed to save image generation cost")
+
+
 async def _image_generation_heartbeat(
     status_message: Any,
     total_count: int,
@@ -1392,8 +1467,8 @@ async def _generate_single_image_result(
 ) -> dict[str, Any]:
     photo_index = min(concept.photo_index, len(photo_file_ids) - 1)
     try:
-        image_bytes = await asyncio.wait_for(
-            generate_marketplace_image(
+        image_result = await asyncio.wait_for(
+            generate_marketplace_image_result(
                 prompt=concept.prompt,
                 reference_photo_file_id=photo_file_ids[photo_index],
                 bot=context.bot,
@@ -1415,7 +1490,9 @@ async def _generate_single_image_result(
         "image_index": concept.image_index,
         "purpose": concept.purpose,
         "prompt_used": concept.prompt,
-        "image_bytes": image_bytes,
+        "image_bytes": image_result.image_bytes,
+        "model": image_result.usage.model,
+        "cost_usd": image_result.usage.cost_usd,
     }
 
 
@@ -1433,6 +1510,8 @@ async def _send_generated_image_result(message: Any, result: dict[str, Any]) -> 
         "image_index": result["image_index"],
         "prompt_used": result["prompt_used"],
         "telegram_file_id": telegram_file_id,
+        "model": result.get("model"),
+        "cost_usd": result.get("cost_usd", 0),
     }
 
 

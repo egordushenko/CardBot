@@ -23,11 +23,15 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     assert "add column if not exists images_count" in schema
     assert "create table if not exists image_sessions" in schema
     assert "create table if not exists generated_images" in schema
+    assert "create table if not exists image_generation_costs" in schema
+    assert "cost_usd numeric(12,6)" in schema
+    assert "failed_count int default 0" in schema
     assert "create table if not exists templates" in schema
     assert "photo_file_ids text" in schema
     assert "images_count int" in schema
     assert "inv_id text unique not null" in schema
     assert "status text default 'pending'" in schema
+    assert "idx_image_generation_costs_session" in schema
     assert "idx_templates_user_created" in schema
 
 
