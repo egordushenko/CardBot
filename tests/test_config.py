@@ -26,6 +26,17 @@ def test_load_settings_reads_gpt_image_model(monkeypatch):
     assert settings.gpt_image_model == "openai/gpt-5.4-image-2"
 
 
+def test_load_settings_strips_openrouter_free_suffix(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "telegram-token")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-key")
+    monkeypatch.setenv("CARDBOT_DB_URL", "postgresql://user:pass@127.0.0.1:5432/cardbot")
+    monkeypatch.setenv("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash:free")
+
+    settings = load_settings(load_dotenv_files=False)
+
+    assert settings.openrouter_model == "deepseek/deepseek-v4-flash"
+
+
 def test_load_settings_keeps_robokassa_values_available_but_optional(monkeypatch):
     monkeypatch.setenv("BOT_TOKEN", "telegram-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-key")

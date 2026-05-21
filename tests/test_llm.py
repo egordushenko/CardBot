@@ -33,16 +33,16 @@ def test_parse_generation_payload_accepts_valid_json():
     )
 
 
-def test_build_openrouter_model_fallbacks_adds_paid_deepseek_after_free():
-    assert build_openrouter_model_fallbacks("deepseek/deepseek-v4-flash:free") == [
-        "deepseek/deepseek-v4-flash:free",
+def test_build_openrouter_model_fallbacks_keeps_normalized_model_single():
+    assert build_openrouter_model_fallbacks("deepseek/deepseek-v4-flash") == [
         "deepseek/deepseek-v4-flash",
     ]
 
 
-def test_build_openrouter_model_fallbacks_keeps_regular_model_single():
-    assert build_openrouter_model_fallbacks("deepseek/deepseek-v4-flash") == [
-        "deepseek/deepseek-v4-flash"
+def test_build_openrouter_model_fallbacks_tolerates_legacy_free_model():
+    assert build_openrouter_model_fallbacks("deepseek/deepseek-v4-flash:free") == [
+        "deepseek/deepseek-v4-flash:free",
+        "deepseek/deepseek-v4-flash",
     ]
 
 

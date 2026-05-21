@@ -49,6 +49,13 @@ def _bool_env(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _normalize_openrouter_model(model: str) -> str:
+    value = model.strip()
+    if value.endswith(":free"):
+        return value[: -len(":free")]
+    return value
+
+
 def load_settings(load_dotenv_files: bool = True) -> Settings:
     defaults: dict[str, str] = {}
     if load_dotenv_files:
@@ -66,8 +73,8 @@ def load_settings(load_dotenv_files: bool = True) -> Settings:
             "postgresql://cardbot_user:password@127.0.0.1:5432/cardbot",
         ),
         trial_generations=int(_env("TRIAL_GENERATIONS", defaults, "3")),
-        openrouter_model=_env(
-            "OPENROUTER_MODEL", defaults, "deepseek/deepseek-v4-flash"
+        openrouter_model=_normalize_openrouter_model(
+            _env("OPENROUTER_MODEL", defaults, "deepseek/deepseek-v4-flash")
         ),
         gpt_image_model=_env("GPT_IMAGE_MODEL", defaults, "openai/gpt-5.4-image-2"),
         site_url=_env("SITE_URL", defaults, "https://alterega.ru"),
