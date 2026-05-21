@@ -47,6 +47,71 @@ def test_apply_wb_generation_quality_does_not_add_unknown_characteristics():
     assert "Представляем вашему вниманию" not in result.description
 
 
+def test_apply_wb_generation_quality_drops_unmentioned_factual_values():
+    card = CardGeneration(
+        title="Настольная лампа LED черная 12 Вт",
+        description="Настольная лампа для рабочего стола.",
+        keywords="",
+        characteristics=(
+            "Цвет: черный\n"
+            "Тип лампы: LED\n"
+            "Мощность: 12 Вт\n"
+            "Регулировка яркости: есть\n"
+            "Страна производства: Китай"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Электроника"},
+        user_input="Настольная лампа",
+    )
+
+    assert "Цвет:" not in result.characteristics
+    assert "Тип лампы:" not in result.characteristics
+    assert "Мощность:" not in result.characteristics
+    assert "Регулировка яркости:" not in result.characteristics
+    assert "Страна производства: Китай" in result.characteristics
+
+
+def test_apply_wb_generation_quality_drops_wrong_mentioned_values():
+    card = CardGeneration(
+        title="Футболка женская оверсайз черная",
+        description="Женская футболка оверсайз.",
+        keywords="",
+        characteristics="Цвет: черный\nСостав: полиэстер\nСтрана производства: Китай",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        user_input="Женская футболка оверсайз белая",
+        category_profile={"category": "Женщинам / Одежда"},
+    )
+
+    assert "Цвет: черный" not in result.characteristics
+    assert "Состав: 100% хлопок" in result.characteristics
+
+
+def test_apply_wb_generation_quality_adds_adaptive_clothing_composition():
+    card = CardGeneration(
+        title="Футболка женская черная базовая",
+        description="Женская футболка для повседневной носки.",
+        keywords="",
+        characteristics="Цвет: черный\nПол: женский\nСтрана производства: Китай",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Женщинам / Одежда"},
+        user_input="Женская футболка черная",
+    )
+
+    assert "Состав: 100% хлопок" in result.characteristics
+
+
 def test_apply_wb_generation_quality_removes_secondary_placeholders_and_defaults_country():
     card = CardGeneration(
         title="Настольная лампа LED спиральная белая, USB, 35 см",
@@ -149,7 +214,7 @@ def test_apply_wb_generation_quality_drops_non_numeric_dimension_fields():
     assert "Высота предмета:" not in result.characteristics
     assert "Состояние товара:" not in result.characteristics
     assert "Покрой: свободный" in result.characteristics
-    assert "Состав:" not in result.characteristics
+    assert "Состав: 100% хлопок" in result.characteristics
 
 
 def test_apply_wb_generation_quality_converts_item_dimensions_to_size():

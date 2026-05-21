@@ -142,6 +142,8 @@ WB_GENERATION_BLOCKED_FIELD_MARKERS = (
 )
 
 WB_GROUNDED_VALUE_FIELD_MARKERS = (
+    "цвет",
+    "пол",
     "материал",
     "состав",
     "вес",
@@ -152,6 +154,15 @@ WB_GROUNDED_VALUE_FIELD_MARKERS = (
     "объем",
     "мощность",
     "количество",
+    "подключение",
+    "тип лампы",
+    "регулиров",
+    "ярк",
+    "покрой",
+    "сезон",
+    "застеж",
+    "застёж",
+    "форма",
 )
 
 WB_NUMERIC_VALUE_FIELDS = (
@@ -215,6 +226,10 @@ def _mentions_any(text: str, patterns: tuple[str, ...]) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
 
 
+def _number_tokens(text: str) -> set[str]:
+    return {item.replace(",", ".") for item in re.findall(r"\d+(?:[,.]\d+)?", text)}
+
+
 def _user_mentions_country(user_input: str) -> bool:
     return _mentions_any(
         user_input,
@@ -263,12 +278,80 @@ def _user_mentions_field(user_input: str, field: str) -> bool:
     if any(marker in field_lower for marker in ("размер", "длина", "ширина", "высота")):
         return _mentions_any(user_input, (r"\b\d+\s*[xх×]\s*\d+", r"\b\d+\s*(см|мм|м)\b", r"\bразмер\w*\b", r"\bдлин\w*\b", r"\bширин\w*\b", r"\bвысот\w*\b"))
     if "цвет" in field_lower:
-        return _mentions_any(user_input, (r"\bцвет\w*\b", r"\bбел\w*\b", r"\bчерн\w*\b", r"\bсер\w*\b", r"\bкрасн\w*\b", r"\bсин\w*\b", r"\bзелен\w*\b", r"\bрозов\w*\b"))
+        return _mentions_any(user_input, (r"\bцвет\w*\b", r"\bбел\w*\b", r"\bчерн\w*\b", r"\bсер\w*\b", r"\bкрасн\w*\b", r"\bсин\w*\b", r"\bзелен\w*\b", r"\bрозов\w*\b", r"\bбеж\w*\b", r"\bпрозрачн\w*\b"))
+    if "пол" in field_lower:
+        return _mentions_any(user_input, (r"\bженск\w*\b", r"\bмужск\w*\b", r"\bдетск\w*\b", r"\bдевоч\w*\b", r"\bмальчик\w*\b"))
+    if "тип лампы" in field_lower:
+        return _mentions_any(user_input, (r"\bled\b", r"\bсветодиод\w*\b", r"\bнакаливан\w*\b", r"\bгалоген\w*\b"))
+    if "подключение" in field_lower:
+        return _mentions_any(user_input, (r"\busb\b", r"\btype-c\b", r"\bтайп-с\b", r"\bсеть\b", r"\bрозетк\w*\b", r"\bаккумулятор\w*\b"))
+    if "регулиров" in field_lower or "ярк" in field_lower:
+        return _mentions_any(user_input, (r"\bрегулиров\w*\b", r"\bяркост\w*\b", r"\bдиммер\w*\b"))
     if "застеж" in field_lower or "застёж" in field_lower:
         return _mentions_any(user_input, (r"\bмолни\w*\b", r"\bзаст[её]ж\w*\b", r"\bлипуч\w*\b", r"\bкнопк\w*\b"))
     if "покрой" in field_lower:
         return _mentions_any(user_input, (r"\bоверсайз\b", r"\bсвободн\w*\b", r"\bпритал\w*\b"))
+    if "сезон" in field_lower:
+        return _mentions_any(user_input, (r"\bсезон\w*\b", r"\bлет\w*\b", r"\bзим\w*\b", r"\bдемисезон\w*\b", r"\bвсесезон\w*\b"))
+    if "форма" in field_lower:
+        return _mentions_any(user_input, (r"\bформ\w*\b", r"\bпрямоугольн\w*\b", r"\bкругл\w*\b", r"\bовальн\w*\b", r"\b\d+\s*(?:[xх×]|на)\s*\d+"))
     return False
+
+
+def _value_is_grounded(user_input: str, field: str, value: str) -> bool:
+    field_lower = field.casefold()
+    user_lower = user_input.casefold()
+    value_lower = value.casefold()
+    value_numbers = _number_tokens(value_lower)
+    if value_numbers:
+        return value_numbers <= _number_tokens(user_lower)
+    if value_lower in {"да", "есть"}:
+        return _user_mentions_field(user_input, field)
+    if value_lower == "нет":
+        return _mentions_any(user_lower, (r"\bнет\b", r"\bне\s+\w+", r"\bбез\b"))
+    if "цвет" in field_lower:
+        for color_pattern in (
+            r"бел\w*",
+            r"черн\w*",
+            r"сер\w*",
+            r"красн\w*",
+            r"син\w*",
+            r"зелен\w*",
+            r"розов\w*",
+            r"беж\w*",
+            r"прозрачн\w*",
+        ):
+            if re.search(color_pattern, value_lower) and not re.search(color_pattern, user_lower):
+                return False
+        return True
+    if "пол" in field_lower:
+        for gender_pattern in (r"женск\w*", r"мужск\w*", r"детск\w*", r"девоч\w*", r"мальчик\w*"):
+            if re.search(gender_pattern, value_lower) and re.search(gender_pattern, user_lower):
+                return True
+        return False
+    if "покрой" in field_lower and "свобод" in value_lower:
+        return _mentions_any(user_lower, (r"\bсвободн\w*\b", r"\bоверсайз\b"))
+    if "сезон" in field_lower:
+        return any(
+            re.search(pattern, value_lower) and re.search(pattern, user_lower)
+            for pattern in (r"лет\w*", r"зим\w*", r"демисезон\w*", r"всесезон\w*")
+        )
+    if "форма" in field_lower:
+        if _mentions_any(user_lower, (r"\b\d+\s*(?:[xх×]|на)\s*\d+",)) and _mentions_any(value_lower, (r"\bпрямоугольн\w*\b",)):
+            return True
+        return any(
+            re.search(pattern, value_lower) and re.search(pattern, user_lower)
+            for pattern in (r"прямоугольн\w*", r"кругл\w*", r"овальн\w*")
+        )
+    if "подключение" in field_lower or "тип лампы" in field_lower:
+        return any(
+            re.search(pattern, value_lower) and re.search(pattern, user_lower)
+            for pattern in (r"usb", r"type-c", r"bluetooth", r"блютуз", r"led", r"светодиод\w*", r"аккумулятор\w*", r"сеть")
+        )
+    if "регулиров" in field_lower or "ярк" in field_lower:
+        return _user_mentions_field(user_input, field)
+    value_words = {word for word in re.findall(r"[a-zа-яё0-9]+", value_lower) if len(word) >= 4}
+    return any(word in user_lower for word in value_words)
 
 
 def _remove_forbidden_title_words(title: str) -> str:
@@ -398,6 +481,8 @@ def _normalize_wb_characteristics(
             continue
         if _requires_grounded_value(clean_key) and not _user_mentions_field(user_input, clean_key):
             continue
+        if _requires_grounded_value(clean_key) and not _value_is_grounded(user_input, clean_key, clean_value):
+            continue
         if _is_placeholder(clean_value):
             continue
         normalized[clean_key] = clean_value
@@ -405,6 +490,9 @@ def _normalize_wb_characteristics(
     normalized["Страна производства"] = (
         normalized.get("Страна производства") or WB_DEFAULT_COUNTRY
     )
+    inferred_composition = infer_wb_clothing_composition(user_input, title, category_profile)
+    if inferred_composition and "Состав" not in normalized:
+        normalized["Состав"] = inferred_composition
     inferred_kit = _infer_wb_kit(user_input, title)
     if inferred_kit and "Комплектация" not in normalized:
         normalized["Комплектация"] = inferred_kit
@@ -412,6 +500,23 @@ def _normalize_wb_characteristics(
     _drop_redundant_generic_size(normalized)
 
     return normalized
+
+
+def infer_wb_clothing_composition(
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> str:
+    if not _is_clothing_context(user_input, title, category_profile):
+        return ""
+    text = f"{user_input} {title}".casefold()
+    if not _mentions_any(text, (r"\bфутболк\w*\b", r"\bмайк\w*\b", r"\bлонгслив\w*\b", r"\bтоп\b")):
+        if _mentions_any(text, (r"\bхуди\b", r"\bтолстовк\w*\b", r"\bсвитшот\w*\b")):
+            return "хлопок 80%, полиэстер 20%"
+        if _mentions_any(text, (r"\bплать\w*\b", r"\bбрюк\w*\b", r"\bкостюм\w*\b", r"\bюбк\w*\b")):
+            return "полиэстер 95%, эластан 5%"
+        return "хлопок 95%, эластан 5%"
+    return "100% хлопок"
 
 
 def _requires_numeric_value(field: str) -> bool:

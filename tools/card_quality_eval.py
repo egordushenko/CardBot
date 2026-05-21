@@ -4,7 +4,14 @@ from collections import Counter
 from typing import Any
 
 from llm import CardGeneration, normalize_marketplace
-from wb_generation_quality import parse_characteristics_text
+from ozon_generation_quality import _requires_grounding as _ozon_requires_grounding
+from ozon_generation_quality import _user_mentions_field as _ozon_user_mentions_field
+from ozon_generation_quality import _value_is_grounded as _ozon_value_is_grounded
+from wb_generation_quality import _is_clothing_context
+from wb_generation_quality import _requires_grounded_value as _wb_requires_grounded_value
+from wb_generation_quality import _user_mentions_field as _wb_user_mentions_field
+from wb_generation_quality import _value_is_grounded as _wb_value_is_grounded
+from wb_generation_quality import infer_wb_clothing_composition, parse_characteristics_text
 
 
 DESCRIPTION_MIN_CHARS = {
@@ -87,6 +94,103 @@ def _has_country(characteristics: dict[str, str], marketplace: str) -> bool:
     return bool(characteristics.get(country_field, "").strip())
 
 
+def _profile_fields(profile: dict[str, Any] | None, key: str) -> list[str]:
+    value = (profile or {}).get(key)
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _characteristic_exists(characteristics: dict[str, str], field_marker: str) -> bool:
+    marker = field_marker.casefold()
+    return any(marker in field.casefold() for field in characteristics)
+
+
+def _is_safe_default_value(
+    field: str,
+    value: str,
+    *,
+    marketplace: str,
+    user_input: str,
+    category_profile: dict[str, Any] | None,
+    title: str,
+) -> bool:
+    field_lower = field.casefold()
+    value_lower = value.casefold()
+    if marketplace == "ozon" and field == "Страна-изготовитель" and value_lower == "китай":
+        return True
+    if marketplace == "wb" and field == "Страна производства" and value_lower == "китай":
+        return True
+    if marketplace == "wb" and field == "Состав":
+        return value == infer_wb_clothing_composition(user_input, title, category_profile)
+    if "комплектац" in field_lower:
+        input_words = {
+            word.strip(" ,.;:-").casefold()
+            for word in user_input.split()
+            if len(word.strip(" ,.;:-")) >= 4
+        }
+        value_words = {
+            word.strip(" ,.;:-").casefold()
+            for word in value.split()
+            if len(word.strip(" ,.;:-")) >= 4
+        }
+        return bool(input_words & value_words)
+    return False
+
+
+def _is_hallucinated_fact(
+    field: str,
+    value: str,
+    *,
+    marketplace: str,
+    user_input: str,
+    category_profile: dict[str, Any] | None,
+    title: str,
+) -> bool:
+    if marketplace == "ozon":
+        requires_grounding = _ozon_requires_grounding(field)
+        user_mentions = _ozon_user_mentions_field(user_input, field)
+        value_is_grounded = _ozon_value_is_grounded(user_input, field, value)
+    else:
+        requires_grounding = _wb_requires_grounded_value(field)
+        user_mentions = _wb_user_mentions_field(user_input, field)
+        value_is_grounded = _wb_value_is_grounded(user_input, field, value)
+    return (
+        requires_grounding
+        and (not user_mentions or not value_is_grounded)
+        and not _is_safe_default_value(
+            field,
+            value,
+            marketplace=marketplace,
+            user_input=user_input,
+            category_profile=category_profile,
+            title=title,
+        )
+    )
+
+
+def _add_missing_explicit_ozon_electronics_issues(
+    issues: list[str],
+    characteristics: dict[str, str],
+    user_input: str,
+    category_profile: dict[str, Any] | None,
+) -> None:
+    context = f"{user_input} {(category_profile or {}).get('category') or ''}".casefold()
+    if not any(marker in context for marker in ("электроник", "наушник", "гарнитур")):
+        return
+    checks = (
+        ("микрофон", "микрофон", "Наличие микрофона"),
+        ("bluetooth", "беспроводной связи", "Тип беспроводной связи"),
+        ("блютуз", "беспроводной связи", "Тип беспроводной связи"),
+        ("шумоподав", "шумоподав", "Шумоподавление"),
+        ("внутриканаль", "конструкция", "Конструкция наушников"),
+        ("время работы", "время работы", "Время работы"),
+    )
+    for input_marker, field_marker, field_name in checks:
+        if input_marker in context and not _characteristic_exists(characteristics, field_marker):
+            issues.append(f"missing_explicit_characteristic:{field_name}")
+
+
 def evaluate_card_quality(
     card: CardGeneration,
     user_input: str = "",
@@ -120,6 +224,22 @@ def evaluate_card_quality(
             issues.append(f"forbidden_characteristic_field:{field}")
         if _is_placeholder(value):
             issues.append(f"placeholder_characteristic_value:{field}")
+        if _is_hallucinated_fact(
+            field,
+            value,
+            marketplace=marketplace,
+            user_input=user_input,
+            category_profile=category_profile,
+            title=card.title,
+        ):
+            issues.append(f"hallucinated_characteristic_value:{field}")
+
+    required = _profile_fields(category_profile, "required_generation_characteristics")
+    if marketplace == "wb" and _is_clothing_context(user_input, card.title, category_profile):
+        if "Состав" not in characteristics and (
+            "Состав" in required or not required
+        ):
+            issues.append("missing_required_user_data:Состав")
 
     if marketplace == "wb" and card.keywords.strip():
         issues.append("wb_keywords_present")
@@ -127,6 +247,12 @@ def evaluate_card_quality(
         hashtags = [item for item in card.keywords.split() if item.startswith("#")]
         if len(hashtags) < OZON_MIN_HASHTAGS:
             issues.append("ozon_too_few_hashtags")
+        _add_missing_explicit_ozon_electronics_issues(
+            issues,
+            characteristics,
+            user_input,
+            category_profile,
+        )
 
     return {
         "marketplace": marketplace,

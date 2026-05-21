@@ -48,6 +48,7 @@ async def test_run_live_eval_uses_generator_and_quality_gates():
                 keywords="",
                 characteristics=(
                     "Цвет: черный\n"
+                    "Состав: 100% хлопок\n"
                     "Покрой: свободный\n"
                     "Пол: Женский\n"
                     "Страна производства: Китай"
