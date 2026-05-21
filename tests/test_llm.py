@@ -4,6 +4,7 @@ from llm import (
     CardGeneration,
     ImageConcept,
     LLMResponseError,
+    build_openrouter_model_fallbacks,
     build_category_profile_prompt_block,
     build_user_prompt,
     build_image_director_user_prompt,
@@ -26,6 +27,19 @@ def test_parse_generation_payload_accepts_valid_json():
         characteristics="Материал: хлопок",
         tokens_used=0,
     )
+
+
+def test_build_openrouter_model_fallbacks_adds_paid_deepseek_after_free():
+    assert build_openrouter_model_fallbacks("deepseek/deepseek-v4-flash:free") == [
+        "deepseek/deepseek-v4-flash:free",
+        "deepseek/deepseek-v4-flash",
+    ]
+
+
+def test_build_openrouter_model_fallbacks_keeps_regular_model_single():
+    assert build_openrouter_model_fallbacks("deepseek/deepseek-v4-flash") == [
+        "deepseek/deepseek-v4-flash"
+    ]
 
 
 def test_parse_generation_payload_rejects_missing_ozon_hashtags():

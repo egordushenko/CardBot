@@ -10,6 +10,7 @@ from prompts import DIRECTOR_SYSTEM_PROMPT, OZON_SYSTEM_PROMPT, WB_SYSTEM_PROMPT
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_FREE_SUFFIX = ":free"
 
 
 class LLMResponseError(RuntimeError):
@@ -54,6 +55,22 @@ def _format_profile_value(value: Any) -> str:
     if isinstance(value, list):
         return ", ".join(str(item) for item in value if str(item).strip())
     return str(value or "").strip()
+
+
+def build_openrouter_model_fallbacks(model: str) -> list[str]:
+    primary = model.strip()
+    if not primary:
+        return []
+
+    candidates = [primary]
+    if primary.endswith(OPENROUTER_FREE_SUFFIX):
+        candidates.append(primary[: -len(OPENROUTER_FREE_SUFFIX)])
+
+    result: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in result:
+            result.append(candidate)
+    return result
 
 
 def build_category_profile_prompt_block(
@@ -295,22 +312,37 @@ async def generate_card(
         },
     )
 
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": select_system_prompt(marketplace, category_profile),
-            },
-            {
-                "role": "user",
-                "content": build_user_prompt(marketplace, user_input, resolved_fields),
-            },
-        ],
-        max_tokens=2200,
-        temperature=0.7,
-        response_format={"type": "json_object"},
-    )
+    messages = [
+        {
+            "role": "system",
+            "content": select_system_prompt(marketplace, category_profile),
+        },
+        {
+            "role": "user",
+            "content": build_user_prompt(marketplace, user_input, resolved_fields),
+        },
+    ]
+    model_candidates = build_openrouter_model_fallbacks(model)
+    response = None
+    last_error: Exception | None = None
+    for candidate in model_candidates:
+        try:
+            response = await client.chat.completions.create(
+                model=candidate,
+                messages=messages,
+                max_tokens=2200,
+                temperature=0.7,
+                response_format={"type": "json_object"},
+            )
+            break
+        except Exception as exc:
+            last_error = exc
+            status_code = getattr(exc, "status_code", None)
+            if status_code != 429 or candidate == model_candidates[-1]:
+                raise
+
+    if response is None:
+        raise LLMResponseError("LLM request failed") from last_error
 
     content = response.choices[0].message.content
     if not content:
