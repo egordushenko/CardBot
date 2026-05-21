@@ -408,6 +408,7 @@ def _normalize_wb_characteristics(
     inferred_kit = _infer_wb_kit(user_input, title)
     if inferred_kit and "Комплектация" not in normalized:
         normalized["Комплектация"] = inferred_kit
+    normalized.update(_infer_wb_pet_food_characteristics(user_input))
 
     return normalized
 
@@ -527,6 +528,40 @@ def _infer_wb_kit(user_input: str, title: str) -> str:
         return ""
     product = _infer_product_name_for_kit(title, user_input)
     return f"{product}; USB-кабель"
+
+
+def _infer_wb_pet_food_characteristics(user_input: str) -> dict[str, str]:
+    text = user_input.casefold()
+    if "корм" not in text or not _mentions_any(text, (r"\bкош\w*\b", r"\bкот\w*\b", r"\bсобак\w*\b", r"\bщен\w*\b")):
+        return {}
+
+    inferred: dict[str, str] = {}
+    if "сухой корм" in text:
+        inferred["Тип"] = "сухой корм"
+    elif "влажный корм" in text:
+        inferred["Тип"] = "влажный корм"
+    elif "корм" in text:
+        inferred["Тип"] = "корм"
+
+    if _mentions_any(text, (r"\bкош\w*\b", r"\bкот\w*\b")):
+        inferred["Вид животного"] = "кошки"
+    elif _mentions_any(text, (r"\bсобак\w*\b", r"\bщен\w*\b")):
+        inferred["Вид животного"] = "собаки"
+
+    weight_match = re.search(r"\b(\d+(?:[,.]\d+)?)\s*(кг|г)\b", text)
+    if weight_match:
+        inferred["Вес"] = f"{weight_match.group(1).replace(',', '.')} {weight_match.group(2)}"
+
+    if "куриц" in text:
+        inferred["Вкус"] = "курица"
+    elif "говядин" in text:
+        inferred["Вкус"] = "говядина"
+    elif "лосос" in text:
+        inferred["Вкус"] = "лосось"
+    elif "индейк" in text:
+        inferred["Вкус"] = "индейка"
+
+    return inferred
 
 
 def _profile_fields(profile: dict[str, Any] | None, key: str) -> list[str]:

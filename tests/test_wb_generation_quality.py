@@ -274,3 +274,25 @@ def test_apply_wb_generation_quality_drops_non_profile_freeform_backpack_fields(
     assert "Мягкая спинка:" not in result.characteristics
     assert "Карман для бутылки:" not in result.characteristics
     assert "Водоотталкивающая пропитка:" not in result.characteristics
+
+
+def test_apply_wb_generation_quality_infers_pet_food_fields_from_input():
+    card = CardGeneration(
+        title="Сухой корм для кошек с курицей 1 кг",
+        description="Сухой корм для взрослых кошек.",
+        keywords="",
+        characteristics="Назначение: Для взрослых кошек",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile=None,
+        user_input="Сухой корм для кошек с курицей. Для взрослых кошек, упаковка 1 кг.",
+    )
+
+    assert "Назначение: Для взрослых кошек" in result.characteristics
+    assert "Тип: сухой корм" in result.characteristics
+    assert "Вид животного: кошки" in result.characteristics
+    assert "Вес: 1 кг" in result.characteristics
+    assert "Вкус: курица" in result.characteristics
