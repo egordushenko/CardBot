@@ -54,6 +54,7 @@ async def run_live_eval(
     generator: Generator,
     retries: int = 1,
     retry_delay_seconds: float = 1,
+    case_timeout_seconds: float = 120,
 ) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     for case in cases:
@@ -62,7 +63,10 @@ async def run_live_eval(
         generation_error: Exception | None = None
         for attempt in range(retries + 1):
             try:
-                card = await generator(case, category_profile)
+                card = await asyncio.wait_for(
+                    generator(case, category_profile),
+                    timeout=case_timeout_seconds,
+                )
                 generation_error = None
                 break
             except Exception as exc:  # pragma: no cover - exact provider errors vary.
@@ -199,6 +203,7 @@ async def _run_from_cli(args: argparse.Namespace) -> int:
         api_generator,
         retries=args.retries,
         retry_delay_seconds=args.retry_delay_seconds,
+        case_timeout_seconds=args.case_timeout_seconds,
     )
     json_path = Path(args.json_report)
     md_path = Path(args.md_report)
@@ -221,6 +226,7 @@ def main() -> int:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--retry-delay-seconds", type=float, default=1)
+    parser.add_argument("--case-timeout-seconds", type=float, default=120)
     parser.add_argument("--fail-on-issues", action="store_true")
     args = parser.parse_args()
     return asyncio.run(_run_from_cli(args))

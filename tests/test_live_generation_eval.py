@@ -99,6 +99,31 @@ async def test_run_live_eval_records_generation_errors_after_retry():
     assert "generation_error:RuntimeError" in report["results"][0]["issues"]
 
 
+@pytest.mark.asyncio
+async def test_run_live_eval_records_generation_timeout():
+    async def slow_generator(case, category_profile):
+        import asyncio
+
+        await asyncio.sleep(1)
+        raise AssertionError("must time out first")
+
+    report = await run_live_eval(
+        [
+            {
+                "id": "wb_timeout",
+                "marketplace": "wb",
+                "user_input": "Футболка женская черная",
+            }
+        ],
+        slow_generator,
+        retries=0,
+        case_timeout_seconds=0.01,
+    )
+
+    assert report["summary"]["failed"] == 1
+    assert "generation_error:TimeoutError" in report["results"][0]["issues"]
+
+
 def test_build_markdown_report_contains_summary_and_failed_cases():
     markdown = build_markdown_report(
         {
