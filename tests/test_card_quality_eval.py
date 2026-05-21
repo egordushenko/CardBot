@@ -83,6 +83,78 @@ def test_evaluate_card_quality_flags_unmentioned_factual_characteristics():
     assert "hallucinated_characteristic_value:Страна производства" not in result["issues"]
 
 
+def test_evaluate_card_quality_uses_wb_category_characteristics_target():
+    card = CardGeneration(
+        title="Коврик для ванной серый 50x80",
+        description=(
+            "Коврик для ванной помогает сделать пол после душа безопаснее и приятнее для ног. "
+            "Мягкая поверхность подходит для зоны ванной, душевой кабины и туалета, а спокойный серый цвет "
+            "легко сочетается с разными интерьерами. Размер 50x80 см закрывает основную мокрую зону."
+        ),
+        keywords="",
+        characteristics=(
+            "Тип: коврик для ванной\n"
+            "Цвет: серый\n"
+            "Размер: 50x80 см\n"
+            "Страна производства: Китай\n"
+            "Комплектация: коврик"
+        ),
+        marketplace="wb",
+    )
+
+    result = evaluate_card_quality(
+        card,
+        user_input="Коврик для ванной серый. Размер 50 на 80 см.",
+        category_profile={
+            "category": "Дом / Ванная / Коврики",
+            "characteristics_target_min": 8,
+            "prompt_characteristics": ["Тип", "Цвет", "Размер", "Страна производства", "Комплектация"],
+        },
+    )
+
+    assert "too_few_characteristics" in result["issues"]
+
+
+def test_evaluate_card_quality_counts_only_clean_wb_characteristics_toward_target():
+    card = CardGeneration(
+        title="Коврик для ванной серый 50x80",
+        description=(
+            "Коврик для ванной помогает сделать пол после душа безопаснее и приятнее для ног. "
+            "Мягкая поверхность подходит для зоны ванной, душевой кабины и туалета, а спокойный серый цвет "
+            "легко сочетается с разными интерьерами. Размер 50x80 см закрывает основную мокрую зону."
+        ),
+        keywords="",
+        characteristics=(
+            "Тип: коврик для ванной\n"
+            "Цвет: серый\n"
+            "Размер: 50x80 см\n"
+            "Страна производства: Китай\n"
+            "Комплектация: коврик\n"
+            "Длина упаковки: 50 см\n"
+            "Ширина упаковки: 10 см\n"
+            "Длина предмета: 80 см\n"
+            "Материал изделия: микрофибра"
+        ),
+        marketplace="wb",
+    )
+
+    result = evaluate_card_quality(
+        card,
+        user_input="Коврик для ванной серый. Размер 50 на 80 см.",
+        category_profile={
+            "category": "Дом / Ванная / Коврики",
+            "characteristics_target_min": 6,
+            "prompt_characteristics": ["Тип", "Цвет", "Размер", "Страна производства", "Комплектация", "Материал изделия"],
+        },
+    )
+
+    assert "forbidden_characteristic_field:Длина упаковки" in result["issues"]
+    assert "forbidden_characteristic_field:Ширина упаковки" in result["issues"]
+    assert "forbidden_characteristic_field:Длина предмета" in result["issues"]
+    assert "hallucinated_characteristic_value:Материал изделия" in result["issues"]
+    assert "too_few_grounded_characteristics" in result["issues"]
+
+
 def test_evaluate_card_quality_flags_wrong_mentioned_characteristic_values():
     card = CardGeneration(
         title="Настольная лампа черная 12 Вт",

@@ -44,11 +44,14 @@ FORBIDDEN_CHARACTERISTIC_FIELDS = {
     "Состояние товара",
     "Ширина предмета",
     "Высота предмета",
+    "Длина предмета",
+    "Глубина предмета",
 }
 
 FORBIDDEN_FIELD_MARKERS = (
     "упаков",
     "вес с упаков",
+    "вес товара без упаков",
     "сертификат",
     "гарант",
     "артикул",
@@ -169,6 +172,20 @@ def _is_hallucinated_fact(
     )
 
 
+def _target_min_characteristics(
+    marketplace: str,
+    category_profile: dict[str, Any] | None,
+) -> int:
+    target = MIN_CHARACTERISTICS[marketplace]
+    if marketplace != "wb":
+        return target
+    try:
+        profile_target = int((category_profile or {}).get("characteristics_target_min") or 0)
+    except (TypeError, ValueError):
+        profile_target = 0
+    return max(target, profile_target)
+
+
 def _add_missing_explicit_ozon_electronics_issues(
     issues: list[str],
     characteristics: dict[str, str],
@@ -214,25 +231,35 @@ def evaluate_card_quality(
     if description and not _has_selling_cues(description):
         issues.append("description_too_dry")
 
-    if len(characteristics) < MIN_CHARACTERISTICS[marketplace]:
+    target_min = _target_min_characteristics(marketplace, category_profile)
+    if len(characteristics) < target_min:
         issues.append("too_few_characteristics")
     if not _has_country(characteristics, marketplace):
         issues.append("missing_country")
 
+    grounded_characteristics_count = 0
     for field, value in characteristics.items():
-        if _is_forbidden_field(field):
-            issues.append(f"forbidden_characteristic_field:{field}")
-        if _is_placeholder(value):
-            issues.append(f"placeholder_characteristic_value:{field}")
-        if _is_hallucinated_fact(
+        field_is_forbidden = _is_forbidden_field(field)
+        value_is_placeholder = _is_placeholder(value)
+        value_is_hallucinated = _is_hallucinated_fact(
             field,
             value,
             marketplace=marketplace,
             user_input=user_input,
             category_profile=category_profile,
             title=card.title,
-        ):
+        )
+        if field_is_forbidden:
+            issues.append(f"forbidden_characteristic_field:{field}")
+        if value_is_placeholder:
+            issues.append(f"placeholder_characteristic_value:{field}")
+        if value_is_hallucinated:
             issues.append(f"hallucinated_characteristic_value:{field}")
+        if not field_is_forbidden and not value_is_placeholder and not value_is_hallucinated:
+            grounded_characteristics_count += 1
+
+    if marketplace == "wb" and grounded_characteristics_count < target_min:
+        issues.append("too_few_grounded_characteristics")
 
     required = _profile_fields(category_profile, "required_generation_characteristics")
     if marketplace == "wb" and _is_clothing_context(user_input, card.title, category_profile):
@@ -259,6 +286,8 @@ def evaluate_card_quality(
         "title_length": len(card.title),
         "description_length": len(description),
         "characteristics_count": len(characteristics),
+        "grounded_characteristics_count": grounded_characteristics_count,
+        "characteristics_target_min": target_min,
         "score": max(0, 100 - len(set(issues)) * 10),
         "issues": sorted(set(issues)),
     }

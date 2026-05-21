@@ -98,6 +98,45 @@ def test_build_wb_category_profiles_excludes_logistics_fields_from_prompt_profil
     assert "Форма коврика" in profile["prompt_characteristics"]
 
 
+def test_build_wb_category_profiles_excludes_item_dimensions_from_prompt_profile():
+    cards = [
+        {
+            "category": "Дом",
+            "source_category": "Дом / Ванная / Коврики",
+            "title": "Коврик для ванной 50x80",
+            "description": "Коврик для ванной комнаты.",
+            "characteristics": {
+                "Длина предмета": "80 см",
+                "Ширина предмета": "50 см",
+                "Высота предмета": "1 см",
+                "Цвет": "серый",
+                "Материал изделия": "микрофибра",
+            },
+        },
+        {
+            "category": "Дом",
+            "source_category": "Дом / Ванная / Коврики",
+            "title": "Коврик для ванной 60x90",
+            "description": "Коврик для душевой зоны.",
+            "characteristics": {
+                "Длина предмета": "90 см",
+                "Ширина предмета": "60 см",
+                "Высота предмета": "1 см",
+                "Цвет": "белый",
+                "Материал изделия": "полиэстер",
+            },
+        },
+    ]
+
+    profile = build_wb_category_profiles(cards)["Дом / Ванная / Коврики"]
+
+    assert "Длина предмета" in profile["required_characteristics"]
+    assert "Длина предмета" not in profile["prompt_characteristics"]
+    assert "Ширина предмета" not in profile["prompt_characteristics"]
+    assert "Высота предмета" not in profile["prompt_characteristics"]
+    assert profile["prompt_characteristics"] == ["Цвет", "Материал изделия"]
+
+
 def test_load_wb_category_profiles_and_detect_profile(tmp_path: Path):
     path = tmp_path / "wb_category_profiles.json"
     path.write_text(
