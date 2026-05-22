@@ -1,5 +1,6 @@
 from bot import (
     FEEDBACK_MESSAGE,
+    IMAGE_PHOTO_PROMPT,
     classify_generation_error,
     build_after_generation_keyboard,
     build_after_image_generation_keyboard,
@@ -29,6 +30,7 @@ from bot import (
     combine_repeat_description,
     extract_image_file_id,
     format_template_description_preview,
+    is_allowed_image_count,
     is_supported_image_document,
     truncate_template_name,
 )
@@ -96,6 +98,7 @@ def test_after_generation_keyboard_offers_template_and_repeat_actions():
     ]
     assert "Не понравился результат" in text_keyboard.inline_keyboard[-1][0].text
     assert "@alterega" in FEEDBACK_MESSAGE
+    assert "Контакт для обратной связи: @alterega" in FEEDBACK_MESSAGE
 
 
 def test_classify_generation_error_returns_safe_reasons():
@@ -171,11 +174,13 @@ def test_generation_mode_keyboard_offers_text_and_combined_modes():
 def test_image_keyboards_follow_spec_callbacks():
     photo_keyboard = build_image_photo_keyboard(photos_count=2)
     count_keyboard = build_image_count_keyboard(image_balance=5)
+    full_count_keyboard = build_image_count_keyboard(image_balance=20)
     packages_keyboard = build_image_packages_keyboard()
     after_keyboard = build_after_image_generation_keyboard()
 
     assert photo_keyboard.inline_keyboard[0][0].callback_data == "img_photos_done"
     assert photo_keyboard.inline_keyboard[0][1].callback_data == "img_add_more"
+    assert len(build_image_photo_keyboard(photos_count=7).inline_keyboard[0]) == 1
     count_callbacks = [button.callback_data for row in count_keyboard.inline_keyboard for button in row]
     assert count_callbacks == [
         "img_count:1",
@@ -183,6 +188,18 @@ def test_image_keyboards_follow_spec_callbacks():
         "img_count:5",
     ]
     assert "img_count:7" not in count_callbacks
+    full_count_callbacks = [
+        button.callback_data for row in full_count_keyboard.inline_keyboard for button in row
+    ]
+    assert full_count_callbacks == [
+        "img_count:1",
+        "img_count:3",
+        "img_count:5",
+        "img_count:7",
+    ]
+    assert "img_count:9" not in full_count_callbacks
+    assert is_allowed_image_count(7) is True
+    assert is_allowed_image_count(9) is False
     assert packages_keyboard.inline_keyboard[0][0].callback_data == "buy:addon_img_20"
     assert after_keyboard.inline_keyboard[0][0].callback_data == "action:generate"
 
@@ -215,7 +232,8 @@ def test_extract_image_file_id_accepts_photo_and_image_document():
 
 def test_build_photo_received_message_groups_album_count():
     assert build_photo_received_message(added_count=3, total_count=3).startswith("Фото 3 получено")
-    assert "Всего: 3/5" in build_photo_received_message(added_count=3, total_count=3)
+    assert "Всего: 3/7" in build_photo_received_message(added_count=3, total_count=3)
+    assert "от 1 до 7 фото" in IMAGE_PHOTO_PROMPT
 
 
 def test_generation_messages_use_hashtags_label_for_ozon():

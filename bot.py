@@ -44,7 +44,7 @@ GENERATE_PROMPT = (
 FEEDBACK_MESSAGE = (
     "Не понравился результат?\n\n"
     "Напишите, что именно не так: название, описание, хэштеги или характеристики. "
-    "Контакт для фидбэка: @alterega"
+    "Контакт для обратной связи: @alterega"
 )
 MARKETPLACE_PROMPT = "Выберите маркетплейс:"
 MODE_PROMPT = (
@@ -57,7 +57,7 @@ IMAGE_DESCRIPTION_PROMPT = (
     "Чем подробнее — тем лучше результат. После этого бот попросит загрузить фото товара."
 )
 IMAGE_PHOTO_PROMPT = (
-    "Загрузите от 1 до 5 фото товара с разных ракурсов. "
+    "Загрузите от 1 до 7 фото товара с разных ракурсов. "
     "Когда загрузите все — нажмите ✅ Готово"
 )
 TEMPLATE_NAME_PROMPT = (
@@ -72,6 +72,8 @@ REPEAT_CHANGES_PROMPT = (
 REPEAT_PHOTOS_PROMPT = "Использовать те же фото или загрузить новые?"
 TEMPLATES_PAGE_SIZE = 5
 TEMPLATES_LIMIT = 10
+MAX_REFERENCE_PHOTOS = 7
+IMAGE_COUNT_OPTIONS = (1, 3, 5, 7)
 
 
 @dataclass(frozen=True)
@@ -276,8 +278,8 @@ def build_image_marketplace_keyboard() -> Any:
 
 def build_image_photo_keyboard(photos_count: int) -> Any:
     row = [_button("✅ Готово", "img_photos_done")]
-    if photos_count < 5:
-        row.append(_button(f"📎 Ещё ({photos_count}/5)", "img_add_more"))
+    if photos_count < MAX_REFERENCE_PHOTOS:
+        row.append(_button(f"📎 Ещё ({photos_count}/{MAX_REFERENCE_PHOTOS})", "img_add_more"))
     return _keyboard([row])
 
 
@@ -299,7 +301,7 @@ def extract_image_file_id(message: Any) -> str | None:
 
 
 def build_photo_received_message(added_count: int, total_count: int) -> str:
-    return f"Фото {added_count} получено ✓\nВсего: {total_count}/5"
+    return f"Фото {added_count} получено ✓\nВсего: {total_count}/{MAX_REFERENCE_PHOTOS}"
 
 
 def build_image_progress_message(
@@ -319,7 +321,7 @@ def build_image_progress_message(
 
 
 def build_image_count_keyboard(image_balance: int | None = None) -> Any:
-    counts = [1, 3, 5, 7, 9]
+    counts = list(IMAGE_COUNT_OPTIONS)
     if image_balance is not None:
         counts = [count for count in counts if count <= image_balance]
     if not counts:
@@ -335,6 +337,10 @@ def build_image_count_prompt(image_balance: int) -> str:
         "Сколько изображений сгенерировать?\n\n"
         f"На вашем балансе: {image_balance} изображений"
     )
+
+
+def is_allowed_image_count(images_count: int) -> bool:
+    return images_count in IMAGE_COUNT_OPTIONS
 
 
 def build_after_generation_keyboard() -> Any:
@@ -930,9 +936,9 @@ async def _handle_image_upload(update: Any, context: Any) -> None:
 
     message = update.effective_message
     photos = list(context.user_data.get("img_photos") or [])
-    if len(photos) >= 5:
+    if len(photos) >= MAX_REFERENCE_PHOTOS:
         await message.reply_text(
-            "Максимум 5 фото. Нажмите ✅ Готово",
+            f"Максимум {MAX_REFERENCE_PHOTOS} фото. Нажмите ✅ Готово",
             reply_markup=build_image_photo_keyboard(len(photos)),
         )
         return
@@ -1691,7 +1697,7 @@ async def _run_last_generation_with_images(
     user_id: int,
     generation: dict[str, Any],
 ) -> None:
-    photo_file_ids = list(generation.get("photo_file_ids") or [])
+    photo_file_ids = list(generation.get("photo_file_ids") or [])[:MAX_REFERENCE_PHOTOS]
     images_count = int(generation.get("images_count") or 1)
     if not photo_file_ids:
         await update.callback_query.message.reply_text(
@@ -1710,6 +1716,14 @@ async def _run_last_generation_with_images(
     context.user_data["mode"] = "text_and_images"
     context.user_data["img_description"] = generation["description"]
     context.user_data["img_photos"] = photo_file_ids
+    if not is_allowed_image_count(images_count):
+        context.user_data["generation_step"] = "count"
+        image_balance = await _get_db(context).get_image_balance(user_id)
+        await update.callback_query.message.reply_text(
+            build_image_count_prompt(image_balance),
+            reply_markup=build_image_count_keyboard(image_balance=image_balance),
+        )
+        return
     context.user_data["img_count"] = images_count
     await _generate_text_and_images_for_user(update, context, user_id, images_count)
 
@@ -1865,6 +1879,14 @@ async def handle_callback(update: Any, context: Any) -> None:
             if user is None:
                 return
             images_count = int(context.user_data.pop("repeat_images_count"))
+            if not is_allowed_image_count(images_count):
+                context.user_data["generation_step"] = "count"
+                image_balance = await _get_db(context).get_image_balance(user.id)
+                await query.message.reply_text(
+                    build_image_count_prompt(image_balance),
+                    reply_markup=build_image_count_keyboard(image_balance=image_balance),
+                )
+                return
             context.user_data["img_count"] = images_count
             await _generate_text_and_images_for_user(update, context, user.id, images_count)
             return
@@ -1888,7 +1910,7 @@ async def handle_callback(update: Any, context: Any) -> None:
                 reply_markup=build_image_count_keyboard(image_balance=image_balance),
             )
             return
-        if images_count < 1 or images_count > 9:
+        if not is_allowed_image_count(images_count):
             image_balance = await _get_db(context).get_image_balance(user.id)
             await query.message.reply_text(
                 build_image_count_prompt(image_balance),
