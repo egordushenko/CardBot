@@ -285,6 +285,15 @@ def test_marketplace_prompts_require_selling_description_pattern():
         assert "сценарии применения" in lowered
 
 
+def test_marketplace_prompts_forbid_duplicate_fact_rephrasing():
+    wb_prompt = select_system_prompt("wb")
+    ozon_prompt = select_system_prompt("ozon")
+
+    for prompt in (wb_prompt, ozon_prompt):
+        assert "Не повторяй один и тот же факт" in prompt
+        assert "Если факт уже раскрыт в первом абзаце" in prompt
+
+
 def test_wb_prompt_includes_category_profile():
     prompt = select_system_prompt(
         "wb",
@@ -432,8 +441,9 @@ def test_parse_image_concepts_payload_rejects_missing_concepts():
         parse_image_concepts_payload("{}", photos_count=1, images_count=1)
 
 
-def test_parse_image_concepts_payload_allows_fewer_safe_concepts_than_requested():
-    result = parse_image_concepts_payload(
+def test_parse_image_concepts_payload_rejects_fewer_concepts_than_requested():
+    with pytest.raises(LLMResponseError, match="exactly 5"):
+        parse_image_concepts_payload(
         (
             '{"concepts":['
             '{"image_index":1,"purpose":"main","photo_index":0,"prompt":"Prompt one"},'
@@ -442,12 +452,7 @@ def test_parse_image_concepts_payload_allows_fewer_safe_concepts_than_requested(
         ),
         photos_count=2,
         images_count=5,
-    )
-
-    assert result == [
-        ImageConcept(image_index=1, purpose="main", photo_index=0, prompt="Prompt one"),
-        ImageConcept(image_index=2, purpose="lifestyle", photo_index=1, prompt="Prompt two"),
-    ]
+        )
 
 
 def test_build_image_director_user_prompt_includes_counts_and_marketplace():
@@ -517,11 +522,27 @@ def test_director_system_prompt_requires_varied_text_and_safe_closeups():
     assert "marketing benefit" in DIRECTOR_SYSTEM_PROMPT
 
 
+def test_director_system_prompt_requires_exact_concept_count_and_rich_backgrounds():
+    assert "Return exactly the requested number of concepts" in DIRECTOR_SYSTEM_PROMPT
+    assert "return fewer concepts" not in DIRECTOR_SYSTEM_PROMPT
+    assert "Do NOT use a pure white empty background" in DIRECTOR_SYSTEM_PROMPT
+    assert "pure white background" not in DIRECTOR_SYSTEM_PROMPT
+    assert "soft shadows" in DIRECTOR_SYSTEM_PROMPT
+    assert "blurred contextual elements" in DIRECTOR_SYSTEM_PROMPT
+
+
+def test_director_system_prompt_requires_modern_typography_and_slide_roles():
+    assert "large readable modern sans-serif" in DIRECTOR_SYSTEM_PROMPT
+    assert "Do NOT place text in random corners" in DIRECTOR_SYSTEM_PROMPT
+    assert "Do NOT use meaningless headings like \"Детали\"" in DIRECTOR_SYSTEM_PROMPT
+    assert "role: hero / facts / closeup / lifestyle / scenario" in DIRECTOR_SYSTEM_PROMPT
+    assert "layout plan" in DIRECTOR_SYSTEM_PROMPT
+
+
 def test_director_system_prompt_handles_clothing_images_safely():
     assert "Do NOT put clothing size" in DIRECTOR_SYSTEM_PROMPT
     assert "Remove home-photo defects" in DIRECTOR_SYSTEM_PROMPT
     assert "Preserve printed logos and text exactly" in DIRECTOR_SYSTEM_PROMPT
-    assert "return fewer concepts" in DIRECTOR_SYSTEM_PROMPT
     assert "не ближе 6% от края кадра" in DIRECTOR_SYSTEM_PROMPT
 
 

@@ -240,8 +240,8 @@ def build_image_director_user_prompt(
         f"Маркетплейс: {name}\n"
         f"Загружено фото: {photos_count} (индексы от 0 до {last_index})\n"
         f"Нужно сгенерировать изображений: {images_count}\n\n"
-        f"Создай до {images_count} уникальных концепций изображений для карточки товара. "
-        f"Если безопасных уникальных идей меньше, верни меньше концепций. "
+        f"Создай ровно {images_count} уникальных концепций изображений для карточки товара. "
+        f"Каждая концепция должна иметь роль, композицию, текст и один конкретный photo_index. "
         f"Распредели {photos_count} фото по изображениям адаптивно."
     )
 
@@ -333,6 +333,8 @@ def parse_image_concepts_payload(
     raw_concepts = data.get("concepts")
     if not isinstance(raw_concepts, list) or not raw_concepts:
         raise LLMResponseError("LLM response is missing required field: concepts")
+    if len(raw_concepts) != images_count:
+        raise LLMResponseError(f"LLM image concepts response must contain exactly {images_count} concepts")
 
     concepts: list[ImageConcept] = []
     max_photo_index = max(photos_count - 1, 0)
@@ -426,8 +428,8 @@ async def generate_image_prompts(
 ) -> list[ImageConcept]:
     from openai import AsyncOpenAI
 
-    if photos_count < 1 or photos_count > 5:
-        raise LLMResponseError("photos_count must be between 1 and 5")
+    if photos_count < 1 or photos_count > 7:
+        raise LLMResponseError("photos_count must be between 1 and 7")
     if images_count < 1 or images_count > 9:
         raise LLMResponseError("images_count must be between 1 and 9")
 

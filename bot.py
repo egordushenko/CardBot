@@ -36,6 +36,10 @@ from webhook_server import start_webhook_server
 
 
 PAYMENT_UNAVAILABLE_MESSAGE = "💳 Оплата временно недоступна, скоро откроем!"
+TECHNICAL_WORKS_MESSAGE = (
+    "Сейчас на стороне сервиса временные технические работы. "
+    "Попробуйте немного позже. Генерация не списана."
+)
 GENERATE_PROMPT = (
     "Отправьте описание товара. Минимум — название. "
     "Можно добавить материал, размер, цвет и особенности. "
@@ -476,14 +480,35 @@ def build_generation_messages(card: CardGeneration) -> list[str]:
 
 
 def classify_generation_error(exc: Exception) -> str:
-    if getattr(exc, "status_code", None) == 429:
+    status_code = getattr(exc, "status_code", None)
+    if status_code in {402, 403}:
+        return "api_balance"
+    if status_code == 429:
         return "429"
     message = str(exc).casefold()
+    if any(
+        marker in message
+        for marker in (
+            "insufficient credits",
+            "insufficient balance",
+            "not enough credits",
+            "no auth credentials",
+            "quota exceeded",
+            "payment required",
+        )
+    ):
+        return "api_balance"
     if "empty response" in message:
         return "empty_response"
     if "invalid json" in message or "missing required field" in message:
         return "parse_error"
     return "unknown"
+
+
+def generation_error_message(reason: str) -> str:
+    if reason in {"api_balance", "429"}:
+        return TECHNICAL_WORKS_MESSAGE
+    return "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
 
 
 def log_generation_error(
@@ -1061,12 +1086,16 @@ async def _generate_images_for_user(
             _serialize_image_concepts(concepts),
             status="generating",
         )
-    except Exception:
-        logging.exception("Image prompt generation failed")
+    except Exception as exc:
+        reason = classify_generation_error(exc)
+        log_generation_error(exc, marketplace=marketplace, mode="images_only", reason=reason)
         await db.set_image_session_status(session_id, "failed")
-        await message.reply_text(
-            "Не удалось разработать концепцию изображений. Баланс не списан."
-        )
+        if reason in {"api_balance", "429"}:
+            await message.reply_text(generation_error_message(reason))
+        else:
+            await message.reply_text(
+                "Не удалось разработать концепцию изображений. Баланс не списан."
+            )
         return
 
     generated = await _generate_and_send_image_concepts(
@@ -1187,10 +1216,9 @@ async def _generate_text_and_images_for_user(
     except Exception as exc:
         await _cancel_task(concepts_task)
         await db.set_image_session_status(session_id, "failed")
-        log_generation_error(exc, marketplace=marketplace, mode="text_and_images")
-        await message.reply_text(
-            "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
-        )
+        reason = classify_generation_error(exc)
+        log_generation_error(exc, marketplace=marketplace, mode="text_and_images", reason=reason)
+        await message.reply_text(generation_error_message(reason))
         return
 
     try:
@@ -1227,16 +1255,25 @@ async def _generate_text_and_images_for_user(
             _serialize_image_concepts(concepts),
             status="generating",
         )
-    except Exception:
-        logging.exception("Image prompt generation failed")
+    except Exception as exc:
+        reason = classify_generation_error(exc)
+        log_generation_error(exc, marketplace=marketplace, mode="text_and_images", reason=reason)
         await db.set_image_session_status(session_id, "failed")
         balance = await db.get_balance(user_id)
         text_left = max(settings.trial_generations - balance.trial_used, 0) + balance.balance
-        await message.reply_text(
-            "Не удалось разработать концепцию изображений. Списана только текстовая генерация.\n"
-            f"Остаток: {text_left} текстовых / {balance.image_balance} изображений",
-            reply_markup=build_after_image_generation_keyboard(),
-        )
+        if reason in {"api_balance", "429"}:
+            await message.reply_text(
+                f"{generation_error_message(reason)}\n"
+                f"Списана только текстовая генерация.\n"
+                f"Остаток: {text_left} текстовых / {balance.image_balance} изображений",
+                reply_markup=build_after_image_generation_keyboard(),
+            )
+        else:
+            await message.reply_text(
+                "Не удалось разработать концепцию изображений. Списана только текстовая генерация.\n"
+                f"Остаток: {text_left} текстовых / {balance.image_balance} изображений",
+                reply_markup=build_after_image_generation_keyboard(),
+            )
         _clear_image_session(context)
         return
 
@@ -1341,7 +1378,7 @@ async def _generate_and_send_image_concepts(
     sent_count = 0
     next_to_send = 1
     ready: dict[int, dict[str, Any]] = {}
-    failed: set[int] = set()
+    failed: dict[int, dict[str, Any]] = {}
     stop_progress = asyncio.Event()
     progress_task = asyncio.create_task(
         _image_generation_heartbeat(
@@ -1361,14 +1398,24 @@ async def _generate_and_send_image_concepts(
             if result.get("ok"):
                 ready[image_index] = result
             else:
-                failed.add(image_index)
-                logging.warning("Image %s generation failed: %s", image_index, result.get("error"))
+                failed[image_index] = result
+                logging.warning(
+                    "Image %s generation failed reason=%s: %s",
+                    image_index,
+                    result.get("reason"),
+                    result.get("error"),
+                )
 
             while next_to_send in ready or next_to_send in failed:
                 if next_to_send in failed:
-                    await message.reply_text(
-                        f"Изображение {next_to_send}/{total_count} не удалось сгенерировать."
-                    )
+                    failed_result = failed.pop(next_to_send)
+                    reason = str(failed_result.get("reason") or "unknown")
+                    if reason in {"api_balance", "429"}:
+                        await message.reply_text(generation_error_message(reason))
+                    else:
+                        await message.reply_text(
+                            f"Изображение {next_to_send}/{total_count} не удалось сгенерировать."
+                        )
                     next_to_send += 1
                     continue
 
@@ -1498,6 +1545,7 @@ async def _generate_single_image_result(
         return {
             "ok": False,
             "image_index": concept.image_index,
+            "reason": classify_generation_error(exc),
             "error": str(exc),
         }
 
@@ -1576,10 +1624,9 @@ async def _generate_and_send_text_card(
             resolved_fields=resolved_fields,
         )
     except Exception as exc:
-        log_generation_error(exc, marketplace=marketplace, mode=mode)
-        await message.reply_text(
-            "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
-        )
+        reason = classify_generation_error(exc)
+        log_generation_error(exc, marketplace=marketplace, mode=mode, reason=reason)
+        await message.reply_text(generation_error_message(reason))
         return None
 
     try:

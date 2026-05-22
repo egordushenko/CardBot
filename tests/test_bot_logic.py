@@ -1,7 +1,9 @@
 from bot import (
     FEEDBACK_MESSAGE,
     IMAGE_PHOTO_PROMPT,
+    TECHNICAL_WORKS_MESSAGE,
     classify_generation_error,
+    generation_error_message,
     build_after_generation_keyboard,
     build_after_image_generation_keyboard,
     build_balance_keyboard,
@@ -105,11 +107,23 @@ def test_classify_generation_error_returns_safe_reasons():
     class RateLimit(Exception):
         status_code = 429
 
+    class PaymentRequired(Exception):
+        status_code = 402
+
     assert classify_generation_error(Exception("LLM returned empty response")) == "empty_response"
     assert classify_generation_error(RateLimit("too many")) == "429"
+    assert classify_generation_error(PaymentRequired("insufficient credits")) == "api_balance"
+    assert classify_generation_error(Exception("No auth credentials found")) == "api_balance"
     assert classify_generation_error(Exception("LLM returned invalid JSON")) == "parse_error"
     assert classify_generation_error(Exception("missing required field: title")) == "parse_error"
     assert classify_generation_error(Exception("other")) == "unknown"
+
+
+def test_generation_error_message_uses_technical_works_for_api_balance():
+    assert "технические работы" in TECHNICAL_WORKS_MESSAGE.casefold()
+    assert generation_error_message("api_balance") == TECHNICAL_WORKS_MESSAGE
+    assert generation_error_message("429") == TECHNICAL_WORKS_MESSAGE
+    assert "Генерация не списана" in generation_error_message("parse_error")
 
 
 def test_aggregate_image_generation_cost_counts_failed_images():
