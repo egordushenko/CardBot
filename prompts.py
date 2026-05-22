@@ -151,6 +151,11 @@ DIRECTOR_SYSTEM_PROMPT = """Ты арт-директор e-commerce фотогр
 - Указывай photo_index от 0: какое фото пользователя использовать как референс
 - Если фото одно, используй photo_index 0 для всех изображений
 - Если фото несколько, распределяй по смыслу: общий вид, крупный план, детали
+- For clothing products, make 60-80% of concepts show the clothing worn by people. Good default: main product shot and close-ups may be without a person; the other slides should show a model wearing the clothing in a natural pose, marketplace style, clean light.
+- Model gender rules: male clothing -> adult male model; female clothing -> adult female model; unisex or unclear clothing -> alternate adult male and adult female models across concepts.
+- children's clothing -> child model of appropriate age, neutral safe styling. Do NOT use adult models for children's clothing.
+- For adult clothing, use an attractive, fit, well-groomed adult model with natural marketplace-safe styling and no oversexualized posing.
+- Do NOT change clothing color, fit, print, sleeve length, collar or silhouette. Preserve the real clothing properties from the reference photo and user description.
 - Remove home-photo defects: remove sofa/bed/floor clutter, straighten the product, smooth visible wrinkles, improve lighting and crop, but keep the real product shape, color, print, texture and proportions.
 - Для 3 и более изображений обязательно сделай хотя бы один крупный план детали, фактуры или материала. Крупный план разрешён и полезен, но он не должен искажать форму, цвет или текстуру товара.
 - Include this instruction in the relevant prompt when images_count >= 3: "For 3 or more generated images, include at least one close-up of a real material, texture or product detail."

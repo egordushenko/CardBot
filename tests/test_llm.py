@@ -515,3 +515,16 @@ def test_director_system_prompt_handles_clothing_images_safely():
     assert "Preserve printed logos and text exactly" in DIRECTOR_SYSTEM_PROMPT
     assert "return fewer concepts" in DIRECTOR_SYSTEM_PROMPT
     assert "не ближе 6% от края кадра" in DIRECTOR_SYSTEM_PROMPT
+
+
+def test_director_system_prompt_prefers_model_shots_for_clothing():
+    assert "For clothing products, make 60-80% of concepts show the clothing worn by people" in DIRECTOR_SYSTEM_PROMPT
+    assert "main product shot and close-ups may be without a person" in DIRECTOR_SYSTEM_PROMPT
+    assert "male clothing -> adult male model" in DIRECTOR_SYSTEM_PROMPT
+    assert "female clothing -> adult female model" in DIRECTOR_SYSTEM_PROMPT
+    assert "unisex or unclear clothing -> alternate adult male and adult female models" in DIRECTOR_SYSTEM_PROMPT
+    assert "children's clothing -> child model of appropriate age" in DIRECTOR_SYSTEM_PROMPT
+    assert "Do NOT use adult models for children's clothing" in DIRECTOR_SYSTEM_PROMPT
+    assert "attractive, fit, well-groomed adult model" in DIRECTOR_SYSTEM_PROMPT
+    assert "no oversexualized posing" in DIRECTOR_SYSTEM_PROMPT
+    assert "Do NOT change clothing color, fit, print, sleeve length, collar or silhouette" in DIRECTOR_SYSTEM_PROMPT
