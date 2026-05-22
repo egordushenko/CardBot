@@ -265,6 +265,14 @@ def test_select_system_prompt_uses_marketplace_specific_rules():
     assert "30 хештегов" in ozon_prompt
 
 
+
+def test_wb_prompt_keeps_clothing_size_and_composition_out_of_title():
+    prompt = select_system_prompt("wb")
+
+    assert "Для одежды не выноси размер в название" in prompt
+    assert "Для одежды не выноси состав в название" in prompt
+
+
 def test_marketplace_prompts_require_selling_description_pattern():
     wb_prompt = select_system_prompt("wb")
     ozon_prompt = select_system_prompt("ozon")

@@ -541,6 +541,7 @@ def _normalize_wb_characteristics(
     normalized["Страна производства"] = (
         normalized.get("Страна производства") or WB_DEFAULT_COUNTRY
     )
+    _promote_clothing_material_to_composition(normalized, user_input, title, category_profile)
     inferred_composition = infer_wb_clothing_composition(user_input, title, category_profile)
     if inferred_composition and "Состав" not in normalized:
         normalized["Состав"] = inferred_composition
@@ -569,6 +570,22 @@ def infer_wb_clothing_composition(
             return "полиэстер 95%, эластан 5%"
         return "хлопок 95%, эластан 5%"
     return "100% хлопок"
+
+
+def _promote_clothing_material_to_composition(
+    normalized: dict[str, str],
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> None:
+    if not _is_clothing_context(user_input, title, category_profile) or "Состав" in normalized:
+        return
+    for material_field in ("Материал изделия", "Материал"):
+        material = normalized.get(material_field, "")
+        material_lower = material.casefold()
+        if material and any(word in material_lower for word in WB_CLOTHING_MATERIAL_WORDS):
+            normalized["Состав"] = material
+            return
 
 
 def _requires_numeric_value(field: str) -> bool:
