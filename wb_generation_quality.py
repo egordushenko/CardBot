@@ -195,6 +195,28 @@ WB_CLOTHING_PROFILE_MARKERS = (
     "костюм",
 )
 
+WB_CLOTHING_TITLE_SIZE_RE = re.compile(
+    r"(?<![A-Za-zА-Яа-яЁё0-9])(?:XXXS|XXS|XS|S|M|L|XL|XXL|XXXL|XXXXL)(?![A-Za-zА-Яа-яЁё0-9])",
+    flags=re.IGNORECASE,
+)
+
+WB_CLOTHING_TITLE_MATERIAL_RE = re.compile(
+    r"(?<![A-Za-zА-Яа-яЁё0-9])(?:\d{1,3}\s*%\s*)?"
+    r"(?:хлопок|полиэстер|эластан|вискоза|нейлон|спандекс|лайкра)"
+    r"(?:\s*\d{1,3}\s*%)?(?![A-Za-zА-Яа-яЁё0-9])",
+    flags=re.IGNORECASE,
+)
+
+WB_CLOTHING_MATERIAL_WORDS = (
+    "хлопок",
+    "полиэстер",
+    "эластан",
+    "вискоза",
+    "нейлон",
+    "спандекс",
+    "лайкра",
+)
+
 WB_CONTEXTUAL_FIELD_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (
         ("коврик", "ворс"),
@@ -527,6 +549,7 @@ def _normalize_wb_characteristics(
         normalized["Комплектация"] = inferred_kit
     normalized.update(_infer_wb_pet_food_characteristics(user_input))
     _drop_redundant_generic_size(normalized)
+    _drop_duplicate_clothing_material(normalized, user_input, title, category_profile)
 
     return normalized
 
@@ -600,6 +623,37 @@ def _is_clothing_context(
     category = str((category_profile or {}).get("category") or "")
     text = f"{category} {title} {user_input}".casefold()
     return any(marker in text for marker in WB_CLOTHING_PROFILE_MARKERS)
+
+
+def _remove_clothing_title_noise(
+    title: str,
+    user_input: str,
+    category_profile: dict[str, Any] | None,
+) -> str:
+    if not _is_clothing_context(user_input, title, category_profile):
+        return title
+    cleaned = WB_CLOTHING_TITLE_SIZE_RE.sub(" ", title)
+    cleaned = WB_CLOTHING_TITLE_MATERIAL_RE.sub(" ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip(" ,.;:-")
+
+
+def _drop_duplicate_clothing_material(
+    normalized: dict[str, str],
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> None:
+    if not _is_clothing_context(user_input, title, category_profile):
+        return
+    composition = normalized.get("Состав", "").casefold()
+    if not composition:
+        return
+    for material_field in ("Материал изделия", "Материал"):
+        material = normalized.get(material_field, "").casefold()
+        if not material:
+            continue
+        if any(word in composition and word in material for word in WB_CLOTHING_MATERIAL_WORDS):
+            normalized.pop(material_field, None)
 
 
 def _clothing_dimension_alternative(
@@ -776,7 +830,14 @@ def apply_wb_generation_quality(
         category_profile=category_profile,
     )
 
-    title = sanitize_title(_remove_forbidden_title_words(card.title), "wb")
+    title = sanitize_title(
+        _remove_clothing_title_noise(
+            _remove_forbidden_title_words(card.title),
+            user_input=user_input,
+            category_profile=category_profile,
+        ),
+        "wb",
+    )
     description = sanitize_description(
         _remove_unverified_description_claims(
             _remove_forbidden_description_phrases(card.description),

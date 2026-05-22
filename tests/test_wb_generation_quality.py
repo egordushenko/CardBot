@@ -47,6 +47,36 @@ def test_apply_wb_generation_quality_does_not_add_unknown_characteristics():
     assert "Представляем вашему вниманию" not in result.description
 
 
+def test_apply_wb_generation_quality_removes_clothing_size_and_composition_from_title():
+    card = CardGeneration(
+        title="Рашгард Therapy черный M 100% хлопок облегающий",
+        description="Рашгард для тренировок.",
+        keywords="",
+        characteristics=(
+            "Цвет: черный\n"
+            "Состав: 100% хлопок\n"
+            "Страна производства: Китай\n"
+            "Комплектация: рашгард\n"
+            "Назначение: для спорта\n"
+            "Материал изделия: хлопок"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Мужчинам / Одежда / Рашгарды"},
+        user_input=(
+            "Рашгард therapy черный размер M, 100% хлопок, тянущийся облегающий "
+            "с горловиной качественная печать текста на спине (Therapy)"
+        ),
+    )
+
+    assert result.title == "Рашгард Therapy черный облегающий"
+    assert "Состав: 100% хлопок" in result.characteristics
+    assert "Материал изделия:" not in result.characteristics
+
+
 def test_apply_wb_generation_quality_drops_unmentioned_factual_values():
     card = CardGeneration(
         title="Настольная лампа LED черная 12 Вт",
