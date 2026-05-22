@@ -240,7 +240,8 @@ def build_image_director_user_prompt(
         f"Маркетплейс: {name}\n"
         f"Загружено фото: {photos_count} (индексы от 0 до {last_index})\n"
         f"Нужно сгенерировать изображений: {images_count}\n\n"
-        f"Создай {images_count} уникальных концепций изображений для карточки товара. "
+        f"Создай до {images_count} уникальных концепций изображений для карточки товара. "
+        f"Если безопасных уникальных идей меньше, верни меньше концепций. "
         f"Распредели {photos_count} фото по изображениям адаптивно."
     )
 
@@ -353,8 +354,6 @@ def parse_image_concepts_payload(
             )
         )
 
-    if len(concepts) != images_count:
-        raise LLMResponseError("LLM returned fewer image concepts than requested")
     return concepts
 
 
