@@ -62,6 +62,16 @@ PLACEHOLDER_PREFIXES = (
     "укажите ",
 )
 
+PLACEHOLDER_VALUES = {
+    "не указана",
+    "не указан",
+    "не указано",
+    "не применимо",
+    "не требуется",
+    "нет данных",
+    "n/a",
+}
+
 SELLING_CUE_WORDS = (
     "подходит",
     "помогает",
@@ -89,12 +99,13 @@ def _is_forbidden_field(field: str) -> bool:
 
 def _is_placeholder(value: str) -> bool:
     lowered = value.strip().casefold()
-    return any(lowered.startswith(prefix) for prefix in PLACEHOLDER_PREFIXES)
+    return any(lowered.startswith(prefix) for prefix in PLACEHOLDER_PREFIXES) or lowered in PLACEHOLDER_VALUES
 
 
 def _has_country(characteristics: dict[str, str], marketplace: str) -> bool:
     country_field = "Страна-изготовитель" if marketplace == "ozon" else "Страна производства"
-    return bool(characteristics.get(country_field, "").strip())
+    value = characteristics.get(country_field, "").strip()
+    return bool(value) and not _is_placeholder(value)
 
 
 def _profile_fields(profile: dict[str, Any] | None, key: str) -> list[str]:
@@ -150,6 +161,15 @@ def _is_hallucinated_fact(
     category_profile: dict[str, Any] | None,
     title: str,
 ) -> bool:
+    if marketplace == "ozon" and field == "Страна-изготовитель":
+        if value.casefold() == "китай":
+            return False
+        return not _ozon_user_mentions_field(user_input, field)
+    if marketplace == "wb" and field == "Страна производства":
+        if value.casefold() == "китай":
+            return False
+        return not _wb_user_mentions_field(user_input, field)
+
     if marketplace == "ozon":
         requires_grounding = _ozon_requires_grounding(field)
         user_mentions = _ozon_user_mentions_field(user_input, field)

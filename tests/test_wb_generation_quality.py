@@ -388,3 +388,73 @@ def test_apply_wb_generation_quality_infers_pet_food_fields_from_input():
     assert "Вид животного: кошки" in result.characteristics
     assert "Вес: 1 кг" in result.characteristics
     assert "Вкус: курица" in result.characteristics
+
+
+def test_apply_wb_generation_quality_drops_rug_fields_from_generic_home_profile():
+    card = CardGeneration(
+        title="Органайзер складной бежевый 40x30x25 см спанбонд",
+        description="Органайзер для хранения вещей.",
+        keywords="",
+        characteristics=(
+            "Цвет: бежевый\n"
+            "Материал изделия: спанбонд\n"
+            "Размер: 40x30x25 см\n"
+            "Форма коврика: прямоугольная\n"
+            "Основа коврика: жесткие стенки\n"
+            "Особенности коврика: прозрачное окно, ручки по бокам\n"
+            "Страна производства: Китай"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={
+            "category": "Дом",
+            "prompt_characteristics": [
+                "Страна производства",
+                "Комплектация",
+                "Материал изделия",
+                "Цвет",
+                "Форма коврика",
+                "Основа коврика",
+                "Особенности коврика",
+                "Размер коврика",
+            ],
+        },
+        user_input=(
+            "Органайзер для хранения вещей складной бежевый. Размер 40x30x25 см, "
+            "материал спанбонд, жесткие стенки, прозрачное окно, ручки по бокам."
+        ),
+    )
+
+    assert "Цвет: бежевый" in result.characteristics
+    assert "Материал изделия: спанбонд" in result.characteristics
+    assert "Размер: 40x30x25 см" in result.characteristics
+    assert "Форма коврика:" not in result.characteristics
+    assert "Основа коврика:" not in result.characteristics
+    assert "Особенности коврика:" not in result.characteristics
+
+
+def test_apply_wb_generation_quality_keeps_explicit_weight_from_input():
+    card = CardGeneration(
+        title="Сухой корм для кошек с курицей 1 кг",
+        description="Сухой корм для взрослых кошек.",
+        keywords="",
+        characteristics=(
+            "Тип: сухой корм\n"
+            "Вид животного: кошки\n"
+            "Вес: 1 кг\n"
+            "Вкус: курица\n"
+            "Страна производства: Китай"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Товары для животных"},
+        user_input="Сухой корм для кошек с курицей. Для взрослых кошек, упаковка 1 кг.",
+    )
+
+    assert "Вес: 1 кг" in result.characteristics

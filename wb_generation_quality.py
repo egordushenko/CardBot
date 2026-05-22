@@ -195,6 +195,17 @@ WB_CLOTHING_PROFILE_MARKERS = (
     "костюм",
 )
 
+WB_CONTEXTUAL_FIELD_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        ("коврик", "ворс"),
+        ("коврик", "ванн", "душ", "туалет"),
+    ),
+    (
+        ("опрыскивател", "разбрызгивател", "объем бака", "механизм работы"),
+        ("опрыскивател", "разбрызгивател", "сад", "дача"),
+    ),
+)
+
 
 def parse_characteristics_text(value: str) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -216,6 +227,20 @@ def _format_characteristics(fields: dict[str, str]) -> str:
 
 def _is_placeholder(value: str) -> bool:
     return value.strip().startswith("[укажите")
+
+
+def _is_contextually_wrong_field(
+    field: str,
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> bool:
+    field_lower = field.casefold()
+    context = f"{user_input} {title} {(category_profile or {}).get('category') or ''}".casefold()
+    for field_markers, context_markers in WB_CONTEXTUAL_FIELD_RULES:
+        if any(marker in field_lower for marker in field_markers):
+            return not any(marker in context for marker in context_markers)
+    return False
 
 
 def _has_digit(value: str) -> bool:
@@ -457,6 +482,8 @@ def _normalize_wb_characteristics(
                 normalized.setdefault("Размер", clean_value)
             continue
         if clean_key in WB_DROP_CHARACTERISTIC_FIELDS:
+            continue
+        if _is_contextually_wrong_field(clean_key, user_input, title, category_profile):
             continue
         if _is_blocked_generation_field(clean_key) and not _user_mentions_field(user_input, clean_key):
             continue

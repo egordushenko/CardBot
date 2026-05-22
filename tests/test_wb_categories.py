@@ -109,7 +109,7 @@ def test_detect_wb_category_profile_uses_catalog_tree_before_profile_scoring():
     assert organizer["category"] == "Дом"
 
 
-def test_detect_wb_category_profile_does_not_fallback_to_conflicting_profile_when_catalog_has_no_profile():
+def test_detect_wb_category_profile_uses_safe_sport_fallback_when_catalog_has_no_profile():
     profiles = {
         "Дом / Ванная / Коврики": {
             "marketplace": "wb",
@@ -134,7 +134,9 @@ def test_detect_wb_category_profile_does_not_fallback_to_conflicting_profile_whe
         wb_categories=catalog,
     )
 
-    assert profile is None
+    assert profile is not None
+    assert profile["category"] == "Спорт"
+    assert "Размер" in profile["prompt_characteristics"]
 
 
 def test_detect_wb_category_profile_maps_repair_catalog_alias_to_existing_profile():

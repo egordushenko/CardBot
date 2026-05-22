@@ -223,6 +223,61 @@ def test_evaluate_card_quality_flags_weak_ozon_card():
     assert "forbidden_characteristic_field:Добавить к сравнению" in result["issues"]
 
 
+def test_evaluate_card_quality_flags_ozon_wrong_default_country():
+    card = CardGeneration(
+        title="Средство для кухни антижир 500 мл",
+        description=(
+            "Средство помогает быстро очистить кухонные поверхности от жира и следов готовки. "
+            "Подходит для плиты, вытяжки, фартука и рабочей зоны, упрощает ежедневную уборку."
+        ),
+        keywords="#антижир #кухня #уборка",
+        characteristics="Тип: Средство для удаления жира\nСтрана-изготовитель: Россия",
+        marketplace="ozon",
+    )
+
+    result = evaluate_card_quality(
+        card,
+        user_input="Средство для кухни антижир 500 мл",
+    )
+
+    assert "hallucinated_characteristic_value:Страна-изготовитель" in result["issues"]
+
+
+def test_evaluate_card_quality_flags_unknown_and_non_applicable_values():
+    card = CardGeneration(
+        title="Аккумуляторная отвертка 3.6 В",
+        description=(
+            "Аккумуляторная отвертка подходит для сборки мебели и мелкого ремонта. "
+            "Компактный корпус удобно держать в руке, а подсветка помогает работать в плохо освещенных местах."
+        ),
+        keywords="#отвертка #инструмент #ремонт",
+        characteristics=(
+            "Тип: Отвертка аккумуляторная\n"
+            "Партномер: Не указан\n"
+            "Время полного высыхания, ч: Не применимо\n"
+            "Страна-изготовитель: Не указана"
+        ),
+        marketplace="ozon",
+    )
+
+    result = evaluate_card_quality(
+        card,
+        user_input="Аккумуляторная отвертка 3.6 В с LED подсветкой",
+        category_profile={
+            "prompt_characteristics": [
+                "Тип",
+                "Партномер",
+                "Время полного высыхания, ч",
+                "Страна-изготовитель",
+            ]
+        },
+    )
+
+    assert "placeholder_characteristic_value:Партномер" in result["issues"]
+    assert "placeholder_characteristic_value:Время полного высыхания, ч" in result["issues"]
+    assert "placeholder_characteristic_value:Страна-изготовитель" in result["issues"]
+
+
 def test_summarize_quality_results_counts_failures():
     passing = {"id": "ok", "issues": [], "score": 100}
     failing = {"id": "bad", "issues": ["description_too_short"], "score": 90}

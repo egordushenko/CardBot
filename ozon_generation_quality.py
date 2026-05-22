@@ -17,6 +17,7 @@ OZON_DROP_FIELDS = {
     "Код ТРУ",
     "Литьевой",
     "Номер СГР",
+    "Партномер",
     "Сертификат",
     "Bluetooth",
     "ISBN",
@@ -100,6 +101,16 @@ OZON_VALUE_LIKE_FIELD_RE = re.compile(
 OZON_HASHTAGS_MIN = 12
 OZON_HASHTAGS_MAX = 18
 
+OZON_PLACEHOLDER_VALUES = {
+    "не указана",
+    "не указан",
+    "не указано",
+    "не применимо",
+    "не требуется",
+    "нет данных",
+    "n/a",
+}
+
 
 def _format_characteristics(fields: dict[str, str]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in fields.items()).strip()
@@ -138,6 +149,13 @@ def _trim_ozon_hashtags(value: str) -> str:
         if len(kept) >= OZON_HASHTAGS_MAX:
             break
     return " ".join(kept)
+
+
+def _is_placeholder_value(value: str) -> bool:
+    lowered = value.strip().casefold()
+    if lowered.startswith("[укажите") or lowered.startswith("укажите "):
+        return True
+    return lowered in OZON_PLACEHOLDER_VALUES
 
 
 def _profile_fields(profile: dict[str, Any] | None) -> set[str]:
@@ -339,6 +357,14 @@ def apply_ozon_generation_quality(
         clean_key = key.strip()
         clean_value = value.strip()
         if not clean_key or not clean_value:
+            continue
+        if clean_key == "Страна-изготовитель":
+            if _user_mentions_field(user_input, clean_key) and not _is_placeholder_value(clean_value):
+                normalized[clean_key] = clean_value
+            else:
+                normalized[clean_key] = OZON_DEFAULT_COUNTRY
+            continue
+        if _is_placeholder_value(clean_value):
             continue
         if _is_blocked_field(clean_key) and not _user_mentions_field(user_input, clean_key):
             continue

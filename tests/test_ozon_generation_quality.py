@@ -257,3 +257,79 @@ def test_apply_ozon_generation_quality_adds_safe_purpose_and_kit_from_input():
 
     assert "Назначение: для ванной комнаты, душевой зоны и туалета" in result.characteristics
     assert "Комплектация: коврик" in result.characteristics
+
+
+def test_apply_ozon_generation_quality_overrides_unmentioned_country_to_china():
+    card = CardGeneration(
+        title="Средство для кухни антижир 500 мл",
+        description="Средство для очистки кухонных поверхностей.",
+        keywords="#антижир #кухня #чистящее_средство",
+        characteristics=(
+            "Тип: Средство для удаления жира\n"
+            "Страна-изготовитель: Россия\n"
+            "Цвет: прозрачный"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={"prompt_characteristics": ["Тип", "Цвет", "Страна-изготовитель"]},
+        user_input="Средство для кухни антижир 500 мл",
+    )
+
+    assert "Страна-изготовитель: Китай" in result.characteristics
+    assert "Страна-изготовитель: Россия" not in result.characteristics
+
+
+def test_apply_ozon_generation_quality_replaces_unknown_country_placeholder():
+    card = CardGeneration(
+        title="Подгузники детские размер 4 60 штук",
+        description="Подгузники для ежедневного ухода.",
+        keywords="#подгузники #детские #размер_4",
+        characteristics="Тип: Подгузники\nСтрана-изготовитель: Не указана",
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={"prompt_characteristics": ["Тип", "Страна-изготовитель"]},
+        user_input="Подгузники детские размер 4 60 штук",
+    )
+
+    assert "Страна-изготовитель: Китай" in result.characteristics
+    assert "Не указана" not in result.characteristics
+
+
+def test_apply_ozon_generation_quality_drops_non_applicable_and_unknown_values():
+    card = CardGeneration(
+        title="Аккумуляторная отвертка 3.6 В с LED подсветкой",
+        description="Отвертка для мелкого ремонта.",
+        keywords="#отвертка #инструмент #ремонт",
+        characteristics=(
+            "Тип: Отвертка аккумуляторная\n"
+            "Время полного высыхания, ч: Не применимо\n"
+            "Партномер: Не указан\n"
+            "Страна-изготовитель: Не указана"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "prompt_characteristics": [
+                "Тип",
+                "Время полного высыхания, ч",
+                "Партномер",
+                "Страна-изготовитель",
+            ]
+        },
+        user_input="Аккумуляторная отвертка 3.6 В с LED подсветкой и реверсом",
+    )
+
+    assert "Тип: Отвертка аккумуляторная" in result.characteristics
+    assert "Страна-изготовитель: Китай" in result.characteristics
+    assert "Не применимо" not in result.characteristics
+    assert "Не указан" not in result.characteristics
+    assert "Партномер:" not in result.characteristics

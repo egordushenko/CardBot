@@ -213,6 +213,72 @@ WB_PARENT_ALIASES = {
     "Для ремонта": ("Для ремонта", "Строительство и ремонт"),
 }
 
+WB_SYNTHETIC_FALLBACK_PROFILES: dict[str, dict[str, Any]] = {
+    "Товары для животных": {
+        "marketplace": "wb",
+        "category": "Товары для животных",
+        "parent_category": "Товары для животных",
+        "match_keywords": ["корм", "кошка", "собака", "питомец"],
+        "prompt_characteristics": [
+            "Тип",
+            "Вид животного",
+            "Вес",
+            "Вкус",
+            "Назначение",
+            "Комплектация",
+            "Страна производства",
+        ],
+        "required_generation_characteristics": ["Тип", "Вид животного", "Страна производства"],
+        "recommended_generation_characteristics": ["Вес", "Вкус", "Назначение", "Комплектация"],
+        "characteristics_target_min": 5,
+        "characteristics_target_max": 8,
+        "title_target_min": 32,
+        "title_target_max": 60,
+        "description_target_min": 900,
+        "description_target_max": 1500,
+    },
+    "Спорт": {
+        "marketplace": "wb",
+        "category": "Спорт",
+        "parent_category": "Спорт",
+        "match_keywords": ["коврик", "йога", "фитнес", "спорт", "тренировка"],
+        "prompt_characteristics": [
+            "Тип",
+            "Цвет",
+            "Размер",
+            "Материал",
+            "Назначение",
+            "Комплектация",
+            "Страна производства",
+        ],
+        "required_generation_characteristics": ["Тип", "Цвет", "Страна производства"],
+        "recommended_generation_characteristics": ["Размер", "Материал", "Назначение", "Комплектация"],
+        "characteristics_target_min": 5,
+        "characteristics_target_max": 8,
+        "title_target_min": 32,
+        "title_target_max": 60,
+        "description_target_min": 900,
+        "description_target_max": 1500,
+    },
+}
+
+WB_PROFILE_FIELD_DROP_MARKERS = (
+    "упаков",
+    "гарант",
+    "партномер",
+    "артикул",
+    "сертификат",
+    "толщина предмета",
+    "длина предмета",
+    "ширина предмета",
+    "высота предмета",
+)
+
+WB_CONTEXT_PROFILE_FIELD_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("коврик", "ворс"), ("коврик", "ванн", "душ", "туалет")),
+    (("опрыскивател", "разбрызгивател", "объем бака"), ("опрыскивател", "разбрызгивател", "сад", "дача")),
+)
+
 
 def _category_depth(category: str) -> int:
     return len([part for part in category.split(" / ") if part.strip()])
@@ -588,6 +654,74 @@ def _catalog_profile_candidates(category_path: str) -> list[str]:
     return candidates
 
 
+def _synthetic_profile(category: str) -> dict[str, Any] | None:
+    profile = WB_SYNTHETIC_FALLBACK_PROFILES.get(category)
+    return dict(profile) if profile else None
+
+
+def _fallback_profile_for_top_category(category_path: str) -> dict[str, Any] | None:
+    top = category_path.split(" / ", 1)[0].strip()
+    if not top:
+        return None
+    if top in WB_SYNTHETIC_FALLBACK_PROFILES:
+        return _synthetic_profile(top)
+    for category, aliases in WB_PARENT_ALIASES.items():
+        if top in aliases:
+            return _synthetic_profile(category)
+    return None
+
+
+def _context_allows_profile_field(field: str, product_description: str, profile: dict[str, Any]) -> bool:
+    field_lower = field.casefold()
+    context = f"{product_description} {profile.get('category') or ''}".casefold()
+    if any(marker in field_lower for marker in WB_PROFILE_FIELD_DROP_MARKERS):
+        return False
+    for field_markers, context_markers in WB_CONTEXT_PROFILE_FIELD_RULES:
+        if any(marker in field_lower for marker in field_markers):
+            return any(marker in context for marker in context_markers)
+    return True
+
+
+def _sanitize_wb_profile_for_product(
+    profile: dict[str, Any],
+    product_description: str,
+) -> dict[str, Any]:
+    result = dict(profile)
+    for key in (
+        "prompt_characteristics",
+        "required_generation_characteristics",
+        "recommended_generation_characteristics",
+    ):
+        value = result.get(key)
+        if not isinstance(value, list):
+            continue
+        result[key] = [
+            str(field).strip()
+            for field in value
+            if str(field).strip() and _context_allows_profile_field(str(field), product_description, result)
+        ]
+    return result
+
+
+def _direct_wb_profile_override(
+    profiles: dict[str, dict[str, Any]],
+    product_description: str,
+) -> dict[str, Any] | None:
+    text = product_description.casefold()
+    text_tokens = _tokens(product_description)
+    if bool(text_tokens & WB_PET_PRODUCT_TOKENS):
+        return _synthetic_profile("Товары для животных")
+    if "коврик" in text and any(marker in text for marker in ("йог", "фитнес", "трениров")):
+        return _synthetic_profile("Спорт")
+    if bool(text_tokens & WB_LIGHTING_PRODUCT_TOKENS) and any(
+        marker in text for marker in ("led", "usb", "мощност", "яркост", "режим", "свет")
+    ):
+        profile = profiles.get("Электроника")
+        if profile:
+            return dict(profile)
+    return None
+
+
 def _profile_from_catalog_path(
     profiles: dict[str, dict[str, Any]],
     category_path: str,
@@ -605,6 +739,22 @@ def _profile_from_catalog_path(
         ]
         if descendants:
             return dict(sorted(descendants, key=_profile_depth)[0])
+    return _fallback_profile_for_top_category(category_path)
+
+
+def _best_scored_wb_profile(
+    profiles: dict[str, dict[str, Any]],
+    product_description: str,
+) -> dict[str, Any] | None:
+    best_profile: dict[str, Any] | None = None
+    best_score = 0
+    for profile in profiles.values():
+        score = _score_profile(profile, product_description)
+        if score > best_score or (score == best_score and best_profile and _profile_depth(profile) > _profile_depth(best_profile)):
+            best_score = score
+            best_profile = profile
+    if best_profile and best_score >= 2:
+        return dict(best_profile)
     return None
 
 
@@ -678,21 +828,18 @@ def detect_wb_category_profile(
     product_description: str,
     wb_categories: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
+    direct_profile = _direct_wb_profile_override(profiles, product_description)
+    if direct_profile:
+        return _sanitize_wb_profile_for_product(direct_profile, product_description)
+
     catalog_path = detect_wb_category_path(product_description, wb_categories)
     if catalog_path:
         profile = _profile_from_catalog_path(profiles, catalog_path)
         if profile:
             profile["detected_category_path"] = catalog_path
-            return profile
-        return None
+            return _sanitize_wb_profile_for_product(profile, product_description)
 
-    best_profile: dict[str, Any] | None = None
-    best_score = 0
-    for profile in profiles.values():
-        score = _score_profile(profile, product_description)
-        if score > best_score or (score == best_score and best_profile and _profile_depth(profile) > _profile_depth(best_profile)):
-            best_score = score
-            best_profile = profile
-    if best_profile and best_score >= 2:
-        return dict(best_profile)
+    best_profile = _best_scored_wb_profile(profiles, product_description)
+    if best_profile:
+        return _sanitize_wb_profile_for_product(best_profile, product_description)
     return None

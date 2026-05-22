@@ -198,8 +198,29 @@ def test_detect_wb_category_profile_uses_gender_and_product_guards():
     assert backpack is not None
     assert backpack["category"] == "Аксессуары"
     assert lamp is not None
-    assert lamp["category"] == "Дом"
-    assert pet_food is None
+    assert lamp["category"] == "Электроника"
+    assert pet_food is not None
+    assert pet_food["category"] == "Товары для животных"
+
+
+def test_detect_wb_category_profile_falls_back_to_safe_synthetic_profiles():
+    profiles = load_wb_category_profiles()
+
+    sport_mat = detect_wb_category_profile(
+        profiles,
+        "Коврик для йоги фиолетовый 183x61 см 6 мм нескользящий с ремнем",
+    )
+    pet_food = detect_wb_category_profile(
+        profiles,
+        "Сухой корм для кошек с курицей. Для взрослых кошек, упаковка 1 кг.",
+    )
+
+    assert sport_mat is not None
+    assert sport_mat["category"] == "Спорт"
+    assert "Размер" in sport_mat["prompt_characteristics"]
+    assert pet_food is not None
+    assert pet_food["category"] == "Товары для животных"
+    assert "Вес" in pet_food["prompt_characteristics"]
 
 
 def test_detect_wb_category_profile_prefers_specific_profile_and_has_no_unsafe_fallback(tmp_path: Path):
