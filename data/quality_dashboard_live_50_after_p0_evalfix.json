@@ -1,0 +1,294 @@
+{
+  "source_summary": {
+    "total": 50,
+    "passed": 25,
+    "failed": 25,
+    "issue_counts": {
+      "too_few_characteristics": 25,
+      "too_few_grounded_characteristics": 19
+    },
+    "avg_score": 91.2
+  },
+  "categories": {
+    "ozon / Автотовары": {
+      "cases": 2,
+      "avg_description_length": 1093.5,
+      "avg_characteristics_count": 6.5,
+      "avg_hashtags_count": 12.5,
+      "issue_counts": {}
+    },
+    "ozon / Аптека": {
+      "cases": 1,
+      "avg_description_length": 1584.0,
+      "avg_characteristics_count": 8.0,
+      "avg_hashtags_count": 18.0,
+      "issue_counts": {}
+    },
+    "ozon / Бытовая техника": {
+      "cases": 2,
+      "avg_description_length": 1194.5,
+      "avg_characteristics_count": 3.0,
+      "avg_hashtags_count": 16.0,
+      "issue_counts": {
+        "too_few_characteristics": 2
+      }
+    },
+    "ozon / Бытовая химия": {
+      "cases": 1,
+      "avg_description_length": 1307.0,
+      "avg_characteristics_count": 3.0,
+      "avg_hashtags_count": 18.0,
+      "issue_counts": {
+        "too_few_characteristics": 1
+      }
+    },
+    "ozon / Детские товары": {
+      "cases": 2,
+      "avg_description_length": 1427.0,
+      "avg_characteristics_count": 5.0,
+      "avg_hashtags_count": 16.5,
+      "issue_counts": {
+        "too_few_characteristics": 1
+      }
+    },
+    "ozon / Дом и сад": {
+      "cases": 3,
+      "avg_description_length": 1328.0,
+      "avg_characteristics_count": 5.7,
+      "avg_hashtags_count": 17.0,
+      "issue_counts": {}
+    },
+    "ozon / Канцелярские товары": {
+      "cases": 1,
+      "avg_description_length": 999.0,
+      "avg_characteristics_count": 6.0,
+      "avg_hashtags_count": 15.0,
+      "issue_counts": {}
+    },
+    "ozon / Мебель": {
+      "cases": 1,
+      "avg_description_length": 1330.0,
+      "avg_characteristics_count": 7.0,
+      "avg_hashtags_count": 18.0,
+      "issue_counts": {}
+    },
+    "ozon / Обувь": {
+      "cases": 1,
+      "avg_description_length": 859.0,
+      "avg_characteristics_count": 4.0,
+      "avg_hashtags_count": 18.0,
+      "issue_counts": {}
+    },
+    "ozon / Одежда": {
+      "cases": 1,
+      "avg_description_length": 1251.0,
+      "avg_characteristics_count": 8.0,
+      "avg_hashtags_count": 18.0,
+      "issue_counts": {}
+    },
+    "ozon / Продукты питания": {
+      "cases": 1,
+      "avg_description_length": 1221.0,
+      "avg_characteristics_count": 3.0,
+      "avg_hashtags_count": 15.0,
+      "issue_counts": {
+        "too_few_characteristics": 1
+      }
+    },
+    "ozon / Спорт и отдых": {
+      "cases": 1,
+      "avg_description_length": 1376.0,
+      "avg_characteristics_count": 6.0,
+      "avg_hashtags_count": 17.0,
+      "issue_counts": {}
+    },
+    "ozon / Строительство и ремонт": {
+      "cases": 2,
+      "avg_description_length": 1227.5,
+      "avg_characteristics_count": 5.5,
+      "avg_hashtags_count": 18.0,
+      "issue_counts": {}
+    },
+    "ozon / Товары для животных": {
+      "cases": 2,
+      "avg_description_length": 966.5,
+      "avg_characteristics_count": 7.5,
+      "avg_hashtags_count": 16.5,
+      "issue_counts": {}
+    },
+    "ozon / Хобби и творчество": {
+      "cases": 1,
+      "avg_description_length": 897.0,
+      "avg_characteristics_count": 5.0,
+      "avg_hashtags_count": 15.0,
+      "issue_counts": {}
+    },
+    "ozon / Электроника": {
+      "cases": 3,
+      "avg_description_length": 950.0,
+      "avg_characteristics_count": 7.0,
+      "avg_hashtags_count": 18.0,
+      "issue_counts": {
+        "too_few_characteristics": 1
+      }
+    },
+    "wb / Аксессуары": {
+      "cases": 1,
+      "avg_description_length": 531.0,
+      "avg_characteristics_count": 6.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {}
+    },
+    "wb / Аксессуары / Маски для сна": {
+      "cases": 1,
+      "avg_description_length": 664.0,
+      "avg_characteristics_count": 3.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Бытовая техника": {
+      "cases": 1,
+      "avg_description_length": 761.0,
+      "avg_characteristics_count": 6.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Детям / Одежда": {
+      "cases": 1,
+      "avg_description_length": 514.0,
+      "avg_characteristics_count": 9.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {}
+    },
+    "wb / Дом": {
+      "cases": 1,
+      "avg_description_length": 776.0,
+      "avg_characteristics_count": 5.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Дом / Ванная / Коврики": {
+      "cases": 1,
+      "avg_description_length": 515.0,
+      "avg_characteristics_count": 6.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Женщинам / Одежда": {
+      "cases": 5,
+      "avg_description_length": 646.4,
+      "avg_characteristics_count": 8.6,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 4,
+        "too_few_grounded_characteristics": 4
+      }
+    },
+    "wb / Здоровье": {
+      "cases": 1,
+      "avg_description_length": 436.0,
+      "avg_characteristics_count": 5.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Игрушки / Антистресс": {
+      "cases": 1,
+      "avg_description_length": 920.0,
+      "avg_characteristics_count": 5.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Красота": {
+      "cases": 2,
+      "avg_description_length": 613.5,
+      "avg_characteristics_count": 4.5,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 2,
+        "too_few_grounded_characteristics": 2
+      }
+    },
+    "wb / Мужчинам / Одежда": {
+      "cases": 3,
+      "avg_description_length": 544.3,
+      "avg_characteristics_count": 7.7,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 2,
+        "too_few_grounded_characteristics": 2
+      }
+    },
+    "wb / Обувь": {
+      "cases": 2,
+      "avg_description_length": 613.0,
+      "avg_characteristics_count": 4.5,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 2,
+        "too_few_grounded_characteristics": 2
+      }
+    },
+    "wb / Спорт": {
+      "cases": 1,
+      "avg_description_length": 899.0,
+      "avg_characteristics_count": 5.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {}
+    },
+    "wb / Строительство и ремонт": {
+      "cases": 1,
+      "avg_description_length": 524.0,
+      "avg_characteristics_count": 2.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Товары для животных": {
+      "cases": 1,
+      "avg_description_length": 469.0,
+      "avg_characteristics_count": 6.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {}
+    },
+    "wb / Электроника": {
+      "cases": 1,
+      "avg_description_length": 818.0,
+      "avg_characteristics_count": 7.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    },
+    "wb / Электроника / Смартфоны и телефоны / Смартфоны": {
+      "cases": 1,
+      "avg_description_length": 679.0,
+      "avg_characteristics_count": 4.0,
+      "avg_hashtags_count": 0.0,
+      "issue_counts": {
+        "too_few_characteristics": 1,
+        "too_few_grounded_characteristics": 1
+      }
+    }
+  }
+}

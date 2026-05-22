@@ -278,6 +278,34 @@ def test_evaluate_card_quality_flags_unknown_and_non_applicable_values():
     assert "placeholder_characteristic_value:Страна-изготовитель" in result["issues"]
 
 
+def test_evaluate_card_quality_accepts_wb_pet_food_weight_from_packaging_input():
+    card = CardGeneration(
+        title="Сухой корм для кошек с курицей 1 кг",
+        description=(
+            "Сухой корм для взрослых кошек подходит для ежедневного рациона. "
+            "Куриный вкус помогает поддерживать интерес к корму, а удобная упаковка подходит для дома."
+        ),
+        keywords="",
+        characteristics=(
+            "Тип: сухой корм\n"
+            "Вид животного: кошки\n"
+            "Вкус: курица\n"
+            "Назначение: Для взрослых кошек\n"
+            "Страна производства: Китай\n"
+            "Вес: 1 кг"
+        ),
+        marketplace="wb",
+    )
+
+    result = evaluate_card_quality(
+        card,
+        user_input="Сухой корм для кошек с курицей. Для взрослых кошек, упаковка 1 кг.",
+        category_profile={"category": "Товары для животных", "characteristics_target_min": 5},
+    )
+
+    assert "hallucinated_characteristic_value:Вес" not in result["issues"]
+
+
 def test_summarize_quality_results_counts_failures():
     passing = {"id": "ok", "issues": [], "score": 100}
     failing = {"id": "bad", "issues": ["description_too_short"], "score": 90}
