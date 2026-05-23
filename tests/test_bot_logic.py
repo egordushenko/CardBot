@@ -3,6 +3,7 @@ import asyncio
 from bot import (
     FEEDBACK_MESSAGE,
     IMAGE_PHOTO_PROMPT,
+    MODE_PROMPT,
     TECHNICAL_WORKS_MESSAGE,
     classify_generation_error,
     generation_error_message,
@@ -273,6 +274,18 @@ def test_generation_mode_keyboard_offers_text_and_combined_modes():
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
     assert callbacks == ["mode:text_only", "mode:text_and_images", "action:generate", "action:home"]
+
+
+def test_generation_mode_prompt_separates_options_visually():
+    assert MODE_PROMPT == (
+        "Что сгенерировать?\n\n"
+        "📝 «Только текст»\n"
+        "Название, описание, ключевые слова, характеристики.\n"
+        "Тратит 1 текстовую генерацию.\n\n"
+        "🖼 «Текст + изображения»\n"
+        "Всё выше плюс изображения для карточки.\n"
+        "Тратит 1 текстовую генерацию + N изображений."
+    )
 
 
 def test_image_keyboards_follow_spec_callbacks():
