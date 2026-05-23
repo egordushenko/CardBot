@@ -400,7 +400,7 @@ class Database:
                     images_count,
                     status
                 )
-                VALUES($1, $2, $3, $4, $5, $6, $7, 'pending')
+                VALUES($1, $2, $3, $4, $5, $5, $6, 'pending')
                 """,
                 user_id,
                 inv_id,

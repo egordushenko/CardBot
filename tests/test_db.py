@@ -1,7 +1,10 @@
+import re
+
 import pytest
 
 from db import (
     CREATE_TABLES_SQL,
+    Database,
     IMAGE_PACKAGES,
     TRIAL_GENERATIONS,
     UsageMode,
@@ -67,3 +70,51 @@ def test_image_package_rows_match_image_tariffs():
         ("img_pro", "Про", 25, 1290, "25 изображений"),
     ]
     assert IMAGE_PACKAGES["img_pro"]["images"] == 25
+
+
+class _FakeConn:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, query, *args):
+        self.calls.append((query, args))
+        placeholders = [int(value) for value in re.findall(r"\$(\d+)", query)]
+        assert max(placeholders) == len(args)
+
+
+class _FakeAcquire:
+    def __init__(self, conn):
+        self.conn = conn
+
+    async def __aenter__(self):
+        return self.conn
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakePool:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def acquire(self):
+        return _FakeAcquire(self.conn)
+
+
+@pytest.mark.asyncio
+async def test_create_pending_payment_uses_matching_sql_arguments():
+    conn = _FakeConn()
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    await db.create_pending_payment(
+        inv_id="abc123",
+        user_id=598380407,
+        package_code="text_pro_x5",
+        amount_rub=22990,
+        text_count=100,
+        images_count=500,
+    )
+
+    _, args = conn.calls[0]
+    assert args == (598380407, "abc123", "text_pro_x5", 22990, 100, 500)
