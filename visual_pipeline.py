@@ -217,7 +217,7 @@ def _common_negative_constraints(profile: str) -> tuple[str, ...]:
         "Do NOT use a pure white empty background; use contextual light studio or interior background.",
         "Use large readable modern sans-serif typography only.",
         "Use 1-2 text blocks, not random corner labels.",
-        "Do NOT use meaningless headings like \"Детали\".",
+        "Do NOT use meaningless headings or generic detail labels.",
         "Preserve exact product shape, color, texture and proportions.",
         "Use only the selected reference photo; do not mix details from other photos.",
     ]
@@ -256,6 +256,112 @@ def _overlay(*items: str) -> tuple[str, ...]:
     return tuple(item for item in items if item)
 
 
+def _has_explicit_no_print(product_description: str) -> bool:
+    text = product_description.casefold()
+    return any(
+        marker in text
+        for marker in (
+            "без принт",
+            "без логотип",
+            "без надпис",
+            "без рисун",
+            "однотон",
+            "no print",
+            "without print",
+            "no logo",
+            "without logo",
+            "plain",
+        )
+    )
+
+
+def _has_explicit_print(product_description: str) -> bool:
+    if _has_explicit_no_print(product_description):
+        return False
+    text = product_description.casefold()
+    return any(marker in text for marker in ("принт", "печать", "надпис", "логотип", "print", "logo"))
+
+
+def _overlay_instruction_like(text: str) -> bool:
+    normalized = text.casefold().strip()
+    forbidden_fragments = (
+        "товарный вид",
+        "без лишнего фона",
+        "разъемы крупно",
+        "разъёмы крупно",
+        "детали",
+        "главное фото",
+        "product view",
+        "no extra background",
+        "closeup",
+        "close-up",
+    )
+    return any(fragment in normalized for fragment in forbidden_fragments)
+
+
+def _extract_overlay_facts(product_description: str) -> tuple[str, ...]:
+    text = product_description.casefold()
+    result: list[str] = []
+
+    def add(value: str) -> None:
+        if value and value not in result:
+            result.append(value)
+
+    for match in re.finditer(r"(?:до\s*)?(\d{1,2})\s*(?:час(?:ов|а)?|hours?|h\b)", text, flags=re.IGNORECASE):
+        add(f"{match.group(1)} часов")
+    for match in re.finditer(r"(\d{1,2})\s*(?:light\s*)?(?:режим(?:а|ов)?|modes?)", text, flags=re.IGNORECASE):
+        add(f"{match.group(1)} режима")
+    for match in re.finditer(r"(\d{1,4})\s*(?:w|вт|ватт)", text, flags=re.IGNORECASE):
+        add(f"{match.group(1)} Вт")
+    if "bluetooth" in text or "блютуз" in text:
+        add("Bluetooth")
+    if "шумоподав" in text or "noise cancellation" in text:
+        add("Шумоподавление")
+    if "usb" in text:
+        add("USB подключение")
+    return tuple(result[:4])
+
+
+def _overlay_for_slide(profile: str, role: str, product_description: str, raw_overlay: tuple[str, ...]) -> tuple[str, ...]:
+    cleaned: list[str] = []
+    no_print = _has_explicit_no_print(product_description)
+    has_print = _has_explicit_print(product_description)
+
+    for item in raw_overlay:
+        text = str(item).strip()
+        if not text or _overlay_instruction_like(text):
+            continue
+        normalized = text.casefold()
+        if no_print and any(marker in normalized for marker in ("принт", "печать", "логотип", "print", "logo")):
+            continue
+        if profile == "clothing" and not has_print and role in {"closeup", "lifestyle_back"}:
+            if any(marker in normalized for marker in ("принт", "печать", "логотип", "print", "logo")):
+                continue
+        if text not in cleaned:
+            cleaned.append(text)
+
+    facts = list(_extract_overlay_facts(product_description))
+    if role == "facts" and facts:
+        cleaned = facts + [item for item in cleaned if item not in facts]
+    elif profile == "electronics" and role == "closeup":
+        closeup_fact = next((fact for fact in facts if not re.search(r"\d+\s*(?:час|Вт|режим)", fact)), "")
+        if closeup_fact:
+            cleaned = [closeup_fact] + [item for item in cleaned if item != closeup_fact]
+
+    if profile == "clothing":
+        fallbacks = {
+            "closeup": ("Ткань и швы",) if not has_print else ("Качество печати",),
+            "lifestyle_back": ("Посадка со спины",) if not has_print else ("Принт на спине",),
+            "lifestyle_front": ("Свобода движений",),
+            "lifestyle_three_quarter": ("Подчеркивает посадку",),
+            "scenario": ("Для тренировок и дня",),
+        }
+        if not cleaned and role in fallbacks:
+            cleaned.extend(fallbacks[role])
+
+    return tuple(cleaned[:2])
+
+
 def _home_decor_subtype(product_description: str) -> str:
     text = product_description.casefold()
     if "песочн" in text or "hourglass" in text or ("таймер" in text and "5" in text):
@@ -276,13 +382,13 @@ def _profile_sequence(profile: str, product_description: str = "") -> list[dict[
                 "role": "hero",
                 "composition": "clean hero flatlay, product fully visible and neatly shaped",
                 "background": "light warm studio surface with soft shadows, not a pure white empty background",
-                "overlay": _overlay("Товарный вид", "Без лишнего фона"),
+                "overlay": _overlay(),
             },
             {
                 "role": "closeup",
                 "composition": "close-up of fabric, seams or print detail; do not crop away the meaningful detail",
                 "background": "soft neutral studio macro background with fabric texture visible",
-                "overlay": _overlay("Ткань и детали", "Аккуратная печать"),
+                "overlay": _overlay("Ткань и швы"),
             },
             {
                 "role": "lifestyle_back",
@@ -498,11 +604,41 @@ def _generic_sequence(profile: str, product_description: str = "") -> list[dict[
             },
         ]
     backgrounds = {
-        "electronics": "modern desk setup with soft screen glow and blurred accessories",
-        "cosmetics": "clean bathroom or vanity scene with soft reflections and product-safe lighting",
-        "bags": "urban desk or travel scene with blurred laptop, notebook or suitcase elements",
-        "food": "warm kitchen tabletop or cafe counter with appetizing natural light",
-        "sports": "gym or active lifestyle background with soft motion depth",
+        "electronics": {
+            "hero": "premium tech desk hero scene with soft screen glow, blurred accessories and controlled reflections",
+            "facts": "clean tech facts layout on a matte desk surface with subtle gradient light and depth",
+            "closeup": "macro tech surface with shallow depth of field, soft highlights and blurred cables or devices",
+            "lifestyle_front": "realistic work or commute scene with product in use, background softly blurred",
+            "scenario": "everyday desk, travel or walking scenario with natural light and contextual tech props",
+        },
+        "cosmetics": {
+            "hero": "clean bathroom or vanity hero scene with soft reflections and product-safe lighting",
+            "facts": "vanity facts layout with subtle tiles, mirror blur and gentle daylight",
+            "closeup": "macro cosmetic texture or packaging background with soft reflection and shallow depth",
+            "lifestyle_front": "calm skincare routine scene near mirror or vanity, softly blurred background",
+            "scenario": "morning bathroom or dressing table scenario with warm natural light",
+        },
+        "bags": {
+            "hero": "urban desk or travel hero scene with blurred laptop, notebook or suitcase elements",
+            "facts": "organized travel facts layout with table surface, passport or notebook softly blurred",
+            "closeup": "macro textile, zipper or pocket surface with shallow depth of field",
+            "lifestyle_front": "city commute or work scene with product naturally used",
+            "scenario": "travel, office or study scenario with realistic contextual props",
+        },
+        "food": {
+            "hero": "warm kitchen tabletop or cafe counter hero scene with appetizing natural light",
+            "facts": "clean food facts layout on tabletop with soft ingredient blur",
+            "closeup": "macro food texture or packaging detail with shallow depth of field",
+            "lifestyle_front": "snack or drink used in a daily routine scene",
+            "scenario": "work, road or kitchen use scenario with warm contextual background",
+        },
+        "sports": {
+            "hero": "gym or active lifestyle hero background with soft motion depth",
+            "facts": "sports facts layout with mat, weights or training props softly blurred",
+            "closeup": "macro sport material or grip texture with directional studio light",
+            "lifestyle_front": "active training scene with product naturally used",
+            "scenario": "fitness, outdoor or home workout scenario with dynamic but clear composition",
+        },
     }
     overlays = {
         "electronics": (
@@ -541,7 +677,16 @@ def _generic_sequence(profile: str, product_description: str = "") -> list[dict[
             _overlay("Спорт каждый день"),
         ),
     }
-    base_background = backgrounds.get(profile, "contextual marketplace studio background with soft shadows")
+    base_backgrounds = backgrounds.get(
+        profile,
+        {
+            "hero": "contextual marketplace studio hero background with soft shadows",
+            "facts": "clean facts layout with subtle contextual background and soft depth",
+            "closeup": "macro contextual scene with shallow depth of field",
+            "lifestyle_front": "realistic lifestyle background matching product use",
+            "scenario": "real use scenario with contextual props and soft blur",
+        },
+    )
     profile_overlays = overlays.get(
         profile,
         (
@@ -556,31 +701,31 @@ def _generic_sequence(profile: str, product_description: str = "") -> list[dict[
         {
             "role": "hero",
             "composition": "hero product shot, full product visible, premium marketplace framing",
-            "background": base_background,
+            "background": base_backgrounds["hero"],
             "overlay": profile_overlays[0],
         },
         {
             "role": "facts",
             "composition": "facts card with product and 3 concise benefits",
-            "background": base_background,
+            "background": base_backgrounds["facts"],
             "overlay": profile_overlays[1],
         },
         {
             "role": "closeup",
             "composition": "close-up of material, texture, connector, label or functional detail",
-            "background": "macro version of the contextual scene with shallow depth of field",
+            "background": base_backgrounds["closeup"],
             "overlay": profile_overlays[2],
         },
         {
             "role": "lifestyle_front",
             "composition": "realistic use-case lifestyle image, product naturally used in context",
-            "background": base_background,
+            "background": base_backgrounds["lifestyle_front"],
             "overlay": profile_overlays[3],
         },
         {
             "role": "scenario",
             "composition": "scenario image showing where and how the customer uses the product",
-            "background": base_background,
+            "background": base_backgrounds["scenario"],
             "overlay": profile_overlays[4],
         },
     ]
@@ -610,7 +755,7 @@ def build_slide_plan(
                 source_photo_index=_choose_photo_index(analyses, role),
                 composition=str(item["composition"]),
                 background=str(item["background"]),
-                overlay_text=tuple(item.get("overlay") or ()),
+                overlay_text=_overlay_for_slide(profile, role, product_description, tuple(item.get("overlay") or ())),
                 negative_constraints=constraints,
                 qa_checks=(
                     "pure_white_background",

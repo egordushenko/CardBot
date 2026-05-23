@@ -268,6 +268,73 @@ def test_electronics_and_cosmetics_prompts_do_not_use_generic_placeholder_copy()
     assert "Уход каждый день" in prompts
 
 
+def test_overlay_text_never_contains_generation_instructions():
+    concepts = build_image_concepts_from_plan(
+        product_description="black basic cotton rashguard without print",
+        marketplace="wb",
+        images_count=3,
+        photo_analyses=[],
+    )
+
+    prompts = "\n".join(concept.prompt for concept in concepts)
+    forbidden_overlay_phrases = (
+        "Товарный вид",
+        "Без лишнего фона",
+        "Разъемы крупно",
+        "Детали",
+        "Детали крупно",
+    )
+
+    assert all(phrase not in prompts for phrase in forbidden_overlay_phrases)
+
+
+def test_clothing_without_print_does_not_receive_print_or_press_overlay():
+    concepts = build_image_concepts_from_plan(
+        product_description="basic black cotton rashguard, no print, no logo, everyday wear",
+        marketplace="wb",
+        images_count=5,
+        photo_analyses=[],
+    )
+
+    prompts = "\n".join(concept.prompt for concept in concepts)
+
+    assert "Принт на спине" not in prompts
+    assert "Аккуратная печать" not in prompts
+
+
+def test_specific_input_facts_have_priority_in_overlay_copy():
+    headphones = build_image_concepts_from_plan(
+        product_description="wireless bluetooth headphones, microphone, noise cancellation, up to 6 hours battery life",
+        marketplace="ozon",
+        images_count=3,
+        photo_analyses=[],
+    )
+    lamp = build_image_concepts_from_plan(
+        product_description="LED desk lamp USB 5W, 3 light modes, brightness adjustment, 35 cm height",
+        marketplace="ozon",
+        images_count=3,
+        photo_analyses=[],
+    )
+
+    headphones_prompts = "\n".join(concept.prompt for concept in headphones)
+    lamp_prompts = "\n".join(concept.prompt for concept in lamp)
+
+    assert "6 часов" in headphones_prompts
+    assert "3 режима" in lamp_prompts
+    assert "5 Вт" in lamp_prompts
+
+
+def test_slide_backgrounds_vary_by_role_within_same_product():
+    plan = build_slide_plan(
+        product_description="wireless bluetooth headphones, microphone, noise cancellation, up to 6 hours battery life",
+        marketplace="ozon",
+        images_count=5,
+        photo_analyses=[],
+    )
+
+    assert len({slide.background for slide in plan}) >= 4
+
+
 def test_parse_image_quality_payload_flags_failed_generated_image():
     report = parse_image_quality_payload(
         """
