@@ -285,7 +285,7 @@ def test_balance_keyboard_offers_both_package_types():
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
     assert callbacks == ["action:buy_combo", "action:buy_text", "action:buy_images", "action:home"]
-    assert keyboard.inline_keyboard[0][0].text.startswith("🗂")
+    assert keyboard.inline_keyboard[0][0].text.startswith("💳")
 
 
 def test_help_message_contains_contact_and_offer_link_button():
@@ -305,7 +305,7 @@ def test_buy_keyboard_starts_with_package_categories():
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
     assert callbacks == ["action:buy_combo", "action:buy_text", "action:buy_images", "action:home"]
-    assert keyboard.inline_keyboard[0][0].text.startswith("🗂")
+    assert keyboard.inline_keyboard[0][0].text.startswith("💳")
     assert all(not callback.startswith("buy:") for callback in callbacks)
 
 

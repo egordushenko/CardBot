@@ -81,7 +81,7 @@ IMAGE_COUNT_OPTIONS = (1, 3, 5, 7)
 HOME_CALLBACK = "action:home"
 HOME_BUTTON_TEXT = "🏠 Главная"
 BACK_BUTTON_TEXT = "⬅️ Назад"
-COMBO_PACKAGE_BUTTON_TEXT = "🗂 Комбо: карточки + изображения"
+COMBO_PACKAGE_BUTTON_TEXT = "💳 Комбо: карточки + изображения"
 REPLY_ACTIONS = {
     "⚡ Сгенерировать карточку": "generate",
     "💳 Купить генерации": "buy",
