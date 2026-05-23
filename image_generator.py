@@ -160,22 +160,14 @@ def _image_content_item(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
 def _build_batch_image_prompt(concepts: list[ImageBatchConcept]) -> str:
     for concept in concepts:
         validate_prompt_text(str(concept.prompt))
-    lines = [
-        f"Generate exactly {len(concepts)} separate marketplace-ready output images.",
-        f"The response must contain exactly {len(concepts)} items in message.images.",
-        "Do not generate alternate versions or any extra images.",
-        "Do not generate preview, cover, contact sheet, collage, grid, comparison image, or fallback image.",
-        f"If you cannot generate exactly {len(concepts)} images, generate fewer images rather than extra images.",
-        "Return each result as a separate image output in message.images, not a collage and not a grid.",
-        "Use the input photos as references of the same product.",
-        "Preserve product identity, shape, color, material, visible text, and distinctive details from the references.",
-        "Use aspect ratio 3:4 for every output image.",
-        "",
-        "Required outputs:",
-    ]
-    for concept in concepts:
-        lines.append(f"Image {concept.image_index} ({concept.purpose}): {concept.prompt}")
-    return "\n".join(lines)
+    product_description = str(concepts[0].prompt).strip()
+    return (
+        f"Сгенерируй {len(concepts)} отдельных изображения данного товара. "
+        "Изображения необходимы для карточек товара маркетплейсов Ozon/WB, "
+        "нужно сделать в лучшем продающем виде для карточки товара.\n"
+        f"Немного информации о товаре: {product_description}\n\n"
+        "Установить соотношение сторон 3:4."
+    )
 
 
 async def _request_openrouter_text(

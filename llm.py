@@ -535,73 +535,21 @@ async def generate_image_prompts(
     if images_count < 1 or images_count > 7:
         raise LLMResponseError("images_count must be between 1 and 7")
 
-    from openai import AsyncOpenAI
-    from visual_pipeline import build_image_concepts_from_plan, fallback_photo_analysis
+    direct_prompt = product_description.strip()
+    guidance = _normalize_image_guidance(image_guidance)
+    if guidance:
+        direct_prompt = f"{direct_prompt}\nПожелания к изображениям: {guidance}"
 
-    analyses = list(photo_analyses or [])
-    if not analyses:
-        analyses = [
-            fallback_photo_analysis(index, product_description, photos_count)
-            for index in range(photos_count)
-        ]
-    try:
-        client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=OPENROUTER_BASE_URL,
-            timeout=30.0,
-            max_retries=1,
-            default_headers={
-                "HTTP-Referer": site_url,
-                "X-Title": "CardBot",
-            },
-        )
-        response = await request_chat_completion_with_fallback(
-            client,
-            model_candidates=build_openrouter_model_fallbacks(model),
-            messages=[
-                {"role": "system", "content": DIRECTOR_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": build_image_director_user_prompt(
-                        product_description=product_description,
-                        marketplace=marketplace,
-                        photos_count=photos_count,
-                        images_count=images_count,
-                        photo_analyses=analyses,
-                        image_guidance=image_guidance,
-                        image_text_mode=image_text_mode,
-                        image_style_preset=image_style_preset,
-                        image_style_custom=image_style_custom,
-                    ),
-                },
-            ],
-            max_tokens=2200,
-            temperature=0.7,
-            extra_body=OPENROUTER_NO_REASONING_BODY,
-        )
-        content = response.choices[0].message.content
-        return ImagePromptPlan(
-            concepts=parse_image_concepts_payload(
-                content,
-                photos_count=photos_count,
-                images_count=images_count,
-            ),
-            source="llm",
-            director_model=str(getattr(response, "model", None) or model),
-        )
-    except Exception:
-        logging.warning("Image director failed, using deterministic fallback", exc_info=True)
-        return ImagePromptPlan(
-            concepts=build_image_concepts_from_plan(
-                product_description=product_description,
-                marketplace=marketplace,
-                images_count=images_count,
-                photo_analyses=analyses,
-                image_guidance=image_guidance,
-                image_text_mode=image_text_mode,
-                image_style_preset=image_style_preset,
-                image_style_custom=image_style_custom,
-            ),
-            source="fallback",
-            director_model="deterministic_fallback",
-        )
+    return ImagePromptPlan(
+        concepts=[
+            ImageConcept(
+                image_index=index,
+                purpose="marketplace",
+                photo_index=0,
+                prompt=direct_prompt,
+            )
+            for index in range(1, images_count + 1)
+        ],
+        source="direct",
+        director_model="none",
+    )

@@ -203,13 +203,13 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
     concepts = [
         image_generator.ImageBatchConcept(
             image_index=1,
-            purpose="hero",
-            prompt="Hero prompt",
+            purpose="marketplace",
+            prompt="black Therapy rashguard cotton fitted",
         ),
         image_generator.ImageBatchConcept(
             image_index=2,
-            purpose="back",
-            prompt="Back prompt",
+            purpose="marketplace",
+            prompt="black Therapy rashguard cotton fitted",
         ),
     ]
 
@@ -227,12 +227,14 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
     prompt_text = content[-1]["text"]
 
     assert len(image_items) == 2
-    assert "Generate exactly 2 separate marketplace-ready output images" in prompt_text
-    assert "The response must contain exactly 2 items in message.images." in prompt_text
-    assert "Do not generate alternate versions or any extra images." in prompt_text
-    assert "If you cannot generate exactly 2 images, generate fewer images rather than extra images." in prompt_text
-    assert "Image 1 (hero): Hero prompt" in prompt_text
-    assert "Image 2 (back): Back prompt" in prompt_text
+    assert "Сгенерируй 2 отдельных изображения данного товара." in prompt_text
+    assert "black Therapy rashguard cotton fitted" in prompt_text
+    assert "Установить соотношение сторон 3:4." in prompt_text
+    assert "message.images" not in prompt_text
+    assert "коллаж" not in prompt_text
+    assert "сетк" not in prompt_text
+    assert "Required outputs" not in prompt_text
+    assert "Image 1" not in prompt_text
     assert captured["timeout"] >= 420
     assert [item.image_bytes for item in result] == [b"one", b"two"]
     assert [item.usage.model for item in result] == ["model-version", "model-version"]
