@@ -5,13 +5,10 @@ import pytest
 
 import image_generator
 from image_generator import (
-    GeneratedImage,
     ImageGenerationError,
-    ImageGenerationUsage,
     extract_openrouter_image_bytes,
     extract_openrouter_image_usage,
 )
-from visual_pipeline import ImageQualityReport
 
 
 def test_extract_openrouter_image_bytes_reads_data_url():
@@ -54,6 +51,35 @@ def test_extract_openrouter_image_bytes_reads_legacy_data_shape():
 def test_extract_openrouter_image_bytes_rejects_missing_images():
     with pytest.raises(ImageGenerationError, match="images"):
         extract_openrouter_image_bytes({"choices": [{"message": {}}]})
+
+
+def test_extract_openrouter_image_bytes_list_reads_all_message_images():
+    first = b"first"
+    second = b"second"
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "images": [
+                        {
+                            "image_url": {
+                                "url": "data:image/png;base64,"
+                                + base64.b64encode(first).decode("ascii")
+                            }
+                        },
+                        {
+                            "image_url": {
+                                "url": "data:image/png;base64,"
+                                + base64.b64encode(second).decode("ascii")
+                            }
+                        },
+                    ]
+                }
+            }
+        ]
+    }
+
+    assert image_generator.extract_openrouter_image_bytes_list(payload) == [first, second]
 
 
 def test_extract_openrouter_image_usage_reads_model_and_cost():
@@ -124,49 +150,139 @@ def test_generate_single_image_sends_safe_prompt_to_api(monkeypatch):
     assert "STRICT PRODUCT PRESERVATION RULES" not in sent_text
 
 
-def test_generate_marketplace_image_result_keeps_image_on_failed_quality_check(monkeypatch):
-    class FakeFile:
-        async def download_as_bytearray(self):
-            return bytearray(b"reference")
+def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypatch):
+    captured = {}
 
-    class FakeBot:
-        async def get_file(self, file_id):
-            return FakeFile()
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
 
-    async def fake_generate_single_image_result(**kwargs):
-        return GeneratedImage(
-            image_bytes=b"generated",
-            usage=ImageGenerationUsage(model="image-model", cost_usd=0.2),
-        )
+        def json(self):
+            return {
+                "model": "model-version",
+                "usage": {"cost": 0.4},
+                "choices": [
+                    {
+                        "message": {
+                            "images": [
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(b"one").decode("ascii")
+                                    }
+                                },
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(b"two").decode("ascii")
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                ],
+            }
 
-    async def fake_evaluate_generated_image_quality(**kwargs):
-        return ImageQualityReport(
-            passed=False,
-            issues=("print_mismatch",),
-            summary="print changed",
-        )
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
 
-    monkeypatch.setattr(
-        image_generator,
-        "generate_single_image_result",
-        fake_generate_single_image_result,
-    )
-    monkeypatch.setattr(
-        image_generator,
-        "evaluate_generated_image_quality",
-        fake_evaluate_generated_image_quality,
-    )
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, headers, json):
+            captured["payload"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
+
+    concepts = [
+        image_generator.ImageBatchConcept(
+            image_index=1,
+            purpose="hero",
+            prompt="Hero prompt",
+        ),
+        image_generator.ImageBatchConcept(
+            image_index=2,
+            purpose="back",
+            prompt="Back prompt",
+        ),
+    ]
 
     result = asyncio.run(
-        image_generator.generate_marketplace_image_result(
-            prompt="Prompt",
-            reference_photo_file_id="file-id",
-            bot=FakeBot(),
+        image_generator.generate_batch_image_results(
+            concepts=concepts,
+            reference_photo_bytes=[b"photo-a", b"photo-b"],
             api_key="key",
-            model="image-model",
-            quality_model="vision-model",
-            quality_enabled=True,
+            model="model",
         )
     )
-    assert result.image_bytes == b"generated"
-    assert result.usage.model == "image-model"
+
+    content = captured["payload"]["messages"][0]["content"]
+    image_items = [item for item in content if item["type"] == "image_url"]
+    prompt_text = content[-1]["text"]
+
+    assert len(image_items) == 2
+    assert "Generate exactly 2 separate marketplace-ready output images" in prompt_text
+    assert "Image 1 (hero): Hero prompt" in prompt_text
+    assert "Image 2 (back): Back prompt" in prompt_text
+    assert [item.image_bytes for item in result] == [b"one", b"two"]
+    assert [item.usage.model for item in result] == ["model-version", "model-version"]
+    assert [item.usage.cost_usd for item in result] == [0.2, 0.2]
+
+
+def test_generate_batch_images_rejects_wrong_output_count(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "images": [
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(b"one").decode("ascii")
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, headers, json):
+            return FakeResponse()
+
+    monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
+
+    concepts = [
+        image_generator.ImageBatchConcept(1, "hero", "Hero prompt"),
+        image_generator.ImageBatchConcept(2, "back", "Back prompt"),
+    ]
+
+    with pytest.raises(ImageGenerationError, match="expected 2 images, got 1"):
+        asyncio.run(
+            image_generator.generate_batch_image_results(
+                concepts=concepts,
+                reference_photo_bytes=[b"photo"],
+                api_key="key",
+                model="model",
+            )
+        )

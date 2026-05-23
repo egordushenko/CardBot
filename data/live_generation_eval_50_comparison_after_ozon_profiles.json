@@ -1,0 +1,672 @@
+{
+  "baseline": "data\\live_generation_eval_50_results_before_ozon_profiles.json",
+  "current": "data\\live_generation_eval_50_results_after_ozon_profiles.json",
+  "summary_delta": {
+    "total_before": 50,
+    "total_after": 50,
+    "passed_before": 24,
+    "passed_after": 27,
+    "failed_before": 26,
+    "failed_after": 23,
+    "avg_score_before": 87.0,
+    "avg_score_after": 89.6,
+    "passed_delta": 3,
+    "failed_delta": -3,
+    "avg_score_delta": 2.6
+  },
+  "issue_deltas": {
+    "description_too_long": {
+      "before": 0,
+      "after": 1,
+      "delta": 1
+    },
+    "forbidden_characteristic_field:Гарантийный срок": {
+      "before": 0,
+      "after": 1,
+      "delta": 1
+    },
+    "generation_error:LLMResponseError": {
+      "before": 2,
+      "after": 1,
+      "delta": -1
+    },
+    "hallucinated_characteristic_value:Вес": {
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    "too_few_characteristics": {
+      "before": 23,
+      "after": 20,
+      "delta": -3
+    },
+    "too_few_grounded_characteristics": {
+      "before": 21,
+      "after": 19,
+      "delta": -2
+    }
+  },
+  "marketplaces": {
+    "wb": {
+      "before": {
+        "cases": 25,
+        "passed": 3,
+        "avg_score": 82.8,
+        "avg_description_length": 652.1,
+        "avg_characteristics_count": 6.3,
+        "avg_tags_count": 0.0
+      },
+      "after": {
+        "cases": 25,
+        "passed": 5,
+        "avg_score": 84.0,
+        "avg_description_length": 603.1,
+        "avg_characteristics_count": 6.7,
+        "avg_tags_count": 0.0
+      }
+    },
+    "ozon": {
+      "before": {
+        "cases": 25,
+        "passed": 21,
+        "avg_score": 91.2,
+        "avg_description_length": 1102.4,
+        "avg_characteristics_count": 5.0,
+        "avg_tags_count": 16.1
+      },
+      "after": {
+        "cases": 25,
+        "passed": 22,
+        "avg_score": 95.2,
+        "avg_description_length": 1225.9,
+        "avg_characteristics_count": 5.8,
+        "avg_tags_count": 17.0
+      }
+    }
+  },
+  "fixed_cases": [
+    {
+      "id": "wb_011_kids_pajama_detailed",
+      "marketplace": "wb",
+      "category_before": "Женщинам / Одежда",
+      "category_after": "Детям / Одежда",
+      "score_before": 80,
+      "score_after": 100,
+      "score_delta": 20,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [],
+      "title_after": "Детская пижама для девочки розовая 100% хлопок"
+    },
+    {
+      "id": "wb_021_sport_mat_medium",
+      "marketplace": "wb",
+      "category_before": "Дом / Ванная / Коврики",
+      "category_after": null,
+      "score_before": 80,
+      "score_after": 100,
+      "score_delta": 20,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [],
+      "title_after": "Коврик для йоги фиолетовый 183x61 см 6 мм нескользящий с"
+    },
+    {
+      "id": "ozon_015_dog_leash_short",
+      "marketplace": "ozon",
+      "category_before": "Товары для животных",
+      "category_after": "Товары для животных",
+      "score_before": 0,
+      "score_after": 100,
+      "score_delta": 100,
+      "issues_before": [
+        "generation_error:LLMResponseError"
+      ],
+      "issues_after": [],
+      "title_after": "Поводок для собак черный 5 метров"
+    },
+    {
+      "id": "ozon_020_yoga_mat_medium",
+      "marketplace": "ozon",
+      "category_before": "Спорт и отдых",
+      "category_after": "Спорт и отдых",
+      "score_before": 0,
+      "score_after": 100,
+      "score_delta": 100,
+      "issues_before": [
+        "generation_error:LLMResponseError"
+      ],
+      "issues_after": [],
+      "title_after": "Коврик для йоги фиолетовый 183x61 см 6 мм нескользящий с ремнем"
+    },
+    {
+      "id": "ozon_022_notebook_medium",
+      "marketplace": "ozon",
+      "category_before": "Канцелярские товары",
+      "category_after": "Канцелярские товары",
+      "score_before": 90,
+      "score_after": 100,
+      "score_delta": 10,
+      "issues_before": [
+        "too_few_characteristics"
+      ],
+      "issues_after": [],
+      "title_after": "Блокнот А5 синий твердая обложка 96 листов клетка для записей"
+    }
+  ],
+  "regressed_cases": [
+    {
+      "id": "ozon_011_men_sneakers_medium",
+      "marketplace": "ozon",
+      "category_before": "Обувь",
+      "category_after": "Обувь",
+      "score_before": 100,
+      "score_after": 0,
+      "score_delta": -100,
+      "issues_before": [],
+      "issues_after": [
+        "generation_error:LLMResponseError"
+      ],
+      "title_after": ""
+    },
+    {
+      "id": "ozon_021_cleaner_short",
+      "marketplace": "ozon",
+      "category_before": "Бытовая химия",
+      "category_after": "Бытовая химия",
+      "score_before": 100,
+      "score_after": 90,
+      "score_delta": -10,
+      "issues_before": [],
+      "issues_after": [
+        "description_too_long"
+      ],
+      "title_after": "Средство для кухни антижир 500 мл"
+    }
+  ],
+  "changed_cases": [
+    {
+      "id": "wb_002_women_dress_medium",
+      "marketplace": "wb",
+      "category_before": "Женщинам / Платья",
+      "category_after": "Женщинам / Одежда",
+      "score_before": 80,
+      "score_after": 80,
+      "score_delta": 0,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title_after": "Платье миди черное трикотажное приталенное офисное"
+    },
+    {
+      "id": "wb_011_kids_pajama_detailed",
+      "marketplace": "wb",
+      "category_before": "Женщинам / Одежда",
+      "category_after": "Детям / Одежда",
+      "score_before": 80,
+      "score_after": 100,
+      "score_delta": 20,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [],
+      "title_after": "Детская пижама для девочки розовая 100% хлопок"
+    },
+    {
+      "id": "wb_013_beauty_shampoo_short",
+      "marketplace": "wb",
+      "category_before": "Красота / Волосы / Для роста",
+      "category_after": "Красота",
+      "score_before": 80,
+      "score_after": 80,
+      "score_delta": 0,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title_after": "Шампунь для волос восстанавливающий 400 мл"
+    },
+    {
+      "id": "wb_016_home_organizer_detailed",
+      "marketplace": "wb",
+      "category_before": "Игрушки / Антистресс",
+      "category_after": "Дом",
+      "score_before": 80,
+      "score_after": 80,
+      "score_delta": 0,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title_after": "Органайзер складной бежевый 40x30x25 см спанбонд"
+    },
+    {
+      "id": "wb_019_electronics_lamp_detailed",
+      "marketplace": "wb",
+      "category_before": "Электроника / Комплектующие для ПК / Видеокарты",
+      "category_after": "Дом",
+      "score_before": 80,
+      "score_after": 80,
+      "score_delta": 0,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title_after": "Настольная лампа LED спиральная белая USB 5W 35 см"
+    },
+    {
+      "id": "wb_021_sport_mat_medium",
+      "marketplace": "wb",
+      "category_before": "Дом / Ванная / Коврики",
+      "category_after": null,
+      "score_before": 80,
+      "score_after": 100,
+      "score_delta": 20,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [],
+      "title_after": "Коврик для йоги фиолетовый 183x61 см 6 мм нескользящий с"
+    },
+    {
+      "id": "wb_022_health_vitamin_medium",
+      "marketplace": "wb",
+      "category_before": "Здоровье / Витамины и БАДы / Витамин D",
+      "category_after": "Здоровье",
+      "score_before": 80,
+      "score_after": 80,
+      "score_delta": 0,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title_after": "Витамин D3 2000 МЕ 60 капсул для взрослых"
+    },
+    {
+      "id": "wb_024_appliance_blender_detailed",
+      "marketplace": "wb",
+      "category_before": "Дом / Сад и дача / Опрыскиватели",
+      "category_after": "Бытовая техника",
+      "score_before": 80,
+      "score_after": 70,
+      "score_delta": -10,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [
+        "forbidden_characteristic_field:Гарантийный срок",
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title_after": "Блендер погружной белый 600 Вт 2 скорости насадка"
+    },
+    {
+      "id": "wb_025_repair_faucet_medium",
+      "marketplace": "wb",
+      "category_before": "Дом / Ванная / Мебель, зеркала, шторы",
+      "category_after": "Строительство и ремонт",
+      "score_before": 80,
+      "score_after": 80,
+      "score_delta": 0,
+      "issues_before": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "issues_after": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title_after": "Смеситель для раковины хром однорычажный латунный"
+    },
+    {
+      "id": "ozon_011_men_sneakers_medium",
+      "marketplace": "ozon",
+      "category_before": "Обувь",
+      "category_after": "Обувь",
+      "score_before": 100,
+      "score_after": 0,
+      "score_delta": -100,
+      "issues_before": [],
+      "issues_after": [
+        "generation_error:LLMResponseError"
+      ],
+      "title_after": ""
+    },
+    {
+      "id": "ozon_015_dog_leash_short",
+      "marketplace": "ozon",
+      "category_before": "Товары для животных",
+      "category_after": "Товары для животных",
+      "score_before": 0,
+      "score_after": 100,
+      "score_delta": 100,
+      "issues_before": [
+        "generation_error:LLMResponseError"
+      ],
+      "issues_after": [],
+      "title_after": "Поводок для собак черный 5 метров"
+    },
+    {
+      "id": "ozon_020_yoga_mat_medium",
+      "marketplace": "ozon",
+      "category_before": "Спорт и отдых",
+      "category_after": "Спорт и отдых",
+      "score_before": 0,
+      "score_after": 100,
+      "score_delta": 100,
+      "issues_before": [
+        "generation_error:LLMResponseError"
+      ],
+      "issues_after": [],
+      "title_after": "Коврик для йоги фиолетовый 183x61 см 6 мм нескользящий с ремнем"
+    },
+    {
+      "id": "ozon_021_cleaner_short",
+      "marketplace": "ozon",
+      "category_before": "Бытовая химия",
+      "category_after": "Бытовая химия",
+      "score_before": 100,
+      "score_after": 90,
+      "score_delta": -10,
+      "issues_before": [],
+      "issues_after": [
+        "description_too_long"
+      ],
+      "title_after": "Средство для кухни антижир 500 мл"
+    },
+    {
+      "id": "ozon_022_notebook_medium",
+      "marketplace": "ozon",
+      "category_before": "Канцелярские товары",
+      "category_after": "Канцелярские товары",
+      "score_before": 90,
+      "score_after": 100,
+      "score_delta": 10,
+      "issues_before": [
+        "too_few_characteristics"
+      ],
+      "issues_after": [],
+      "title_after": "Блокнот А5 синий твердая обложка 96 листов клетка для записей"
+    }
+  ],
+  "failed_after": [
+    {
+      "id": "wb_001_women_tshirt_short",
+      "marketplace": "wb",
+      "category": "Женщинам / Одежда",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Футболка оверсайз женская черная базовая"
+    },
+    {
+      "id": "wb_002_women_dress_medium",
+      "marketplace": "wb",
+      "category": "Женщинам / Одежда",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Платье миди черное трикотажное приталенное офисное"
+    },
+    {
+      "id": "wb_003_women_pants_detailed",
+      "marketplace": "wb",
+      "category": "Женщинам / Одежда",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Брюки палаццо бежевые высокая посадка свободный крой"
+    },
+    {
+      "id": "wb_004_women_jacket_medium",
+      "marketplace": "wb",
+      "category": "Женщинам / Одежда",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Куртка женская демисезонная молочная на легком утеплителе"
+    },
+    {
+      "id": "wb_006_men_tshirt_short",
+      "marketplace": "wb",
+      "category": "Мужчинам / Одежда",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Футболка мужская базовая белая"
+    },
+    {
+      "id": "wb_007_men_hoodie_medium",
+      "marketplace": "wb",
+      "category": "Мужчинам / Одежда",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Мужское худи на молнии черное футер"
+    },
+    {
+      "id": "wb_008_men_pants_detailed",
+      "marketplace": "wb",
+      "category": "Мужчинам / Одежда",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Брюки мужские карго хаки прямые хлопок"
+    },
+    {
+      "id": "wb_009_shoes_sneakers_medium",
+      "marketplace": "wb",
+      "category": "Обувь",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Кроссовки мужские черные весна-лето шнуровка"
+    },
+    {
+      "id": "wb_010_shoes_slippers_short",
+      "marketplace": "wb",
+      "category": "Обувь",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Тапочки женские домашние мягкие розовые"
+    },
+    {
+      "id": "wb_013_beauty_shampoo_short",
+      "marketplace": "wb",
+      "category": "Красота",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Шампунь для волос восстанавливающий 400 мл"
+    },
+    {
+      "id": "wb_014_beauty_serum_detailed",
+      "marketplace": "wb",
+      "category": "Красота",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Сыворотка для лица гиалуроновая 30 мл"
+    },
+    {
+      "id": "wb_015_home_bath_mat_medium",
+      "marketplace": "wb",
+      "category": "Дом / Ванная / Коврики",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Коврик для ванной серый 50x80 см мягкий противоскользящий"
+    },
+    {
+      "id": "wb_016_home_organizer_detailed",
+      "marketplace": "wb",
+      "category": "Дом",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Органайзер складной бежевый 40x30x25 см спанбонд"
+    },
+    {
+      "id": "wb_018_accessory_sleep_mask_medium",
+      "marketplace": "wb",
+      "category": "Аксессуары / Маски для сна",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Маска для сна черная шелковая"
+    },
+    {
+      "id": "wb_019_electronics_lamp_detailed",
+      "marketplace": "wb",
+      "category": "Дом",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Настольная лампа LED спиральная белая USB 5W 35 см"
+    },
+    {
+      "id": "wb_020_electronics_phone_medium",
+      "marketplace": "wb",
+      "category": "Электроника / Смартфоны и телефоны / Смартфоны",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Смартфон 128GB 4GB RAM черный 6.5 дюйма"
+    },
+    {
+      "id": "wb_022_health_vitamin_medium",
+      "marketplace": "wb",
+      "category": "Здоровье",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Витамин D3 2000 МЕ 60 капсул для взрослых"
+    },
+    {
+      "id": "wb_023_pet_food_medium",
+      "marketplace": "wb",
+      "category": null,
+      "score": 90,
+      "issues": [
+        "hallucinated_characteristic_value:Вес"
+      ],
+      "title": "Сухой корм для кошек с курицей 1 кг"
+    },
+    {
+      "id": "wb_024_appliance_blender_detailed",
+      "marketplace": "wb",
+      "category": "Бытовая техника",
+      "score": 70,
+      "issues": [
+        "forbidden_characteristic_field:Гарантийный срок",
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Блендер погружной белый 600 Вт 2 скорости насадка"
+    },
+    {
+      "id": "wb_025_repair_faucet_medium",
+      "marketplace": "wb",
+      "category": "Строительство и ремонт",
+      "score": 80,
+      "issues": [
+        "too_few_characteristics",
+        "too_few_grounded_characteristics"
+      ],
+      "title": "Смеситель для раковины хром однорычажный латунный"
+    },
+    {
+      "id": "ozon_011_men_sneakers_medium",
+      "marketplace": "ozon",
+      "category": "Обувь",
+      "score": 0,
+      "issues": [
+        "generation_error:LLMResponseError"
+      ],
+      "title": ""
+    },
+    {
+      "id": "ozon_017_humidifier_medium",
+      "marketplace": "ozon",
+      "category": "Бытовая техника",
+      "score": 90,
+      "issues": [
+        "too_few_characteristics"
+      ],
+      "title": "Увлажнитель воздуха ультразвуковой 2 л USB подсветка для комнаты до 20 м² белый"
+    },
+    {
+      "id": "ozon_021_cleaner_short",
+      "marketplace": "ozon",
+      "category": "Бытовая химия",
+      "score": 90,
+      "issues": [
+        "description_too_long"
+      ],
+      "title": "Средство для кухни антижир 500 мл"
+    }
+  ]
+}

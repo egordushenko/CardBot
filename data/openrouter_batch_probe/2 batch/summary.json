@@ -1,0 +1,170 @@
+[
+  {
+    "label": "xai_grok_imagine_quality",
+    "model": "x-ai/grok-imagine-image-quality",
+    "model_returned": "x-ai/grok-imagine-image-quality-20260512",
+    "status": 200,
+    "elapsed_sec": 7.93,
+    "images_count": 1,
+    "saved": [
+      "D:\\github\\CardBot\\data\\openrouter_batch_probe\\2 batch\\xai_grok_imagine_quality\\output_1.jpg"
+    ],
+    "usage": {
+      "prompt_tokens": 1506,
+      "completion_tokens": 4175,
+      "total_tokens": 5681,
+      "cost": 0.06,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.06,
+        "upstream_inference_prompt_cost": 0.01,
+        "upstream_inference_completions_cost": 0.05
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 4175,
+        "audio_tokens": 0
+      }
+    }
+  },
+  {
+    "label": "google_nanobanana_pro",
+    "model": "google/gemini-3-pro-image-preview",
+    "model_returned": "google/gemini-3-pro-image-preview-20251120",
+    "status": 200,
+    "elapsed_sec": 22.91,
+    "images_count": 1,
+    "saved": [
+      "D:\\github\\CardBot\\data\\openrouter_batch_probe\\2 batch\\google_nanobanana_pro\\output_1.png"
+    ],
+    "usage": {
+      "prompt_tokens": 631,
+      "completion_tokens": 1422,
+      "total_tokens": 2053,
+      "cost": 0.139286,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.139286,
+        "upstream_inference_prompt_cost": 0.001262,
+        "upstream_inference_completions_cost": 0.138024
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 302,
+        "image_tokens": 1120,
+        "audio_tokens": 0
+      }
+    }
+  },
+  {
+    "label": "bytedance_seedream_45",
+    "model": "bytedance-seed/seedream-4.5",
+    "model_returned": "bytedance-seed/seedream-4.5-20251203",
+    "status": 200,
+    "elapsed_sec": 31.42,
+    "images_count": 1,
+    "saved": [
+      "D:\\github\\CardBot\\data\\openrouter_batch_probe\\2 batch\\bytedance_seedream_45\\output_1.jpg"
+    ],
+    "usage": {
+      "prompt_tokens": 1506,
+      "completion_tokens": 15552,
+      "total_tokens": 17058,
+      "cost": 0.04,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.04,
+        "upstream_inference_prompt_cost": 0,
+        "upstream_inference_completions_cost": 0.04
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 15552,
+        "audio_tokens": 0
+      }
+    }
+  },
+  {
+    "label": "google_nanobanana_31_flash_preview",
+    "model": "google/gemini-3.1-flash-image-preview",
+    "model_returned": "google/gemini-3.1-flash-image-preview-20260226",
+    "status": 200,
+    "elapsed_sec": 18.17,
+    "images_count": 1,
+    "saved": [
+      "D:\\github\\CardBot\\data\\openrouter_batch_probe\\2 batch\\google_nanobanana_31_flash_preview\\output_1.jpg"
+    ],
+    "usage": {
+      "prompt_tokens": 330,
+      "completion_tokens": 1572,
+      "total_tokens": 1902,
+      "cost": 0.068721,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.068721,
+        "upstream_inference_prompt_cost": 0.000165,
+        "upstream_inference_completions_cost": 0.068556
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 1120,
+        "audio_tokens": 0
+      }
+    }
+  },
+  {
+    "label": "google_nanobanana_25_flash",
+    "model": "google/gemini-2.5-flash-image",
+    "model_returned": "google/gemini-2.5-flash-image",
+    "status": 200,
+    "elapsed_sec": 2.11,
+    "images_count": 0,
+    "saved": [],
+    "usage": {
+      "prompt_tokens": 3425,
+      "completion_tokens": 33,
+      "total_tokens": 3458,
+      "cost": 0.00111,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.00111,
+        "upstream_inference_prompt_cost": 0.0010275,
+        "upstream_inference_completions_cost": 8.25e-05
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    }
+  }
+]

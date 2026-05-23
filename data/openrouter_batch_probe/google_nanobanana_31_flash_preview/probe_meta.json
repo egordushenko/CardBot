@@ -1,0 +1,6 @@
+{
+  "label": "google_nanobanana_31_flash_preview",
+  "model": "google/gemini-3.1-flash-image-preview",
+  "prompt_batch": "Use the two input photos as references of the same black Therapy rashguard product. Generate exactly 2 separate marketplace-ready output images, not a collage, not a grid. Output image 1: clean hero product image on a light neutral marketplace background, full product visible. Output image 2: lifestyle back view emphasizing the Therapy print on the back, realistic product shape and black fabric. Return exactly two separate image outputs. Do not include extra images.",
+  "prompt_single": "Use the input photo as the reference for the same black Therapy rashguard product. Generate exactly 1 marketplace-ready output image: clean hero product image on a light neutral marketplace background, full product visible. Return exactly one image output."
+}
