@@ -78,6 +78,19 @@ TEMPLATES_PAGE_SIZE = 5
 TEMPLATES_LIMIT = 10
 MAX_REFERENCE_PHOTOS = 7
 IMAGE_COUNT_OPTIONS = (1, 3, 5, 7)
+HOME_CALLBACK = "action:home"
+HOME_BUTTON_TEXT = "🏠 Главная"
+BACK_BUTTON_TEXT = "⬅️ Назад"
+REPLY_ACTIONS = {
+    "⚡ Сгенерировать карточку": "generate",
+    "💳 Купить генерации": "buy",
+    "📊 Мой баланс": "balance",
+    "📋 Мои шаблоны": "templates",
+    "📋 История": "history",
+    "❓ Помощь": "help",
+    HOME_BUTTON_TEXT: "home",
+    "Главная": "home",
+}
 
 
 @dataclass(frozen=True)
@@ -90,6 +103,12 @@ class KeyboardButton:
 @dataclass(frozen=True)
 class KeyboardMarkup:
     inline_keyboard: list[list[KeyboardButton]]
+
+
+@dataclass(frozen=True)
+class ReplyKeyboardMarkupFallback:
+    keyboard: list[list[str]]
+    resize_keyboard: bool = True
 
 
 def _button(text: str, callback_data: str) -> Any:
@@ -117,6 +136,38 @@ def _keyboard(rows: list[list[Any]]) -> Any:
         return InlineKeyboardMarkup(rows)
     except ImportError:
         return KeyboardMarkup(rows)
+
+
+def _home_button() -> Any:
+    return _button(HOME_BUTTON_TEXT, HOME_CALLBACK)
+
+
+def _nav_row(back_callback: str | None = None) -> list[Any]:
+    row: list[Any] = []
+    if back_callback:
+        row.append(_button(BACK_BUTTON_TEXT, back_callback))
+    row.append(_home_button())
+    return row
+
+
+def classify_reply_action(text: Any | None) -> str | None:
+    value = getattr(text, "text", text)
+    return REPLY_ACTIONS.get(str(value or "").strip())
+
+
+def build_persistent_main_keyboard() -> Any:
+    rows = [
+        ["⚡ Сгенерировать карточку"],
+        ["💳 Купить генерации", "📊 Мой баланс"],
+        ["📋 Мои шаблоны", "📋 История"],
+        ["❓ Помощь", HOME_BUTTON_TEXT],
+    ]
+    try:
+        from telegram import ReplyKeyboardMarkup
+
+        return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+    except ImportError:
+        return ReplyKeyboardMarkupFallback(rows)
 
 
 def build_main_menu() -> Any:
@@ -176,6 +227,7 @@ def build_buy_keyboard(show_first_image_promo: bool = False) -> Any:
             [_button("Комбо: карточки + изображения", "action:buy_combo")],
             [_button("Только карточки", "action:buy_text")],
             [_button("Только изображения", "action:buy_images")],
+            [_home_button()],
         ]
     )
 
@@ -187,7 +239,7 @@ def build_combined_buy_keyboard(show_first_image_promo: bool = False) -> Any:
 def build_combo_card_count_keyboard() -> Any:
     counts = sorted({PAYMENT_PACKAGES[code].text_count for code in MAIN_PACKAGE_CODES})
     rows = [[_button(f"{count} карточек", f"combo_cards:{count}")] for count in counts]
-    rows.append([_button("⬅️ Назад", "buy_back:root")])
+    rows.append(_nav_row("buy_back:root"))
     return _keyboard(rows)
 
 
@@ -198,17 +250,19 @@ def build_combo_photo_count_keyboard(text_count: int) -> Any:
         if PAYMENT_PACKAGES[code].text_count == text_count
     )
     rows = [[_combo_payment_button(text_count, photo_count)] for photo_count in photo_counts]
-    rows.append([_button("⬅️ Назад", "buy_back:combo")])
+    rows.append(_nav_row("buy_back:combo"))
     return _keyboard(rows)
 
 
 def build_balance_keyboard() -> Any:
     return _keyboard(
         [
+            [_button("Комбо: карточки + изображения", "action:buy_combo")],
             [
                 _button("💳 Купить текстовые", "action:buy_text"),
                 _button("💳 Купить изображения", "action:buy_images"),
-            ]
+            ],
+            [_home_button()],
         ]
     )
 
@@ -217,15 +271,18 @@ def build_image_packages_keyboard(show_first_image_promo: bool = False) -> Any:
     rows = [[_payment_button(code)] for code in IMAGE_ADDON_CODES]
     if show_first_image_promo:
         rows.insert(0, [_payment_button(PROMO_PACKAGE_CODE)])
+    rows.append(_nav_row("buy_back:root"))
     return _keyboard(rows)
 
 
 def build_text_packages_keyboard() -> Any:
-    return _keyboard([[_payment_button(code)] for code in TEXT_ADDON_CODES])
+    rows = [[_payment_button(code)] for code in TEXT_ADDON_CODES]
+    rows.append(_nav_row("buy_back:root"))
+    return _keyboard(rows)
 
 
 def build_payment_link_keyboard(payment_url: str) -> Any:
-    return _keyboard([[_url_button("Перейти к оплате", payment_url)]])
+    return _keyboard([[_url_button("Перейти к оплате", payment_url)], [_home_button()]])
 
 
 def build_marketplace_keyboard() -> Any:
@@ -234,7 +291,8 @@ def build_marketplace_keyboard() -> Any:
             [
                 _button("Wildberries", "marketplace:wb"),
                 _button("Ozon", "marketplace:ozon"),
-            ]
+            ],
+            [_home_button()],
         ]
     )
 
@@ -245,7 +303,8 @@ def build_generation_mode_keyboard() -> Any:
             [
                 _button("📝 Только текст", "mode:text_only"),
                 _button("📝🖼 Текст + изображения", "mode:text_and_images"),
-            ]
+            ],
+            _nav_row("action:generate"),
         ]
     )
 
@@ -256,7 +315,8 @@ def build_no_image_balance_keyboard() -> Any:
             [
                 _button("💳 Купить изображения", "action:buy_images"),
                 _button("📝 Только текст", "mode:text_only"),
-            ]
+            ],
+            [_home_button()],
         ]
     )
 
@@ -275,7 +335,8 @@ def build_image_marketplace_keyboard() -> Any:
             [
                 _button("Wildberries", "img_marketplace:wb"),
                 _button("Ozon", "img_marketplace:ozon"),
-            ]
+            ],
+            [_home_button()],
         ]
     )
 
@@ -284,7 +345,7 @@ def build_image_photo_keyboard(photos_count: int) -> Any:
     row = [_button("✅ Готово", "img_photos_done")]
     if photos_count < MAX_REFERENCE_PHOTOS:
         row.append(_button(f"📎 Ещё ({photos_count}/{MAX_REFERENCE_PHOTOS})", "img_add_more"))
-    return _keyboard([row])
+    return _keyboard([row, [_home_button()]])
 
 
 def is_supported_image_document(document: Any) -> bool:
@@ -329,12 +390,12 @@ def build_image_count_keyboard(image_balance: int | None = None) -> Any:
     if image_balance is not None:
         counts = [count for count in counts if count <= image_balance]
     if not counts:
-        return _keyboard([[_button("💳 Купить изображения", "action:buy_images")]])
+        return _keyboard([[_button("💳 Купить изображения", "action:buy_images")], [_home_button()]])
     rows = [[_button(str(count), f"img_count:{count}") for count in counts[:3]]]
     if len(counts) > 3:
         rows.append([_button(str(count), f"img_count:{count}") for count in counts[3:]])
+    rows.append([_home_button()])
     return _keyboard(rows)
-
 
 def build_image_count_prompt(image_balance: int) -> str:
     return (
@@ -359,9 +420,9 @@ def build_after_generation_keyboard() -> Any:
                 _button("💳 Пополнить баланс", "action:buy"),
             ],
             [_button("💬 Не понравился результат?", "action:feedback")],
+            [_home_button()],
         ]
     )
-
 
 def build_after_image_generation_keyboard() -> Any:
     return _keyboard(
@@ -375,9 +436,9 @@ def build_after_image_generation_keyboard() -> Any:
                 _button("💳 Пополнить баланс", "action:buy_images"),
             ],
             [_button("💬 Не понравился результат?", "action:feedback")],
+            [_home_button()],
         ]
     )
-
 
 def truncate_template_name(name: str) -> str:
     return (name or "").strip()[:50] or "Шаблон"
@@ -408,10 +469,10 @@ def build_repeat_photos_keyboard() -> Any:
             [
                 _button("📎 Те же фото", "repeat:same_photos"),
                 _button("🖼 Загрузить новые", "repeat:new_photos"),
-            ]
+            ],
+            [_home_button()],
         ]
     )
-
 
 def build_templates_keyboard(
     templates: list[dict[str, Any]],
@@ -427,8 +488,8 @@ def build_templates_keyboard(
     if nav_row:
         rows.append(nav_row)
     rows.append([_button("🗑 Удалить шаблон", f"templates_delete:{page}")])
+    rows.append([_home_button()])
     return _keyboard(rows)
-
 
 def build_templates_delete_keyboard(
     templates: list[dict[str, Any]],
@@ -444,8 +505,8 @@ def build_templates_delete_keyboard(
     if nav_row:
         rows.append(nav_row)
     rows.append([_button("❌ Отмена", f"templates_page:{page}")])
+    rows.append([_home_button()])
     return _keyboard(rows)
-
 
 def build_template_details_keyboard(template_id: int) -> Any:
     return _keyboard(
@@ -453,9 +514,9 @@ def build_template_details_keyboard(template_id: int) -> Any:
             [_button("⚡ Использовать как есть", f"template_run:{template_id}")],
             [_button("✏️ Изменить и использовать", f"template_edit:{template_id}")],
             [_button("🗑 Удалить шаблон", f"template_delete:{template_id}")],
+            [_home_button()],
         ]
     )
-
 
 def build_template_delete_confirm_keyboard(template_id: int) -> Any:
     return _keyboard(
@@ -463,10 +524,10 @@ def build_template_delete_confirm_keyboard(template_id: int) -> Any:
             [
                 _button("✅ Да, удалить", f"template_delete_confirm:{template_id}"),
                 _button("❌ Отмена", f"template_delete_cancel:{template_id}"),
-            ]
+            ],
+            [_home_button()],
         ]
     )
-
 
 def build_generation_messages(card: CardGeneration) -> list[str]:
     messages = [
@@ -559,8 +620,7 @@ def build_help_message() -> str:
 
 
 def build_help_keyboard(offer_url: str) -> Any:
-    return _keyboard([[_url_button("Публичная оферта", offer_url)]])
-
+    return _keyboard([[_url_button("Публичная оферта", offer_url)], [_home_button()]])
 
 def build_start_message(first_name: str | None) -> str:
     name = f", {first_name}" if first_name else ""
@@ -660,6 +720,23 @@ def _clear_image_session(context: Any) -> None:
         context.user_data.pop(key, None)
 
 
+def _reset_navigation_state(context: Any) -> None:
+    _clear_image_session(context)
+    for key in (
+        "awaiting_template_name",
+        "awaiting_repeat_changes",
+    ):
+        context.user_data.pop(key, None)
+
+
+async def _show_home(message: Any, context: Any, first_name: str | None = None) -> None:
+    _reset_navigation_state(context)
+    await message.reply_text(
+        build_start_message(first_name),
+        reply_markup=build_main_menu(),
+    )
+
+
 def _store_last_generation(
     context: Any,
     *,
@@ -717,6 +794,10 @@ async def start(update: Any, context: Any) -> None:
     user = update.effective_user
     await update.effective_message.reply_text(
         build_start_message(user.first_name if user else None),
+        reply_markup=build_persistent_main_keyboard(),
+    )
+    await update.effective_message.reply_text(
+        "Выберите действие:",
         reply_markup=build_main_menu(),
     )
 
@@ -1837,12 +1918,45 @@ async def _run_saved_generation(
     _clear_image_session(context)
 
 
+async def _handle_reply_action(update: Any, context: Any, user_id: int, action: str) -> None:
+    if action == "home":
+        user = update.effective_user
+        await _show_home(
+            update.effective_message,
+            context,
+            user.first_name if user else None,
+        )
+        return
+    if action == "generate":
+        await generate_command(update, context)
+        return
+    if action == "buy":
+        await _show_buy_menu(update.effective_message, context, user_id, kind="all")
+        return
+    if action == "balance":
+        await balance_command(update, context)
+        return
+    if action == "templates":
+        await _show_templates(update.effective_message, context, user_id, page=0)
+        return
+    if action == "history":
+        await history_command(update, context)
+        return
+    if action == "help":
+        await help_command(update, context)
+
+
 async def handle_text(update: Any, context: Any) -> None:
     user_id = await _ensure_user(update, context)
     if user_id is None or update.effective_message is None:
         return
 
     user_input = (update.effective_message.text or "").strip()
+    reply_action = classify_reply_action(user_input)
+    if reply_action is not None:
+        await _handle_reply_action(update, context, user_id, reply_action)
+        return
+
     if await _handle_template_name(update, context, user_id, user_input):
         return
     if await _handle_repeat_changes(update, context, user_id, user_input):
@@ -1889,7 +2003,10 @@ async def handle_callback(update: Any, context: Any) -> None:
     data = query.data or ""
     if data != "action:save_template":
         await query.answer()
-    if data == "action:generate":
+    if data == HOME_CALLBACK:
+        user = update.effective_user
+        await _show_home(query.message, context, user.first_name if user else None)
+    elif data == "action:generate":
         _clear_image_session(context)
         context.user_data["generation_step"] = "marketplace"
         await query.message.reply_text(
