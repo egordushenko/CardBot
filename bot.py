@@ -91,7 +91,7 @@ REPLY_ACTIONS = {
     "💳 Купить генерации": "buy",
     "📊 Мой баланс": "balance",
     "📋 Мои шаблоны": "templates",
-    "📋 История": "history",
+    "🕐 История": "history",
     "❓ Помощь": "help",
     HOME_BUTTON_TEXT: "home",
     "Главная": "home",
@@ -164,7 +164,7 @@ def build_persistent_main_keyboard() -> Any:
     rows = [
         ["⚡ Сгенерировать карточку"],
         ["💳 Купить генерации", "📊 Мой баланс"],
-        ["📋 Мои шаблоны", "📋 История"],
+        ["📋 Мои шаблоны", "🕐 История"],
         ["❓ Помощь"],
     ]
     try:
@@ -185,7 +185,7 @@ def build_main_menu() -> Any:
             ],
             [
                 _button("📋 Мои шаблоны", "action:templates"),
-                _button("📋 История", "action:history"),
+                _button("🕐 История", "action:history"),
             ],
             [
                 _button("❓ Помощь", "action:help"),
@@ -222,7 +222,7 @@ def _combo_payment_button(text_count: int, images_per_card: int) -> Any:
     if images_per_card == 0:
         label = f"Без фото — {package.price_rub:,} ₽"
     else:
-        label = f"{images_per_card} фото/карточка — {package.price_rub:,} ₽"
+        label = f"{images_per_card} фото на карточку — {package.price_rub:,} ₽"
     return _button(label.replace(",", " "), f"buy:{code}")
 
 
@@ -384,8 +384,7 @@ def build_image_progress_message(
     suffix = "\nЗапрос еще выполняется, это может занять пару минут." if still_working else ""
     return (
         "🎨 Генерирую изображения...\n"
-        f"Сгенерировано: {generated_count}/{total_count}\n"
-        f"Отправлено: {sent_count}/{total_count}"
+        f"Готово: {sent_count} из {total_count}"
         f"{suffix}"
     )
 
@@ -417,7 +416,7 @@ def build_after_generation_keyboard() -> Any:
     return _keyboard(
         [
             [
-                _button("🔄 Сгенерировать ещё", "action:generate"),
+                _button("⚡ Сгенерировать ещё", "action:generate"),
                 _button("💾 Сохранить как шаблон", "action:save_template"),
             ],
             [
@@ -1839,7 +1838,7 @@ async def _handle_template_name(update: Any, context: Any, user_id: int, user_in
         images_count=last_generation.get("images_count"),
     )
     await update.effective_message.reply_text(
-        f"✅ Шаблон \"{name}\" сохранён.\nНайти его можно через /templates"
+        f"✅ Шаблон \"{name}\" сохранён.\nНайдёте его в «Мои шаблоны»."
     )
     return True
 
@@ -1878,7 +1877,7 @@ async def _handle_new_template_text(update: Any, context: Any, user_id: int, use
         images_count=None,
     )
     await update.effective_message.reply_text(
-        f"✅ Шаблон \"{name}\" сохранён.\nНайти его можно через /templates"
+        f"✅ Шаблон \"{name}\" сохранён.\nНайдёте его в «Мои шаблоны»."
     )
     return True
 

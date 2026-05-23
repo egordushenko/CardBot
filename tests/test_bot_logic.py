@@ -20,6 +20,7 @@ from bot import (
     build_help_message,
     build_image_count_keyboard,
     build_image_count_prompt,
+    build_image_progress_message,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
     build_persistent_main_keyboard,
@@ -107,6 +108,7 @@ def test_after_generation_keyboard_offers_template_and_repeat_actions():
         "action:feedback",
         "action:home",
     ]
+    assert text_keyboard.inline_keyboard[0][0].text.startswith("⚡")
     assert "Не понравился результат" in text_keyboard.inline_keyboard[-2][0].text
     assert "@alterega" in FEEDBACK_MESSAGE
     assert "Контакт для обратной связи: @alterega" in FEEDBACK_MESSAGE
@@ -259,7 +261,7 @@ def test_new_template_flow_collects_name_then_saves_text_without_generation():
                 "images_count": None,
             }
         ]
-        assert "сохранён" in text_update.effective_message.replies[0][0]
+        assert "Найдёте его в «Мои шаблоны»" in text_update.effective_message.replies[0][0]
         assert "awaiting_new_template_text" not in context.user_data
         assert "new_template_name" not in context.user_data
 
@@ -310,6 +312,14 @@ def test_image_keyboards_follow_spec_callbacks():
 
 def test_image_count_prompt_shows_current_balance():
     assert "5" in build_image_count_prompt(image_balance=5)
+
+
+def test_image_progress_message_uses_single_ready_counter():
+    text = build_image_progress_message(total_count=7, generated_count=3, sent_count=2)
+
+    assert "Готово: 2 из 7" in text
+    assert "Сгенерировано:" not in text
+    assert "Отправлено:" not in text
 
 
 def test_extract_image_file_id_accepts_photo_and_image_document():
@@ -425,9 +435,9 @@ def test_combo_photo_count_keyboard_uses_short_final_payment_labels():
 
     assert labels == [
         "Без фото — 490 ₽",
-        "3 фото/карточка — 1 990 ₽",
-        "5 фото/карточка — 2 990 ₽",
-        "7 фото/карточка — 3 990 ₽",
+        "3 фото на карточку — 1 990 ₽",
+        "5 фото на карточку — 2 990 ₽",
+        "7 фото на карточку — 3 990 ₽",
     ]
     assert callbacks == [
         "buy:text_start_x0",
@@ -445,9 +455,12 @@ def test_combo_photo_count_keyboard_uses_short_final_payment_labels():
 def test_persistent_reply_keyboard_routes_primary_actions():
     keyboard = build_persistent_main_keyboard()
     labels = [label for row in keyboard.keyboard for label in row]
+    texts = [getattr(label, "text", label) for label in labels]
 
     assert classify_reply_action(labels[0]) == "generate"
-    assert "\U0001f3e0 \u0413\u043b\u0430\u0432\u043d\u0430\u044f" not in labels
+    assert "🕐 История" in texts
+    assert "\U0001f3e0 \u0413\u043b\u0430\u0432\u043d\u0430\u044f" not in texts
     assert classify_reply_action("\u0413\u043b\u0430\u0432\u043d\u0430\u044f") == "home"
     assert classify_reply_action("\U0001f3e0 \u0413\u043b\u0430\u0432\u043d\u0430\u044f") == "home"
+    assert classify_reply_action("🕐 История") == "history"
     assert classify_reply_action("\u043e\u0431\u044b\u0447\u043d\u044b\u0439 \u0442\u043e\u0432\u0430\u0440") is None
