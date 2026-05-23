@@ -474,11 +474,18 @@ def build_image_progress_message(
     *,
     still_working: bool = False,
 ) -> str:
-    suffix = "\nЗапрос еще выполняется, это может занять пару минут." if still_working else ""
+    if sent_count <= 0:
+        estimated_minutes = max(2, total_count * 2)
+        suffix = "\nЗапрос еще выполняется." if still_working else ""
+        return (
+            f"🎨 Генерирую {total_count} изображений.\n"
+            f"Ориентир: около {estimated_minutes} минут.\n"
+            f"Изображения придут вместе после завершения генерации."
+            f"{suffix}"
+        )
     return (
-        "🎨 Генерирую изображения...\n"
-        f"Готово: {sent_count} из {total_count}"
-        f"{suffix}"
+        "🎨 Отправляю изображения...\n"
+        f"Отправлено: {sent_count} из {total_count}"
     )
 
 
@@ -1755,7 +1762,6 @@ async def _generate_text_and_images_for_user(
     await message.reply_text("✅ Текстовая карточка готова:")
     for text in build_generation_messages(card):
         await message.reply_text(text)
-    await message.reply_text("🖼 Генерирую изображения.\nОбычно это занимает 1-2 минуты.")
 
     try:
         prompt_plan = await concepts_task

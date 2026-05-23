@@ -572,12 +572,20 @@ def test_image_text_mode_skip_moves_to_style_step_with_default_mode():
     asyncio.run(run_flow())
 
 
-def test_image_progress_message_uses_single_ready_counter():
+def test_image_progress_message_describes_batch_generation_before_outputs_arrive():
+    text = build_image_progress_message(total_count=3, generated_count=0, sent_count=0)
+
+    assert "Генерирую 3 изображений" in text
+    assert "Ориентир: около 6 минут" in text
+    assert "Изображения придут вместе" in text
+    assert "Готово: 0 из 3" not in text
+
+
+def test_image_progress_message_uses_sent_counter_after_batch_arrives():
     text = build_image_progress_message(total_count=7, generated_count=3, sent_count=2)
 
-    assert "Готово: 2 из 7" in text
-    assert "Сгенерировано:" not in text
-    assert "Отправлено:" not in text
+    assert "Отправлено: 2 из 7" in text
+    assert "Готово:" not in text
 
 
 def test_extract_image_file_id_accepts_photo_and_image_document():
