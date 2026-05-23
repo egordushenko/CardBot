@@ -54,6 +54,15 @@ def test_detect_visual_profile_covers_required_profiles():
     assert detect_visual_profile("yoga mat fitness workout") == "sports"
 
 
+def test_detect_visual_profile_supports_russian_product_descriptions():
+    assert detect_visual_profile("Рашгард therapy черный размер M") == "clothing"
+    assert detect_visual_profile("Часы песочные высота 15 см") == "home_decor"
+    assert detect_visual_profile("Сыворотка для лица с ниацинамидом") == "cosmetics"
+    assert detect_visual_profile("Наушники беспроводные Bluetooth") == "electronics"
+    assert detect_visual_profile("Органайзер для ванной комнаты") == "home_decor"
+    assert detect_visual_profile("Настольная лампа LED спиральная USB") == "home_decor"
+
+
 def test_build_slide_plan_uses_clothing_five_image_sequence_and_photo_analysis():
     analyses = [
         PhotoAnalysis(0, ("back", "on_model"), ("THERAPY FOR YOU",), (), ("back_on_model", "print_reference")),
@@ -130,6 +139,120 @@ def test_build_image_concepts_from_plan_uses_role_templates_and_constraints():
     assert "Do NOT place text in random corners" in prompt
     assert "Do NOT use meaningless headings" in prompt
     assert "Preserve printed logos and text exactly" in prompt
+
+
+def test_generated_prompts_use_russian_marketplace_overlay_copy():
+    concepts = build_image_concepts_from_plan(
+        product_description="Часы песочные высота 15 см, цикл 5 минут, черное деревянное основание",
+        marketplace="ozon",
+        images_count=3,
+        photo_analyses=[],
+    )
+
+    prompts = "\n".join(concept.prompt for concept in concepts)
+    assert "TEXT OVERLAY: Made for everyday use" not in prompts
+    assert "TEXT OVERLAY: Key features" not in prompts
+    assert "TEXT OVERLAY: Reliable details" not in prompts
+    assert "5 минут" in prompts
+    assert "Наглядный таймер" in prompts
+
+
+def test_clothing_overlay_copy_does_not_expose_size_or_generic_english_labels():
+    concepts = build_image_concepts_from_plan(
+        product_description="Рашгард Therapy черный размер M, 100% хлопок, облегающий, принт Therapy на спине",
+        marketplace="wb",
+        images_count=5,
+        photo_analyses=[],
+    )
+
+    prompts = "\n".join(concept.prompt for concept in concepts)
+    assert "TEXT OVERLAY: Clean product view" not in prompts
+    assert "TEXT OVERLAY: Fabric and print detail" not in prompts
+    assert "размер M" not in prompts
+    assert "Размер: M" not in prompts
+    assert "Свобода движений" in prompts
+    assert "Принт на спине" in prompts
+
+
+def test_home_decor_organizer_does_not_use_hourglass_copy():
+    concepts = build_image_concepts_from_plan(
+        product_description="Органайзер для ванной комнаты белый, 3 секции, для косметики и зубных щеток",
+        marketplace="ozon",
+        images_count=4,
+        photo_analyses=[],
+    )
+
+    prompts = "\n".join(concept.prompt for concept in concepts)
+    assert "5 минут" not in prompts
+    assert "Наглядный таймер" not in prompts
+    assert "Деревянная основа" not in prompts
+    assert "Белый песок" not in prompts
+    assert "Порядок в ванной" in prompts
+    assert "ванной" in prompts.casefold()
+
+
+def test_home_decor_bath_mat_does_not_use_hourglass_copy():
+    concepts = build_image_concepts_from_plan(
+        product_description="Коврик для ванной серый 50 на 80 см, мягкий ворс, нескользящее основание",
+        marketplace="ozon",
+        images_count=4,
+        photo_analyses=[],
+    )
+
+    prompts = "\n".join(concept.prompt for concept in concepts)
+    assert "5 минут" not in prompts
+    assert "Наглядный таймер" not in prompts
+    assert "Деревянная основа" not in prompts
+    assert "Белый песок" not in prompts
+    assert "Мягкий ворс" in prompts
+    assert "ванной" in prompts.casefold()
+
+
+def test_home_decor_subtypes_have_five_distinct_slide_roles():
+    organizer = build_slide_plan(
+        product_description="Органайзер для ванной комнаты белый, 3 секции",
+        marketplace="ozon",
+        images_count=5,
+        photo_analyses=[],
+    )
+    bath_mat = build_slide_plan(
+        product_description="Коврик для ванной серый, мягкий ворс, нескользящее основание",
+        marketplace="ozon",
+        images_count=5,
+        photo_analyses=[],
+    )
+    lamp = build_slide_plan(
+        product_description="Настольная лампа LED белая USB, регулировка яркости",
+        marketplace="ozon",
+        images_count=5,
+        photo_analyses=[],
+    )
+
+    assert [slide.role for slide in organizer] == ["hero", "facts", "closeup", "scenario", "interior"]
+    assert [slide.role for slide in bath_mat] == ["hero", "facts", "closeup", "scenario", "interior"]
+    assert [slide.role for slide in lamp] == ["hero", "facts", "closeup", "scenario", "interior"]
+
+
+def test_electronics_and_cosmetics_prompts_do_not_use_generic_placeholder_copy():
+    electronics = build_image_concepts_from_plan(
+        product_description="Наушники беспроводные Bluetooth, микрофон, шумоподавление, до 6 часов работы",
+        marketplace="ozon",
+        images_count=4,
+        photo_analyses=[],
+    )
+    cosmetics = build_image_concepts_from_plan(
+        product_description="Сыворотка для лица с ниацинамидом 30 мл, увлажнение, выравнивает тон",
+        marketplace="wb",
+        images_count=4,
+        photo_analyses=[],
+    )
+
+    prompts = "\n".join(concept.prompt for concept in electronics + cosmetics)
+    assert "TEXT OVERLAY: Главное фото" not in prompts
+    assert "TEXT OVERLAY: Ключевые преимущества" not in prompts
+    assert "TEXT OVERLAY: Сценарий применения" not in prompts
+    assert "Чистый звук" in prompts
+    assert "Уход каждый день" in prompts
 
 
 def test_parse_image_quality_payload_flags_failed_generated_image():

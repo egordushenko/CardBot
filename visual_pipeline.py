@@ -135,6 +135,8 @@ def parse_image_quality_payload(payload: str) -> ImageQualityReport:
 
 def detect_visual_profile(product_description: str, marketplace: str = "wb") -> str:
     text = product_description.casefold()
+    if any(keyword in text for keyword in ("ламп", "светильник", "lamp")):
+        return "home_decor"
     profiles: list[tuple[str, tuple[str, ...]]] = [
         ("kids", ("детск", "ребен", "ребён", "малыш", "baby", "kids", "child", "подгуз")),
         ("clothing", ("рашгард", "футбол", "плать", "худи", "куртк", "брюк", "одежд", "shirt", "jacket", "dress", "rashguard", "hoodie")),
@@ -231,50 +233,84 @@ def _common_negative_constraints(profile: str) -> tuple[str, ...]:
     return tuple(constraints)
 
 
-def _profile_sequence(profile: str) -> list[dict[str, Any]]:
+def _sanitize_product_description_for_prompt(product_description: str, profile: str) -> str:
+    description = product_description.strip()
+    if profile not in {"clothing", "kids"}:
+        return description
+    patterns = [
+        r"\bsize\s*[:=]?\s*[a-z0-9]{1,4}\b",
+        r"\bразмер\s*[:=]?\s*[a-zа-я0-9]{1,6}\b",
+        r"\bр-р\s*[:=]?\s*[a-zа-я0-9]{1,6}\b",
+    ]
+    result = description
+    for pattern in patterns:
+        result = re.sub(pattern, "", result, flags=re.IGNORECASE)
+    result = re.sub(r"\s{2,}", " ", result)
+    result = re.sub(r"\s+,", ",", result)
+    return result.strip(" ,.;") or description
+
+
+def _overlay(*items: str) -> tuple[str, ...]:
+    return tuple(item for item in items if item)
+
+
+def _home_decor_subtype(product_description: str) -> str:
+    text = product_description.casefold()
+    if "песочн" in text or "hourglass" in text or ("таймер" in text and "5" in text):
+        return "hourglass"
+    if "коврик" in text and ("ванн" in text or "душ" in text or "туалет" in text):
+        return "bath_mat"
+    if "органайзер" in text or "organizer" in text:
+        return "organizer"
+    if "ламп" in text or "светильник" in text or "lamp" in text:
+        return "lamp"
+    return "generic"
+
+
+def _profile_sequence(profile: str, product_description: str = "") -> list[dict[str, Any]]:
     if profile == "clothing":
         return [
             {
                 "role": "hero",
                 "composition": "clean hero flatlay, product fully visible and neatly shaped",
                 "background": "light warm studio surface with soft shadows, not a pure white empty background",
-                "overlay": ("Clean product view",),
+                "overlay": _overlay("Товарный вид", "Без лишнего фона"),
             },
             {
                 "role": "closeup",
                 "composition": "close-up of fabric, seams or print detail; do not crop away the meaningful detail",
                 "background": "soft neutral studio macro background with fabric texture visible",
-                "overlay": ("Fabric and print detail",),
+                "overlay": _overlay("Ткань и детали", "Аккуратная печать"),
             },
             {
                 "role": "lifestyle_back",
                 "composition": "adult model wearing the clothing, back view, natural confident pose",
                 "background": "marketplace sports or streetwear studio background, softly blurred",
-                "overlay": ("Back print",),
+                "overlay": _overlay("Принт на спине"),
             },
             {
                 "role": "lifestyle_front",
                 "composition": "adult model wearing the clothing, front view, natural pose, good fit visible",
                 "background": "bright marketplace studio or gym background, softly blurred",
-                "overlay": ("Comfort in motion",),
+                "overlay": _overlay("Свобода движений"),
             },
             {
                 "role": "lifestyle_three_quarter",
                 "composition": "adult model wearing the clothing, three-quarter 30-60 degree angle, natural pose",
                 "background": "premium marketplace lifestyle background with soft directional light",
-                "overlay": ("Fits the body",),
+                "overlay": _overlay("Подчеркивает посадку"),
             },
             {
                 "role": "scenario",
                 "composition": "model using the clothing in a realistic activity scenario",
                 "background": "contextual lifestyle background matching the product use case",
-                "overlay": ("Ready for daily use",),
+                "overlay": _overlay("Для тренировок и дня"),
             },
             {
                 "role": "closeup",
                 "composition": "macro close-up of collar, seam, sleeve or printed element",
                 "background": "soft macro studio background, no empty white field",
-                "overlay": ("Detail quality",),
+                "overlay": _overlay("Качество деталей"),
             },
         ]
     if profile == "kids":
@@ -283,68 +319,168 @@ def _profile_sequence(profile: str) -> list[dict[str, Any]]:
                 "role": "hero",
                 "composition": "clean product hero flatlay, full item visible",
                 "background": "soft pastel studio surface with gentle shadows, not empty white",
-                "overlay": ("Everyday comfort",),
+                "overlay": _overlay("Комфорт каждый день"),
             },
             {
                 "role": "lifestyle_front",
                 "composition": "child model of appropriate age wearing the item, neutral safe pose",
                 "background": "bright child-safe room or studio background, softly blurred",
-                "overlay": ("Comfort for kids",),
+                "overlay": _overlay("Удобно ребенку"),
             },
             {
                 "role": "closeup",
                 "composition": "close-up of fabric, seam or functional detail",
                 "background": "soft studio macro background",
-                "overlay": ("Soft fabric",),
+                "overlay": _overlay("Мягкая ткань"),
             },
         ]
-    return _generic_sequence(profile)
+    return _generic_sequence(profile, product_description)
 
 
-def _generic_sequence(profile: str) -> list[dict[str, Any]]:
+def _generic_sequence(profile: str, product_description: str = "") -> list[dict[str, Any]]:
     if profile == "home_decor":
+        subtype = _home_decor_subtype(product_description)
+        if subtype == "organizer":
+            return [
+                {
+                    "role": "hero",
+                    "composition": "hero product shot on a bathroom shelf or vanity surface, full organizer visible, clean product arrangement",
+                    "background": "light bathroom interior with sink, mirror or towels softly blurred, warm studio light, not a pure white empty background",
+                    "overlay": _overlay("Порядок в ванной"),
+                },
+                {
+                    "role": "facts",
+                    "composition": "facts card with organizer on one side and 3 concise storage benefits on the other",
+                    "background": "clean bathroom countertop scene with subtle depth and soft shadows",
+                    "overlay": _overlay("3 секции", "Все под рукой"),
+                },
+                {
+                    "role": "closeup",
+                    "composition": "closeup of compartments, edges and material finish; show practical storage details",
+                    "background": "macro bathroom background with soft towel or tile blur",
+                    "overlay": _overlay("Для косметики и щеток"),
+                },
+                {
+                    "role": "scenario",
+                    "composition": "organizer in use with cosmetics, toothbrushes or small accessories neatly placed",
+                    "background": "realistic vanity or bathroom shelf scene with contextual props softly blurred",
+                    "overlay": _overlay("Аккуратное хранение"),
+                },
+                {
+                    "role": "interior",
+                    "composition": "organizer placed in a clean bathroom storage zone, showing how it fits the interior",
+                    "background": "bathroom shelf or countertop with mirror, towels and light decor softly blurred",
+                    "overlay": _overlay("Вписывается в интерьер"),
+                },
+            ]
+        if subtype == "bath_mat":
+            return [
+                {
+                    "role": "hero",
+                    "composition": "hero product shot of bath mat laid flat, full shape visible, neat edges and soft pile visible",
+                    "background": "light bathroom floor scene near shower or bathtub, soft shadows and blurred interior elements, not a pure white empty background",
+                    "overlay": _overlay("Мягкий ворс"),
+                },
+                {
+                    "role": "facts",
+                    "composition": "facts card with bath mat and 3 concise comfort or safety benefits",
+                    "background": "clean bathroom floor with subtle tile texture and soft daylight",
+                    "overlay": _overlay("Не скользит", "Быстро впитывает"),
+                },
+                {
+                    "role": "closeup",
+                    "composition": "closeup of pile texture and edge finish, show softness without changing material",
+                    "background": "macro bathroom textile background with shallow depth of field",
+                    "overlay": _overlay("Приятен для ног"),
+                },
+                {
+                    "role": "scenario",
+                    "composition": "bath mat placed near bathtub, shower or sink in a realistic bathroom use case",
+                    "background": "cozy bathroom interior with towels and neutral decor softly blurred",
+                    "overlay": _overlay("Комфорт после душа"),
+                },
+                {
+                    "role": "interior",
+                    "composition": "bath mat shown as part of a finished bathroom interior, full placement visible",
+                    "background": "bright bathroom scene with bathtub, sink or shower elements softly blurred",
+                    "overlay": _overlay("Для ванной и душа"),
+                },
+            ]
+        if subtype == "lamp":
+            return [
+                {
+                    "role": "hero",
+                    "composition": "hero product shot of the lamp on a desk or bedside table, full silhouette visible",
+                    "background": "warm desk or bedroom interior with soft glow and blurred decor, not a pure white empty background",
+                    "overlay": _overlay("Мягкий свет"),
+                },
+                {
+                    "role": "facts",
+                    "composition": "facts card with lamp and 3 concise lighting benefits",
+                    "background": "modern desk scene with books or laptop softly blurred",
+                    "overlay": _overlay("Для работы и отдыха"),
+                },
+                {
+                    "role": "closeup",
+                    "composition": "closeup of switch, base, light form or texture",
+                    "background": "macro desk background with warm directional light",
+                    "overlay": _overlay("Удобное управление"),
+                },
+                {
+                    "role": "scenario",
+                    "composition": "lamp used as bedside, desk or room decor lighting",
+                    "background": "cozy room interior with soft evening light",
+                    "overlay": _overlay("Создает уют"),
+                },
+                {
+                    "role": "interior",
+                    "composition": "lamp integrated into a modern interior, visible on desk, shelf or bedside table",
+                    "background": "room interior with books, decor and soft ambient light, background gently blurred",
+                    "overlay": _overlay("Декор и свет"),
+                },
+            ]
         return [
             {
                 "role": "hero",
                 "composition": "hero product shot on a desk or tabletop, full product visible",
                 "background": "light interior desk scene with soft shadows, blurred contextual elements, not a pure white empty background",
-                "overlay": ("Made for everyday use",),
+                "overlay": _overlay("Наглядный таймер"),
             },
             {
                 "role": "facts",
                 "composition": "facts card with the product on the left and 3 concise icon facts on the right",
                 "background": "warm studio tabletop with subtle interior depth and soft shadows",
-                "overlay": ("Key features",),
+                "overlay": _overlay("5 минут", "Деревянная основа"),
             },
             {
                 "role": "closeup",
                 "composition": "closeup sand/glass or material detail, texture and construction visible",
                 "background": "macro interior background with warm blur and directional light",
-                "overlay": ("Reliable details",),
+                "overlay": _overlay("Белый песок", "Защита колбы"),
             },
             {
                 "role": "interior",
                 "composition": "product placed on an interior shelf or table as decor",
                 "background": "cozy shelf interior with books, plant or decor softly blurred",
-                "overlay": ("Adds atmosphere",),
+                "overlay": _overlay("Декор для стола"),
             },
             {
                 "role": "scenario",
                 "composition": "scenario desk/kitchen use case, product in realistic context",
                 "background": "desk or kitchen counter with contextual props softly blurred",
-                "overlay": ("Useful every day",),
+                "overlay": _overlay("Для кухни и работы"),
             },
             {
                 "role": "facts",
                 "composition": "clean benefits layout with product centered and two strong benefit blocks",
                 "background": "soft studio table scene with depth, no blank white field",
-                "overlay": ("Simple and visual",),
+                "overlay": _overlay("Просто и наглядно"),
             },
             {
                 "role": "closeup",
                 "composition": "detail close-up of base, finish, texture or functional part",
                 "background": "warm macro background with shallow depth of field",
-                "overlay": ("Material close-up",),
+                "overlay": _overlay("Фактура материала"),
             },
         ]
     backgrounds = {
@@ -354,37 +490,84 @@ def _generic_sequence(profile: str) -> list[dict[str, Any]]:
         "food": "warm kitchen tabletop or cafe counter with appetizing natural light",
         "sports": "gym or active lifestyle background with soft motion depth",
     }
+    overlays = {
+        "electronics": (
+            _overlay("Чистый звук"),
+            _overlay("Подключение без лишних проводов"),
+            _overlay("Разъемы крупно"),
+            _overlay("Для работы и прогулок"),
+            _overlay("Всегда под рукой"),
+        ),
+        "cosmetics": (
+            _overlay("Уход каждый день"),
+            _overlay("Увлажнение и ровный тон"),
+            _overlay("Текстура и флакон"),
+            _overlay("Легко в рутине"),
+            _overlay("Для утреннего ухода"),
+        ),
+        "bags": (
+            _overlay("Городской формат"),
+            _overlay("Все помещается"),
+            _overlay("Карманы крупно"),
+            _overlay("Для работы и поездок"),
+            _overlay("Удобно каждый день"),
+        ),
+        "food": (
+            _overlay("Вкусный перекус"),
+            _overlay("Состав и польза"),
+            _overlay("Аппетитная текстура"),
+            _overlay("С собой каждый день"),
+            _overlay("Для работы и дороги"),
+        ),
+        "sports": (
+            _overlay("Для тренировок"),
+            _overlay("Комфорт в движении"),
+            _overlay("Фактура и детали"),
+            _overlay("Активный сценарий"),
+            _overlay("Спорт каждый день"),
+        ),
+    }
     base_background = backgrounds.get(profile, "contextual marketplace studio background with soft shadows")
+    profile_overlays = overlays.get(
+        profile,
+        (
+            _overlay("Товар в деталях"),
+            _overlay("Главные преимущества"),
+            _overlay("Крупный план"),
+            _overlay("В ежедневном использовании"),
+            _overlay("Реальный сценарий"),
+        ),
+    )
     return [
         {
             "role": "hero",
             "composition": "hero product shot, full product visible, premium marketplace framing",
             "background": base_background,
-            "overlay": ("Main product view",),
+            "overlay": profile_overlays[0],
         },
         {
             "role": "facts",
             "composition": "facts card with product and 3 concise benefits",
             "background": base_background,
-            "overlay": ("Key benefits",),
+            "overlay": profile_overlays[1],
         },
         {
             "role": "closeup",
             "composition": "close-up of material, texture, connector, label or functional detail",
             "background": "macro version of the contextual scene with shallow depth of field",
-            "overlay": ("Detail quality",),
+            "overlay": profile_overlays[2],
         },
         {
             "role": "lifestyle_front",
             "composition": "realistic use-case lifestyle image, product naturally used in context",
             "background": base_background,
-            "overlay": ("Made for daily use",),
+            "overlay": profile_overlays[3],
         },
         {
             "role": "scenario",
             "composition": "scenario image showing where and how the customer uses the product",
             "background": base_background,
-            "overlay": ("Practical scenario",),
+            "overlay": profile_overlays[4],
         },
     ]
 
@@ -398,7 +581,7 @@ def build_slide_plan(
     if images_count < 1 or images_count > 9:
         raise ValueError("images_count must be between 1 and 9")
     profile = detect_visual_profile(product_description, marketplace)
-    sequence = _profile_sequence(profile)
+    sequence = _profile_sequence(profile, product_description)
     analyses = _analysis_by_index(photo_analyses, max((a.photo_index for a in photo_analyses or []), default=0) + 1)
     constraints = _common_negative_constraints(profile)
 
@@ -445,13 +628,15 @@ def build_prompt_from_slide(
     slide: SlidePlan,
     photo_analysis: PhotoAnalysis | None,
 ) -> str:
+    profile = detect_visual_profile(product_description, marketplace)
+    product_for_prompt = _sanitize_product_description_for_prompt(product_description, profile)
     overlay = "; ".join(slide.overlay_text) if slide.overlay_text else "No overlay text unless it improves the slide."
     constraints = "\n".join(f"- {item}" for item in slide.negative_constraints)
     qa_checks = ", ".join(slide.qa_checks)
     marketplace_name = "Wildberries" if marketplace == "wb" else "Ozon"
     return (
         f"Create a 3:4 marketplace image for {marketplace_name}.\n"
-        f"PRODUCT: {product_description.strip()}\n"
+        f"PRODUCT: {product_for_prompt}\n"
         f"SLIDE ROLE: {slide.role}\n"
         f"REFERENCE PHOTO: use only photo {slide.source_photo_index}; do not merge details from other photos.\n"
         f"COMPOSITION: {slide.composition}.\n"
