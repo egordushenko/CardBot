@@ -533,6 +533,7 @@ def test_image_text_mode_and_style_keyboards_use_expected_callbacks():
         "img_text_mode:no_text",
         "img_text_mode:minimal",
         "img_text_mode:infographic",
+        "img_text_mode:skip",
         "action:home",
     ]
     assert style_callbacks == [
@@ -547,6 +548,28 @@ def test_image_text_mode_and_style_keyboards_use_expected_callbacks():
         "img_style:skip",
         "action:home",
     ]
+    style_pairs = [
+        (button.text, button.callback_data)
+        for row in style_keyboard.inline_keyboard
+        for button in row
+    ]
+    assert ("Светлый", "img_style:light_wb") in style_pairs
+    assert ("Натуральный", "img_style:eco") in style_pairs
+
+
+def test_image_text_mode_skip_moves_to_style_step_with_default_mode():
+    async def run_flow():
+        context = _FakeImageModeContext(_FakeImageModeDb())
+        context.user_data["generation_step"] = "image_text_mode"
+        update = _FakeCallbackUpdate("img_text_mode:skip")
+
+        await handle_callback(update, context)
+
+        assert context.user_data["generation_step"] == "image_style"
+        assert context.user_data["img_text_mode"] == ""
+        assert "Стиль изображений" in update.callback_query.message.replies[-1][0]
+
+    asyncio.run(run_flow())
 
 
 def test_image_progress_message_uses_single_ready_counter():

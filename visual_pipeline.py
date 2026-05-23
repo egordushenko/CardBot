@@ -849,7 +849,8 @@ def build_prompt_from_slide(
         f"{overlay_part}\n"
         f"Use reference photo {slide.source_photo_index} as product source. "
         f"Preserve product appearance exactly: shape, color, print, texture. "
-        f"Make it polished and commercial."
+        f"Make it polished and commercial. "
+        f"Create in the style of a professional WB/Ozon marketplace product card."
     ).strip()
     guidance = _normalize_image_guidance(image_guidance)
     if guidance:

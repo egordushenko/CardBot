@@ -436,6 +436,22 @@ def test_parse_image_concepts_payload_validates_and_clamps_photo_index():
     ]
 
 
+def test_parse_image_concepts_payload_normalizes_duplicate_image_indexes():
+    result = parse_image_concepts_payload(
+        (
+            '{"concepts":['
+            '{"image_index":1,"purpose":"first","photo_index":0,"prompt":"Prompt one"},'
+            '{"image_index":1,"purpose":"second","photo_index":0,"prompt":"Prompt two"},'
+            '{"image_index":2,"purpose":"third","photo_index":0,"prompt":"Prompt three"}'
+            ']}'
+        ),
+        photos_count=1,
+        images_count=3,
+    )
+
+    assert [concept.image_index for concept in result] == [1, 2, 3]
+
+
 def test_parse_image_concepts_payload_rejects_missing_concepts():
     with pytest.raises(LLMResponseError, match="concepts"):
         parse_image_concepts_payload("{}", photos_count=1, images_count=1)
@@ -556,6 +572,7 @@ async def test_generate_image_prompts_uses_llm_director(monkeypatch):
     assert result.source == "llm"
     assert result.director_model == "deepseek/deepseek-v4-flash:free"
     assert captured["messages"][0]["content"] == DIRECTOR_SYSTEM_PROMPT
+    assert "Create in the style of a professional WB/Ozon marketplace product card." in captured["messages"][0]["content"]
     assert "make the hero image luxury" in captured["messages"][1]["content"]
     assert captured["model_candidates"] == [
         "deepseek/deepseek-v4-flash:free",

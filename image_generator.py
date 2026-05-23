@@ -218,6 +218,59 @@ async def generate_single_image_result(
     )
 
 
+async def generate_multi_reference_single_image_result(
+    *,
+    prompt: str,
+    reference_photo_bytes: list[bytes],
+    api_key: str,
+    model: str,
+    site_url: str = "https://alterega.ru",
+) -> GeneratedImage:
+    if not reference_photo_bytes:
+        raise ImageGenerationError("Multi-reference image generation requires at least one reference photo")
+
+    content: list[dict[str, Any]] = []
+    for index, photo_bytes in enumerate(reference_photo_bytes, start=1):
+        content.append(_image_content_item(photo_bytes))
+        content.append({"type": "text", "text": f"Input reference photo {index}"})
+    content.append({"type": "text", "text": prompt})
+
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": content,
+            }
+        ],
+        "modalities": ["image", "text"],
+        "image_config": {
+            "aspect_ratio": "3:4",
+            "image_size": "1K",
+        },
+        "max_tokens": 4096,
+    }
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        response = await client.post(
+            OPENROUTER_CHAT_COMPLETIONS_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": site_url,
+                "X-Title": "CardBot",
+            },
+            json=payload,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+    return GeneratedImage(
+        image_bytes=extract_openrouter_image_bytes(result),
+        usage=extract_openrouter_image_usage(result, fallback_model=model),
+    )
+
+
 async def generate_batch_image_results(
     *,
     concepts: list[ImageBatchConcept],
@@ -314,6 +367,30 @@ async def generate_marketplace_image_result(
     return await generate_single_image_result(
         prompt=prompt,
         reference_photo_bytes=bytes(photo_bytes),
+        api_key=api_key,
+        model=model,
+        site_url=site_url,
+    )
+
+
+async def generate_marketplace_multi_reference_image_result(
+    *,
+    prompt: str,
+    reference_photo_file_ids: list[str],
+    bot: Any,
+    api_key: str,
+    model: str,
+    site_url: str = "https://alterega.ru",
+) -> GeneratedImage:
+    reference_photo_bytes: list[bytes] = []
+    for file_id in reference_photo_file_ids:
+        telegram_file = await bot.get_file(file_id)
+        photo_bytes = await telegram_file.download_as_bytearray()
+        reference_photo_bytes.append(bytes(photo_bytes))
+
+    return await generate_multi_reference_single_image_result(
+        prompt=prompt,
+        reference_photo_bytes=reference_photo_bytes,
         api_key=api_key,
         model=model,
         site_url=site_url,

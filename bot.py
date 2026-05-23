@@ -22,8 +22,7 @@ from category_profiles import (
 from core.field_resolver import resolve_fields
 from db import Database, UsageMode
 from image_generator import (
-    ImageBatchConcept,
-    generate_marketplace_batch_image_results,
+    generate_marketplace_multi_reference_image_result,
 )
 from llm import (
     CardGeneration,
@@ -415,6 +414,7 @@ def build_image_text_mode_keyboard() -> Any:
                 _button("Минимум текста", "img_text_mode:minimal"),
             ],
             [_button("Инфографика", "img_text_mode:infographic")],
+            [_button("Пропустить", "img_text_mode:skip")],
             [_home_button()],
         ]
     )
@@ -432,11 +432,11 @@ def build_image_style_keyboard() -> Any:
                 _button("Темный премиум", "img_style:dark_premium"),
             ],
             [
-                _button("Светлый WB", "img_style:light_wb"),
+                _button("Светлый", "img_style:light_wb"),
                 _button("Детский", "img_style:kids"),
             ],
             [
-                _button("Eco", "img_style:eco"),
+                _button("Натуральный", "img_style:eco"),
                 _button("Свой стиль", "img_style:custom"),
             ],
             [_button("Пропустить", "img_style:skip")],
@@ -1932,56 +1932,62 @@ async def _generate_and_send_image_concepts(
         )
     )
 
-    batch_results = []
+    async def process_concept(concept: ImageConcept) -> dict[str, Any]:
+        try:
+            image_result = await asyncio.wait_for(
+                generate_marketplace_multi_reference_image_result(
+                    prompt=str(concept.prompt),
+                    reference_photo_file_ids=photo_file_ids,
+                    bot=context.bot,
+                    api_key=settings.openrouter_api_key,
+                    model=settings.gpt_image_model,
+                    site_url=settings.site_url,
+                ),
+                timeout=420,
+            )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "image_index": int(concept.image_index),
+                "reason": classify_generation_error(exc),
+                "error": exc,
+            }
+        return {
+            "ok": True,
+            "image_index": int(concept.image_index),
+            "purpose": concept.purpose,
+            "prompt_used": concept.prompt,
+            "image_bytes": image_result.image_bytes,
+            "model": image_result.usage.model,
+            "cost_usd": image_result.usage.cost_usd,
+        }
+
+    tasks = [asyncio.create_task(process_concept(concept)) for concept in concepts]
     try:
-        batch_results = await asyncio.wait_for(
-            generate_marketplace_batch_image_results(
-                concepts=[
-                    ImageBatchConcept(
-                        image_index=int(concept.image_index),
-                        purpose=str(concept.purpose),
-                        prompt=str(concept.prompt),
+        for completed in asyncio.as_completed(tasks):
+            result = await completed
+            if not result["ok"]:
+                logging.warning(
+                    "Image generation failed image_index=%s reason=%s: %s",
+                    result["image_index"],
+                    result["reason"],
+                    result["error"],
+                )
+                if result["reason"] in {"api_balance", "429"}:
+                    await message.reply_text(generation_error_message(result["reason"]))
+                else:
+                    await message.reply_text(
+                        f"Изображение {result['image_index']}/{total_count} не удалось сгенерировать."
                     )
-                    for concept in concepts
-                ],
-                reference_photo_file_ids=photo_file_ids,
-                bot=context.bot,
-                api_key=settings.openrouter_api_key,
-                model=settings.gpt_image_model,
-                site_url=settings.site_url,
-            ),
-            timeout=420,
-        )
-    except Exception as exc:
-        reason = classify_generation_error(exc)
-        logging.warning("Batch image generation failed reason=%s: %s", reason, exc)
-        if reason in {"api_balance", "429"}:
-            await message.reply_text(generation_error_message(reason))
-        else:
-            for concept in concepts:
-                await message.reply_text(
-                    f"Изображение {int(concept.image_index)}/{total_count} не удалось сгенерировать."
-                )
-    else:
-        generated_count = len(batch_results)
-        for concept, image_result in zip(concepts, batch_results):
-            image_index = int(concept.image_index)
+                continue
+
+            generated_count += 1
             try:
-                image_record = await _send_generated_image_result(
-                    message,
-                    {
-                        "image_index": image_index,
-                        "purpose": concept.purpose,
-                        "prompt_used": concept.prompt,
-                        "image_bytes": image_result.image_bytes,
-                        "model": image_result.usage.model,
-                        "cost_usd": image_result.usage.cost_usd,
-                    },
-                )
+                image_record = await _send_generated_image_result(message, result)
             except Exception as exc:
-                logging.warning("Failed to send generated image %s: %s", image_index, exc)
+                logging.warning("Failed to send generated image %s: %s", result["image_index"], exc)
                 await message.reply_text(
-                    f"Изображение {image_index}/{total_count} не удалось отправить."
+                    f"Изображение {result['image_index']}/{total_count} не удалось отправить."
                 )
                 continue
             generated.append(image_record)
@@ -1993,6 +1999,14 @@ async def _generate_and_send_image_concepts(
     finally:
         stop_progress.set()
         await progress_task
+        for task in tasks:
+            if task.done():
+                with suppress(Exception):
+                    task.result()
+                continue
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     return generated
 
@@ -2566,7 +2580,11 @@ async def handle_callback(update: Any, context: Any) -> None:
         user = update.effective_user
         if user is None:
             return
-        context.user_data["img_text_mode"] = normalize_image_text_mode(data.split(":", 1)[1])
+        text_mode_value = data.split(":", 1)[1]
+        if text_mode_value == "skip":
+            context.user_data["img_text_mode"] = ""
+        else:
+            context.user_data["img_text_mode"] = normalize_image_text_mode(text_mode_value)
         await _continue_after_image_text_mode(update, context, user.id)
     elif data.startswith("img_style:"):
         user = update.effective_user

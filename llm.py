@@ -443,7 +443,7 @@ def parse_image_concepts_payload(
         prompt = str(item.get("prompt", "")).strip()
         if not prompt:
             raise LLMResponseError("LLM image concept is missing prompt")
-        image_index = int(item.get("image_index") or index)
+        image_index = index
         photo_index = int(item.get("photo_index") or 0)
         photo_index = min(max(photo_index, 0), max_photo_index)
         concepts.append(

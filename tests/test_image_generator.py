@@ -286,3 +286,66 @@ def test_generate_batch_images_rejects_wrong_output_count(monkeypatch):
                 model="model",
             )
         )
+
+
+def test_generate_multi_reference_single_image_result_uses_all_reference_photos(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "model": "model-version",
+                "usage": {"cost": 0.25},
+                "choices": [
+                    {
+                        "message": {
+                            "images": [
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(b"one").decode("ascii")
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+            }
+
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, headers, json):
+            captured["payload"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        image_generator.generate_multi_reference_single_image_result(
+            prompt="Hero prompt",
+            reference_photo_bytes=[b"photo-a", b"photo-b", b"photo-c"],
+            api_key="key",
+            model="model",
+        )
+    )
+
+    content = captured["payload"]["messages"][0]["content"]
+    image_items = [item for item in content if item["type"] == "image_url"]
+    prompt_text = content[-1]["text"]
+
+    assert len(image_items) == 3
+    assert prompt_text == "Hero prompt"
+    assert result.image_bytes == b"one"
+    assert result.usage.model == "model-version"
+    assert result.usage.cost_usd == 0.25

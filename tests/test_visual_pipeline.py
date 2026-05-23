@@ -137,6 +137,7 @@ def test_build_image_concepts_from_plan_uses_role_templates_and_constraints():
     assert "Slide role: hero" in prompt
     assert "Use reference photo 0 as product source" in prompt
     assert "Preserve product appearance exactly: shape, color, print, texture" in prompt
+    assert "Create in the style of a professional WB/Ozon marketplace product card." in prompt
     assert "NEGATIVE CONSTRAINTS" not in prompt
     assert "QA TARGETS" not in prompt
     assert "Do NOT" not in prompt
