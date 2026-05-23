@@ -24,6 +24,10 @@ class Settings:
     robokassa_password1: str = ""
     robokassa_password2: str = ""
     robokassa_test_mode: bool = False
+    robokassa_sno: str = "usn_income"
+    robokassa_payment_method: str = "full_payment"
+    robokassa_payment_object: str = "service"
+    robokassa_tax: str = "none"
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -102,4 +106,10 @@ def load_settings(load_dotenv_files: bool = True) -> Settings:
         robokassa_password1=_env("ROBOKASSA_PASSWORD1", defaults),
         robokassa_password2=_env("ROBOKASSA_PASSWORD2", defaults),
         robokassa_test_mode=_bool_env(_env("ROBOKASSA_TEST_MODE", defaults, "0")),
+        robokassa_sno=_env("ROBOKASSA_SNO", defaults, "usn_income"),
+        robokassa_payment_method=_env(
+            "ROBOKASSA_PAYMENT_METHOD", defaults, "full_payment"
+        ),
+        robokassa_payment_object=_env("ROBOKASSA_PAYMENT_OBJECT", defaults, "service"),
+        robokassa_tax=_env("ROBOKASSA_TAX", defaults, "none"),
     )

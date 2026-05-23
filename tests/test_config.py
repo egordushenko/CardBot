@@ -45,6 +45,10 @@ def test_load_settings_keeps_robokassa_values_available_but_optional(monkeypatch
     monkeypatch.setenv("ROBOKASSA_PASSWORD1", "pass1")
     monkeypatch.setenv("ROBOKASSA_PASSWORD2", "pass2")
     monkeypatch.setenv("ROBOKASSA_TEST_MODE", "1")
+    monkeypatch.setenv("ROBOKASSA_SNO", "usn_income")
+    monkeypatch.setenv("ROBOKASSA_PAYMENT_METHOD", "full_payment")
+    monkeypatch.setenv("ROBOKASSA_PAYMENT_OBJECT", "service")
+    monkeypatch.setenv("ROBOKASSA_TAX", "none")
     monkeypatch.setenv("CARDBOT_WEBHOOK_PORT", "8091")
     monkeypatch.setenv("CARDBOT_BOT_URL", "https://t.me/CaardMakerBot")
     monkeypatch.setenv("CARDBOT_OFFER_URL", "https://alterega.ru/cardbot/offer")
@@ -55,6 +59,10 @@ def test_load_settings_keeps_robokassa_values_available_but_optional(monkeypatch
     assert settings.robokassa_password1 == "pass1"
     assert settings.robokassa_password2 == "pass2"
     assert settings.robokassa_test_mode is True
+    assert settings.robokassa_sno == "usn_income"
+    assert settings.robokassa_payment_method == "full_payment"
+    assert settings.robokassa_payment_object == "service"
+    assert settings.robokassa_tax == "none"
     assert settings.cardbot_webhook_port == 8091
     assert settings.cardbot_bot_url == "https://t.me/CaardMakerBot"
     assert settings.cardbot_offer_url == "https://alterega.ru/cardbot/offer"

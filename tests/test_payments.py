@@ -1,6 +1,9 @@
+from urllib.parse import parse_qs, urlparse
+
 from config import Settings
 from payments import (
     PACKAGES,
+    build_receipt,
     build_payment_url,
     calculate_package_counts,
     format_out_sum,
@@ -67,28 +70,103 @@ def test_build_payment_url_contains_required_robokassa_fields():
 
     url = build_payment_url(
         settings=settings,
-        inv_id="abc123",
+        inv_id="1779390000000123456",
         user_id=598380407,
         package_code="text_start_x0",
     )
 
     assert url.startswith("https://auth.robokassa.ru/Merchant/Index.aspx?")
     assert "MerchantLogin=CardBot" in url
-    assert "OutSum=490.00" in url
-    assert "InvId=abc123" in url
+    assert "OutSum=490.000000" in url
+    assert "InvId=1779390000000123456" in url
     assert "Shp_user_id=598380407" in url
     assert "Shp_package=text_start_x0" in url
     assert "SuccessURL=https%3A%2F%2Ft.me%2FCaardMakerBot" in url
     assert "FailURL=https%3A%2F%2Ft.me%2FCaardMakerBot" in url
+    assert "Receipt=%257B%2522sno%2522%253A%2522usn_income%2522" in url
     assert "IsTest=1" in url
 
 
-def test_generate_inv_id_is_uuid_without_dashes():
+def test_build_payment_url_signature_uses_encoded_receipt_before_password():
+    settings = Settings(
+        bot_token="telegram-token",
+        openrouter_api_key="openrouter-key",
+        cardbot_db_url="postgresql://user:pass@127.0.0.1:5432/cardbot",
+        robokassa_login="CardBot",
+        robokassa_password1="pass1",
+        robokassa_password2="pass2",
+        cardbot_bot_url="https://t.me/CaardMakerBot",
+    )
+
+    url = build_payment_url(
+        settings=settings,
+        inv_id="1779390000000123456",
+        user_id=598380407,
+        package_code="text_business_x3",
+    )
+    params = parse_qs(urlparse(url).query)
+    receipt_for_sign = params["Receipt"][0]
+
+    expected_signature = robokassa_payment_signature(
+        merchant_login="CardBot",
+        out_sum=params["OutSum"][0],
+        inv_id=params["InvId"][0],
+        password1="pass1",
+        shp_params={
+            "Shp_package": params["Shp_package"][0],
+            "Shp_user_id": params["Shp_user_id"][0],
+        },
+        receipt_for_sign=receipt_for_sign,
+    )
+
+    assert params["SignatureValue"][0] == expected_signature
+
+
+def test_generate_inv_id_is_numeric_robokassa_invoice_id():
     inv_id = generate_inv_id()
 
-    assert len(inv_id) == 32
-    assert "-" not in inv_id
+    assert inv_id.isdigit()
+    assert 1 <= int(inv_id) <= 9_223_372_036_854_775_807
 
 
-def test_format_out_sum_uses_two_decimal_places():
-    assert format_out_sum(490) == "490.00"
+def test_build_payment_url_rejects_non_numeric_inv_id():
+    settings = Settings(
+        bot_token="telegram-token",
+        openrouter_api_key="openrouter-key",
+        cardbot_db_url="postgresql://user:pass@127.0.0.1:5432/cardbot",
+        robokassa_login="CardBot",
+        robokassa_password1="pass1",
+    )
+
+    try:
+        build_payment_url(
+            settings=settings,
+            inv_id="81c33b1a548a452a9efd02836f257685",
+            user_id=598380407,
+            package_code="text_start_x0",
+        )
+    except ValueError as exc:
+        assert "InvId" in str(exc)
+    else:
+        raise AssertionError("Expected non-numeric Robokassa InvId to be rejected")
+
+
+def test_format_out_sum_uses_six_decimal_places_for_robokassa():
+    assert format_out_sum(490) == "490.000000"
+
+
+def test_build_receipt_returns_double_encoded_receipt_for_url():
+    settings = Settings(
+        bot_token="telegram-token",
+        openrouter_api_key="openrouter-key",
+        cardbot_db_url="postgresql://user:pass@127.0.0.1:5432/cardbot",
+    )
+
+    receipt_for_sign, receipt_for_url = build_receipt(
+        settings=settings,
+        package=PACKAGES["text_start_x0"],
+        out_sum="490.000000",
+    )
+
+    assert receipt_for_sign.startswith("%7B%22sno%22%3A%22usn_income%22")
+    assert receipt_for_url.startswith("%257B%2522sno%2522%253A%2522usn_income%2522")

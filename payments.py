@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-import uuid
+import json
+import secrets
+import time
 from dataclasses import dataclass
-from urllib.parse import urlencode
+from urllib.parse import quote
 
 from config import Settings
 
@@ -76,11 +78,13 @@ PROMO_PACKAGE_CODE = "promo_img_10"
 
 
 def generate_inv_id() -> str:
-    return uuid.uuid4().hex
+    timestamp_part = int(time.time() * 1000) * 1_000_000
+    random_part = secrets.randbelow(1_000_000)
+    return str(timestamp_part + random_part)
 
 
 def format_out_sum(amount_rub: int) -> str:
-    return f"{amount_rub:.2f}"
+    return f"{amount_rub:.6f}"
 
 
 def calculate_package_counts(package_code: str) -> tuple[int, int]:
@@ -106,8 +110,12 @@ def robokassa_payment_signature(
     inv_id: str,
     password1: str,
     shp_params: dict[str, str | int],
+    receipt_for_sign: str | None = None,
 ) -> str:
-    parts = [merchant_login, out_sum, inv_id, password1]
+    parts = [merchant_login, out_sum, inv_id]
+    if receipt_for_sign:
+        parts.append(receipt_for_sign)
+    parts.append(password1)
     parts.extend(_sorted_shp_parts(shp_params))
     return _md5_upper(":".join(parts))
 
@@ -124,6 +132,36 @@ def robokassa_result_signature(
     return _md5_upper(":".join(parts))
 
 
+def build_receipt(*, settings: Settings, package: PaymentPackage, out_sum: str) -> tuple[str, str]:
+    receipt = {
+        "sno": settings.robokassa_sno,
+        "items": [
+            {
+                "name": f"CardBot: {package.title}"[:128],
+                "quantity": 1,
+                "sum": float(out_sum),
+                "payment_method": settings.robokassa_payment_method,
+                "payment_object": settings.robokassa_payment_object,
+                "tax": settings.robokassa_tax,
+            }
+        ],
+    }
+    receipt_json = json.dumps(receipt, ensure_ascii=False, separators=(",", ":"))
+    receipt_for_sign = quote(receipt_json, safe="")
+    receipt_for_url = quote(receipt_for_sign, safe="")
+    return receipt_for_sign, receipt_for_url
+
+
+def _build_query(params: dict[str, str]) -> str:
+    parts = []
+    for key, value in params.items():
+        if key == "Receipt":
+            parts.append(f"{key}={value}")
+            continue
+        parts.append(f"{quote(key, safe='')}={quote(value, safe='')}")
+    return "&".join(parts)
+
+
 def build_payment_url(
     *,
     settings: Settings,
@@ -135,9 +173,16 @@ def build_payment_url(
         raise RuntimeError("ROBOKASSA_LOGIN is not configured")
     if not settings.robokassa_password1:
         raise RuntimeError("ROBOKASSA_PASSWORD1 is not configured")
+    if not inv_id.isdigit() or not (1 <= int(inv_id) <= 9_223_372_036_854_775_807):
+        raise ValueError("Robokassa InvId must be a numeric id in allowed range")
 
     package = PACKAGES[package_code]
     out_sum = format_out_sum(package.price_rub)
+    receipt_for_sign, receipt_for_url = build_receipt(
+        settings=settings,
+        package=package,
+        out_sum=out_sum,
+    )
     shp_params = {
         "Shp_package": package_code,
         "Shp_user_id": str(user_id),
@@ -148,6 +193,7 @@ def build_payment_url(
         inv_id=inv_id,
         password1=settings.robokassa_password1,
         shp_params=shp_params,
+        receipt_for_sign=receipt_for_sign,
     )
     params: dict[str, str] = {
         "MerchantLogin": settings.robokassa_login,
@@ -160,8 +206,9 @@ def build_payment_url(
         "Shp_package": package_code,
         "SuccessURL": settings.cardbot_bot_url,
         "FailURL": settings.cardbot_bot_url,
+        "Receipt": receipt_for_url,
         "SignatureValue": signature,
     }
     if settings.robokassa_test_mode:
         params["IsTest"] = "1"
-    return f"{ROBOKASSA_PAY_URL}?{urlencode(params)}"
+    return f"{ROBOKASSA_PAY_URL}?{_build_query(params)}"
