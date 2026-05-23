@@ -468,9 +468,93 @@ def test_build_image_director_user_prompt_includes_counts_and_marketplace():
     assert "Нужно сгенерировать изображений: 5" in prompt
 
 
-@pytest.mark.asyncio
-async def test_generate_image_prompts_uses_code_slide_plan_with_photo_analysis():
+def test_build_image_director_user_prompt_uses_photo_roles_without_text_or_defects():
     from visual_pipeline import PhotoAnalysis
+
+    prompt = build_image_director_user_prompt(
+        product_description="black Therapy rashguard",
+        marketplace="wb",
+        photos_count=1,
+        images_count=1,
+        photo_analyses=[
+            PhotoAnalysis(
+                0,
+                ("front", "on_model"),
+                ("M SIZE", "100% COTTON"),
+                ("home lighting", "wrinkles"),
+                ("hero", "front_on_model"),
+                "Back print says M SIZE",
+            )
+        ],
+    )
+
+    assert "tags=front, on_model" in prompt
+    assert "usable_for=hero, front_on_model" in prompt
+    assert "M SIZE" not in prompt
+    assert "100% COTTON" not in prompt
+    assert "home lighting" not in prompt
+    assert "wrinkles" not in prompt
+    assert "Back print says" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_generate_image_prompts_uses_llm_director(monkeypatch):
+    captured = {}
+
+    async def fake_request_chat_completion_with_fallback(client, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            '{"concepts":['
+                            '{"image_index":1,"purpose":"hero","photo_index":0,"prompt":"Hero marketplace card prompt"},'
+                            '{"image_index":2,"purpose":"lifestyle","photo_index":1,"prompt":"Lifestyle marketplace card prompt"}'
+                            ']}'
+                        )
+                    )
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        "llm.request_chat_completion_with_fallback",
+        fake_request_chat_completion_with_fallback,
+    )
+
+    result = await generate_image_prompts(
+        product_description="black Therapy rashguard cotton fitted",
+        marketplace="ozon",
+        photos_count=2,
+        images_count=2,
+        api_key="test-key",
+        model="deepseek/deepseek-v4-flash:free",
+        site_url="https://alterega.ru",
+    )
+
+    assert result == [
+        ImageConcept(1, "hero", 0, "Hero marketplace card prompt"),
+        ImageConcept(2, "lifestyle", 1, "Lifestyle marketplace card prompt"),
+    ]
+    assert captured["messages"][0]["content"] == DIRECTOR_SYSTEM_PROMPT
+    assert captured["model_candidates"] == [
+        "deepseek/deepseek-v4-flash:free",
+        "deepseek/deepseek-v4-flash",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_generate_image_prompts_falls_back_to_code_slide_plan(monkeypatch):
+    from visual_pipeline import PhotoAnalysis
+
+    async def fake_request_chat_completion_with_fallback(client, **kwargs):
+        raise RuntimeError("director unavailable")
+
+    monkeypatch.setattr(
+        "llm.request_chat_completion_with_fallback",
+        fake_request_chat_completion_with_fallback,
+    )
 
     result = await generate_image_prompts(
         product_description="black Therapy rashguard cotton fitted",
@@ -490,7 +574,7 @@ async def test_generate_image_prompts_uses_code_slide_plan_with_photo_analysis()
 
     assert [concept.purpose for concept in result] == ["hero", "closeup", "lifestyle_back"]
     assert [concept.photo_index for concept in result] == [3, 1, 0]
-    assert "SLIDE ROLE: hero" in result[0].prompt
+    assert "Slide role: hero" in result[0].prompt
 
 
 @pytest.mark.asyncio
@@ -505,54 +589,15 @@ async def test_generate_image_prompts_rejects_more_than_seven_images():
         )
 
 
-def test_director_system_prompt_requires_product_preservation_rules():
-    assert "STRICT PRODUCT PRESERVATION RULES" in DIRECTOR_SYSTEM_PROMPT
-    assert "Do NOT add any buttons" in DIRECTOR_SYSTEM_PROMPT
-    assert "The product must look IDENTICAL to the reference photo" in DIRECTOR_SYSTEM_PROMPT
-    assert "Preserve exact product geometry" in DIRECTOR_SYSTEM_PROMPT
+def test_director_system_prompt_is_short_and_single_source():
+    assert "Ты создаёшь концепции изображений для карточек товаров WB/Ozon" in DIRECTOR_SYSTEM_PROMPT
+    assert "60-100 words" in DIRECTOR_SYSTEM_PROMPT
+    assert "hero, lifestyle, infographic, closeup" in DIRECTOR_SYSTEM_PROMPT
+    assert "photo_index" in DIRECTOR_SYSTEM_PROMPT
+    assert '{"concepts": [...]}' in DIRECTOR_SYSTEM_PROMPT
 
-
-def test_director_system_prompt_requires_varied_text_and_safe_closeups():
-    assert "Do NOT squash, stretch, compress or elongate the product" in DIRECTOR_SYSTEM_PROMPT
-    assert "Preserve original product color and material texture" in DIRECTOR_SYSTEM_PROMPT
-    assert "brown wood must remain brown wood" in DIRECTOR_SYSTEM_PROMPT
-    assert "For 3 or more generated images, include at least one close-up" in DIRECTOR_SYSTEM_PROMPT
-    assert "Do not repeat the same benefit phrase across images" in DIRECTOR_SYSTEM_PROMPT
-    assert "marketing benefit" in DIRECTOR_SYSTEM_PROMPT
-
-
-def test_director_system_prompt_requires_exact_concept_count_and_rich_backgrounds():
-    assert "Return exactly the requested number of concepts" in DIRECTOR_SYSTEM_PROMPT
-    assert "return fewer concepts" not in DIRECTOR_SYSTEM_PROMPT
-    assert "Do NOT use a pure white empty background" in DIRECTOR_SYSTEM_PROMPT
-    assert "pure white background" not in DIRECTOR_SYSTEM_PROMPT
-    assert "soft shadows" in DIRECTOR_SYSTEM_PROMPT
-    assert "blurred contextual elements" in DIRECTOR_SYSTEM_PROMPT
-
-
-def test_director_system_prompt_requires_modern_typography_and_slide_roles():
-    assert "large readable modern sans-serif" in DIRECTOR_SYSTEM_PROMPT
-    assert "Do NOT place text in random corners" in DIRECTOR_SYSTEM_PROMPT
-    assert "Do NOT use meaningless headings like \"Детали\"" in DIRECTOR_SYSTEM_PROMPT
-    assert "role: hero / facts / closeup / lifestyle / scenario" in DIRECTOR_SYSTEM_PROMPT
-    assert "layout plan" in DIRECTOR_SYSTEM_PROMPT
-
-
-def test_director_system_prompt_handles_clothing_images_safely():
-    assert "Do NOT put clothing size" in DIRECTOR_SYSTEM_PROMPT
-    assert "Remove home-photo defects" in DIRECTOR_SYSTEM_PROMPT
-    assert "Preserve printed logos and text exactly" in DIRECTOR_SYSTEM_PROMPT
-    assert "не ближе 6% от края кадра" in DIRECTOR_SYSTEM_PROMPT
-
-
-def test_director_system_prompt_prefers_model_shots_for_clothing():
-    assert "For clothing products, make 60-80% of concepts show the clothing worn by people" in DIRECTOR_SYSTEM_PROMPT
-    assert "main product shot and close-ups may be without a person" in DIRECTOR_SYSTEM_PROMPT
-    assert "male clothing -> adult male model" in DIRECTOR_SYSTEM_PROMPT
-    assert "female clothing -> adult female model" in DIRECTOR_SYSTEM_PROMPT
-    assert "unisex or unclear clothing -> alternate adult male and adult female models" in DIRECTOR_SYSTEM_PROMPT
-    assert "children's clothing -> child model of appropriate age" in DIRECTOR_SYSTEM_PROMPT
-    assert "Do NOT use adult models for children's clothing" in DIRECTOR_SYSTEM_PROMPT
-    assert "attractive, fit, well-groomed adult model" in DIRECTOR_SYSTEM_PROMPT
-    assert "no oversexualized posing" in DIRECTOR_SYSTEM_PROMPT
-    assert "Do NOT change clothing color, fit, print, sleeve length, collar or silhouette" in DIRECTOR_SYSTEM_PROMPT
+    assert "STRICT PRODUCT PRESERVATION RULES" not in DIRECTOR_SYSTEM_PROMPT
+    assert "Do NOT add any buttons" not in DIRECTOR_SYSTEM_PROMPT
+    assert "Model gender rules" not in DIRECTOR_SYSTEM_PROMPT
+    assert "Remove home-photo defects" not in DIRECTOR_SYSTEM_PROMPT
+    assert "не ближе 6% от края кадра" not in DIRECTOR_SYSTEM_PROMPT

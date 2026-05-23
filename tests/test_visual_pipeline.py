@@ -133,13 +133,38 @@ def test_build_image_concepts_from_plan_uses_role_templates_and_constraints():
         )
     ]
     prompt = concepts[0].prompt
-    assert "SLIDE ROLE: hero" in prompt
-    assert "REFERENCE PHOTO: use only photo 0" in prompt
-    assert "Do NOT use a pure white empty background" in prompt
-    assert "large readable modern sans-serif" in prompt
-    assert "Do NOT place text in random corners" in prompt
-    assert "Do NOT use meaningless headings" in prompt
-    assert "Preserve printed logos and text exactly" in prompt
+    assert "Professional marketplace card image for Wildberries" in prompt
+    assert "Slide role: hero" in prompt
+    assert "Use reference photo 0 as product source" in prompt
+    assert "Preserve product appearance exactly: shape, color, print, texture" in prompt
+    assert "NEGATIVE CONSTRAINTS" not in prompt
+    assert "QA TARGETS" not in prompt
+    assert "Do NOT" not in prompt
+
+
+def test_build_prompt_ignores_reference_visible_text_and_defects():
+    concepts = build_image_concepts_from_plan(
+        product_description="black Therapy rashguard",
+        marketplace="wb",
+        images_count=1,
+        photo_analyses=[
+            PhotoAnalysis(
+                0,
+                ("front", "on_model"),
+                ("M SIZE", "100% COTTON"),
+                ("home lighting", "wrinkles"),
+                ("hero",),
+            )
+        ],
+    )
+
+    prompt = concepts[0].prompt
+    assert "Trusted visible text" not in prompt
+    assert "M SIZE" not in prompt
+    assert "100% COTTON" not in prompt
+    assert "Fix these source photo defects" not in prompt
+    assert "home lighting" not in prompt
+    assert "wrinkles" not in prompt
 
 
 def test_generated_prompts_use_russian_marketplace_overlay_copy():
@@ -169,6 +194,8 @@ def test_clothing_overlay_copy_does_not_expose_size_or_generic_english_labels():
     prompts = "\n".join(concept.prompt for concept in concepts)
     assert "TEXT OVERLAY: Clean product view" not in prompts
     assert "TEXT OVERLAY: Fabric and print detail" not in prompts
+    assert "TEXT OVERLAY: Товарный вид" not in prompts
+    assert "TEXT OVERLAY: Без лишнего фона" not in prompts
     assert "размер M" not in prompts
     assert "Размер: M" not in prompts
     assert "Свобода движений" in prompts

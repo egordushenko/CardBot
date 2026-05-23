@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import base64
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
-from prompts import PRODUCT_PRESERVATION_SUFFIX
 from visual_pipeline import (
     ImageQualityReport,
     PhotoAnalysis,
@@ -35,10 +35,6 @@ class ImageGenerationUsage:
 class GeneratedImage:
     image_bytes: bytes
     usage: ImageGenerationUsage
-
-
-def build_safe_image_prompt(prompt: str) -> str:
-    return f"{prompt}{PRODUCT_PRESERVATION_SUFFIX}"
 
 
 def extract_openrouter_image_bytes(payload: dict[str, Any]) -> bytes:
@@ -252,7 +248,6 @@ async def generate_single_image_result(
     model: str,
     site_url: str = "https://alterega.ru",
 ) -> GeneratedImage:
-    safe_prompt = build_safe_image_prompt(prompt)
     payload = {
         "model": model,
         "messages": [
@@ -262,7 +257,7 @@ async def generate_single_image_result(
                     _image_content_item(reference_photo_bytes),
                     {
                         "type": "text",
-                        "text": safe_prompt,
+                        "text": prompt,
                     },
                 ],
             }
@@ -343,7 +338,11 @@ async def generate_marketplace_image_result(
         )
         if not report.passed:
             issues = ", ".join(report.issues) or "unknown"
-            raise ImageGenerationError(f"image QA failed: {issues}; {report.summary}")
+            logging.warning(
+                "Generated image QA warning issues=%s summary=%s",
+                issues,
+                report.summary,
+            )
     return result
 
 

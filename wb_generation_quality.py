@@ -122,6 +122,8 @@ WB_UNIVERSAL_CHARACTERISTIC_FIELDS = {
     "Подключение",
     "Тип лампы",
     "Тип застежки",
+    "Вид застежки",
+    "Высота",
     "Форма",
     "Покрой",
     "Сезон",
@@ -193,6 +195,11 @@ WB_CLOTHING_PROFILE_MARKERS = (
     "худи",
     "кофта",
     "костюм",
+    "куртка",
+    "ветровка",
+    "пуховик",
+    "жилет",
+    "пальто",
 )
 
 WB_CLOTHING_TITLE_SIZE_RE = re.compile(
@@ -225,6 +232,10 @@ WB_CONTEXTUAL_FIELD_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] =
     (
         ("опрыскивател", "разбрызгивател", "объем бака", "механизм работы"),
         ("опрыскивател", "разбрызгивател", "сад", "дача"),
+    ),
+    (
+        ("вырез горловины", "тип рукава", "длина рукава"),
+        ("футболк", "майк", "лонгслив", "топ", "плать", "рубаш", "блуз", "кофт", "свитер", "худи", "рашгард"),
     ),
 )
 
@@ -548,6 +559,13 @@ def _normalize_wb_characteristics(
     inferred_kit = _infer_wb_kit(user_input, title)
     if inferred_kit and "Комплектация" not in normalized:
         normalized["Комплектация"] = inferred_kit
+    for inferred_fields in (
+        _infer_wb_shoe_characteristics(user_input, title, category_profile),
+        _infer_wb_beauty_characteristics(user_input, title, category_profile),
+        _infer_wb_home_electronics_characteristics(user_input, title, category_profile),
+    ):
+        for key, value in inferred_fields.items():
+            normalized.setdefault(key, value)
     normalized.update(_infer_wb_pet_food_characteristics(user_input))
     _drop_redundant_generic_size(normalized)
     _drop_duplicate_clothing_material(normalized, user_input, title, category_profile)
@@ -566,6 +584,8 @@ def infer_wb_clothing_composition(
     if not _mentions_any(text, (r"\bфутболк\w*\b", r"\bмайк\w*\b", r"\bлонгслив\w*\b", r"\bтоп\b")):
         if _mentions_any(text, (r"\bхуди\b", r"\bтолстовк\w*\b", r"\bсвитшот\w*\b")):
             return "хлопок 80%, полиэстер 20%"
+        if _mentions_any(text, (r"\bкуртк\w*\b", r"\bветровк\w*\b", r"\bпуховик\w*\b", r"\bжилет\w*\b", r"\bпальто\b")):
+            return "полиэстер 100%"
         if _mentions_any(text, (r"\bплать\w*\b", r"\bбрюк\w*\b", r"\bкостюм\w*\b", r"\bюбк\w*\b")):
             return "полиэстер 95%, эластан 5%"
         return "хлопок 95%, эластан 5%"
@@ -590,6 +610,8 @@ def _promote_clothing_material_to_composition(
 
 def _requires_numeric_value(field: str) -> bool:
     field_lower = field.casefold()
+    if any(marker in field_lower for marker in ("высота", "ширина", "длина", "глубина", "вес", "объем", "объём", "мощность", "количество")):
+        return True
     return any(marker.casefold() in field_lower for marker in WB_NUMERIC_VALUE_FIELDS)
 
 
@@ -600,6 +622,34 @@ def _is_blocked_generation_field(field: str) -> bool:
 
 def _requires_grounded_value(field: str) -> bool:
     field_lower = field.casefold()
+    if any(
+        marker in field_lower
+        for marker in (
+            "цвет",
+            "пол",
+            "материал",
+            "состав",
+            "вес",
+            "размер",
+            "длина",
+            "ширина",
+            "высота",
+            "объем",
+            "объём",
+            "мощность",
+            "количество",
+            "подключение",
+            "тип лампы",
+            "регулиров",
+            "ярк",
+            "покрой",
+            "сезон",
+            "застеж",
+            "застёж",
+            "форма",
+        )
+    ):
+        return True
     return any(marker in field_lower for marker in WB_GROUNDED_VALUE_FIELD_MARKERS)
 
 
@@ -734,6 +784,133 @@ def _infer_wb_kit(user_input: str, title: str) -> str:
         return ""
     product = _infer_product_name_for_kit(title, user_input)
     return f"{product}; USB-кабель"
+
+
+def _combined_context(user_input: str, title: str, category_profile: dict[str, Any] | None) -> str:
+    category = str((category_profile or {}).get("category") or "")
+    return f"{category} {user_input}".casefold()
+
+
+def _infer_wb_color(text: str) -> str:
+    color_patterns = (
+        (r"\bчерн\w*\b", "черный"),
+        (r"\bбел\w*\b", "белый"),
+        (r"\bсер\w*\b", "серый"),
+        (r"\bкрасн\w*\b", "красный"),
+        (r"\bсин\w*\b", "синий"),
+        (r"\bзелен\w*\b", "зеленый"),
+        (r"\bрозов\w*\b", "розовый"),
+        (r"\bбеж\w*\b", "бежевый"),
+        (r"\bкоричнев\w*\b", "коричневый"),
+        (r"\bпрозрачн\w*\b", "прозрачный"),
+    )
+    for pattern, value in color_patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return value
+    return ""
+
+
+def _infer_wb_gender(text: str) -> str:
+    if _mentions_any(text, (r"\bмужск\w*\b", r"\bдля мужчин\b")):
+        return "мужской"
+    if _mentions_any(text, (r"\bженск\w*\b", r"\bдля женщин\b")):
+        return "женский"
+    if _mentions_any(text, (r"\bдетск\w*\b", r"\bдля детей\b", r"\bмальчик\w*\b", r"\bдевочк\w*\b")):
+        return "детский"
+    return ""
+
+
+def _infer_wb_shoe_characteristics(
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> dict[str, str]:
+    text = _combined_context(user_input, title, category_profile)
+    if not _mentions_any(text, (r"\bобув\w*\b", r"\bкроссовк\w*\b", r"\bботинк\w*\b", r"\bтуфл\w*\b", r"\bсапог\w*\b", r"\bкед\w*\b")):
+        return {}
+
+    inferred: dict[str, str] = {}
+    if gender := _infer_wb_gender(text):
+        inferred["Пол"] = gender
+    if color := _infer_wb_color(text):
+        inferred["Цвет"] = color
+    if _mentions_any(text, (r"\bдемисезон\w*\b",)):
+        inferred["Сезон"] = "демисезон"
+    elif _mentions_any(text, (r"\bзим\w*\b",)):
+        inferred["Сезон"] = "зима"
+    elif _mentions_any(text, (r"\bлет\w*\b",)):
+        inferred["Сезон"] = "лето"
+    elif _mentions_any(text, (r"\bвсесезон\w*\b",)):
+        inferred["Сезон"] = "всесезонный"
+    if _mentions_any(text, (r"\bшнуровк\w*\b",)):
+        inferred["Вид застежки"] = "шнуровка"
+    elif _mentions_any(text, (r"\bмолни\w*\b",)):
+        inferred["Вид застежки"] = "молния"
+    elif _mentions_any(text, (r"\bлипучк\w*\b",)):
+        inferred["Вид застежки"] = "липучка"
+    return inferred
+
+
+def _infer_wb_beauty_characteristics(
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> dict[str, str]:
+    text = _combined_context(user_input, title, category_profile)
+    if not _mentions_any(text, (r"\bкрасот\w*\b", r"\bсыворотк\w*\b", r"\bкрем\w*\b", r"\bшампун\w*\b", r"\bбальзам\w*\b", r"\bмаск\w*\b", r"\bгель\w*\b")):
+        return {}
+
+    inferred: dict[str, str] = {}
+    if _mentions_any(text, (r"\bсыворотк\w*\b",)):
+        inferred["Тип"] = "сыворотка"
+    elif _mentions_any(text, (r"\bкрем\w*\b",)):
+        inferred["Тип"] = "крем"
+    elif _mentions_any(text, (r"\bшампун\w*\b",)):
+        inferred["Тип"] = "шампунь"
+    elif _mentions_any(text, (r"\bбальзам\w*\b",)):
+        inferred["Тип"] = "бальзам"
+    elif _mentions_any(text, (r"\bмаск\w*\b",)):
+        inferred["Тип"] = "маска"
+
+    volume_match = re.search(r"\b(\d+(?:[,.]\d+)?)\s*(мл|л)\b", text)
+    if volume_match:
+        inferred["Объем"] = f"{volume_match.group(1).replace(',', '.')} {volume_match.group(2)}"
+    if _mentions_any(text, (r"\bувлажн\w*\b",)):
+        inferred["Назначение"] = "увлажнение"
+    elif _mentions_any(text, (r"\bочищ\w*\b",)):
+        inferred["Назначение"] = "очищение"
+    elif _mentions_any(text, (r"\bпитан\w*\b",)):
+        inferred["Назначение"] = "питание"
+    elif _mentions_any(text, (r"\bвосстанов\w*\b",)):
+        inferred["Назначение"] = "восстановление"
+    return inferred
+
+
+def _infer_wb_home_electronics_characteristics(
+    user_input: str,
+    title: str,
+    category_profile: dict[str, Any] | None,
+) -> dict[str, str]:
+    text = _combined_context(user_input, title, category_profile)
+    if not _mentions_any(text, (r"\bламп\w*\b", r"\bсветильник\w*\b")):
+        return {}
+
+    inferred: dict[str, str] = {}
+    if color := _infer_wb_color(text):
+        inferred["Цвет"] = color
+    if _mentions_any(text, (r"\bled\b", r"\bсветодиод\w*\b")):
+        inferred["Тип лампы"] = "LED"
+    power_match = re.search(r"\b(\d+(?:[,.]\d+)?)\s*(w|вт|ватт)\b", text)
+    if power_match:
+        inferred["Мощность"] = f"{power_match.group(1).replace(',', '.')} Вт"
+    if _mentions_any(text, (r"\busb\b", r"\bюсб\b")):
+        inferred["Подключение"] = "USB"
+    elif _mentions_any(text, (r"\btype-c\b", r"\bтайп-с\b")):
+        inferred["Подключение"] = "Type-C"
+    height_match = re.search(r"\bвысот\w*\s*(\d+(?:[,.]\d+)?)\s*(см|мм|м)\b", text)
+    if height_match:
+        inferred["Высота"] = f"{height_match.group(1).replace(',', '.')} {height_match.group(2)}"
+    return inferred
 
 
 def _infer_wb_pet_food_characteristics(user_input: str) -> dict[str, str]:

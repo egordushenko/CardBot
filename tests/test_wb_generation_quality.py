@@ -520,3 +520,114 @@ def test_apply_wb_generation_quality_keeps_explicit_weight_from_input():
     )
 
     assert "Вес: 1 кг" in result.characteristics
+
+
+def test_apply_wb_generation_quality_drops_neckline_from_pants():
+    card = CardGeneration(
+        title="Брюки женские черные прямые",
+        description="Женские брюки прямого кроя для повседневных образов.",
+        keywords="",
+        characteristics=(
+            "Цвет: черный\n"
+            "Пол: женский\n"
+            "Покрой: прямой\n"
+            "Вырез горловины: круглый\n"
+            "Страна производства: Китай"
+        ),
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={
+            "category": "Женщинам / Одежда / Брюки",
+            "prompt_characteristics": ["Цвет", "Пол", "Покрой", "Вырез горловины", "Страна производства"],
+        },
+        user_input="Брюки женские черные прямого кроя",
+    )
+
+    assert "Цвет: черный" in result.characteristics
+    assert "Пол: женский" in result.characteristics
+    assert "Вырез горловины:" not in result.characteristics
+
+
+def test_apply_wb_generation_quality_uses_outerwear_composition_default():
+    card = CardGeneration(
+        title="Куртка мужская черная демисезонная",
+        description="Куртка для повседневной носки.",
+        keywords="",
+        characteristics="Цвет: черный\nСтрана производства: Китай",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Мужчинам / Одежда / Куртки"},
+        user_input="Куртка мужская черная демисезонная",
+    )
+
+    assert "Состав: полиэстер 100%" in result.characteristics
+    assert "Состав: хлопок 95%, эластан 5%" not in result.characteristics
+
+
+def test_apply_wb_generation_quality_infers_shoe_fields_from_input():
+    card = CardGeneration(
+        title="Кроссовки мужские черные демисезонные",
+        description="Кроссовки для повседневной носки.",
+        keywords="",
+        characteristics="Страна производства: Китай",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Обувь / Кроссовки"},
+        user_input="Кроссовки мужские черные демисезонные на шнуровке",
+    )
+
+    assert "Пол: мужской" in result.characteristics
+    assert "Цвет: черный" in result.characteristics
+    assert "Сезон: демисезон" in result.characteristics
+    assert "Вид застежки: шнуровка" in result.characteristics
+
+
+def test_apply_wb_generation_quality_infers_beauty_volume_and_type():
+    card = CardGeneration(
+        title="Сыворотка для лица гиалуроновая 30 мл",
+        description="Сыворотка для ухода за кожей лица.",
+        keywords="",
+        characteristics="Страна производства: Китай",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Красота / Уход за лицом"},
+        user_input="Сыворотка для лица гиалуроновая 30 мл увлажняющая",
+    )
+
+    assert "Тип: сыворотка" in result.characteristics
+    assert "Объем: 30 мл" in result.characteristics
+    assert "Назначение: увлажнение" in result.characteristics
+
+
+def test_apply_wb_generation_quality_infers_lamp_grounded_fields_from_input():
+    card = CardGeneration(
+        title="Настольная лампа LED белая USB",
+        description="Лампа для рабочего стола.",
+        keywords="",
+        characteristics="Страна производства: Китай",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        category_profile={"category": "Дом / Освещение"},
+        user_input="Настольная лампа LED белая USB мощность 5W высота 35 см",
+    )
+
+    assert "Цвет: белый" in result.characteristics
+    assert "Тип лампы: LED" in result.characteristics
+    assert "Мощность: 5 Вт" in result.characteristics
+    assert "Подключение: USB" in result.characteristics
+    assert "Высота: 35 см" in result.characteristics

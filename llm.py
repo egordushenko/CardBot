@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -231,11 +232,12 @@ def build_image_director_user_prompt(
     marketplace: str,
     photos_count: int,
     images_count: int,
+    photo_analyses: list[Any] | None = None,
 ) -> str:
     normalized = normalize_marketplace(marketplace)
     name = MARKETPLACE_NAMES[normalized]
     last_index = max(photos_count - 1, 0)
-    return (
+    prompt = (
         f"Товар: {product_description.strip()}\n"
         f"Маркетплейс: {name}\n"
         f"Загружено фото: {photos_count} (индексы от 0 до {last_index})\n"
@@ -244,6 +246,17 @@ def build_image_director_user_prompt(
         f"Каждая концепция должна иметь роль, композицию, текст и один конкретный photo_index. "
         f"Распредели {photos_count} фото по изображениям адаптивно."
     )
+    analysis_lines: list[str] = []
+    for analysis in photo_analyses or []:
+        photo_index = getattr(analysis, "photo_index", None)
+        tags = ", ".join(getattr(analysis, "tags", ()) or ())
+        usable_for = ", ".join(getattr(analysis, "usable_for", ()) or ())
+        details = ", ".join(item for item in (f"tags={tags}" if tags else "", f"usable_for={usable_for}" if usable_for else "") if item)
+        if photo_index is not None and details:
+            analysis_lines.append(f"- photo {photo_index}: {details}")
+    if analysis_lines:
+        prompt += "\n\nФото-анализ без распознавания текста:\n" + "\n".join(analysis_lines)
+    return prompt
 
 
 def _strip_markdown_fence(payload: str) -> str:
@@ -432,6 +445,7 @@ async def generate_image_prompts(
     if images_count < 1 or images_count > 7:
         raise LLMResponseError("images_count must be between 1 and 7")
 
+    from openai import AsyncOpenAI
     from visual_pipeline import build_image_concepts_from_plan, fallback_photo_analysis
 
     analyses = list(photo_analyses or [])
@@ -440,9 +454,48 @@ async def generate_image_prompts(
             fallback_photo_analysis(index, product_description, photos_count)
             for index in range(photos_count)
         ]
-    return build_image_concepts_from_plan(
-        product_description=product_description,
-        marketplace=marketplace,
-        images_count=images_count,
-        photo_analyses=analyses,
-    )
+    try:
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=OPENROUTER_BASE_URL,
+            timeout=30.0,
+            max_retries=1,
+            default_headers={
+                "HTTP-Referer": site_url,
+                "X-Title": "CardBot",
+            },
+        )
+        response = await request_chat_completion_with_fallback(
+            client,
+            model_candidates=build_openrouter_model_fallbacks(model),
+            messages=[
+                {"role": "system", "content": DIRECTOR_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": build_image_director_user_prompt(
+                        product_description=product_description,
+                        marketplace=marketplace,
+                        photos_count=photos_count,
+                        images_count=images_count,
+                        photo_analyses=analyses,
+                    ),
+                },
+            ],
+            max_tokens=2200,
+            temperature=0.7,
+            extra_body=OPENROUTER_NO_REASONING_BODY,
+        )
+        content = response.choices[0].message.content
+        return parse_image_concepts_payload(
+            content,
+            photos_count=photos_count,
+            images_count=images_count,
+        )
+    except Exception:
+        logging.warning("Image director failed, using deterministic fallback", exc_info=True)
+        return build_image_concepts_from_plan(
+            product_description=product_description,
+            marketplace=marketplace,
+            images_count=images_count,
+            photo_analyses=analyses,
+        )

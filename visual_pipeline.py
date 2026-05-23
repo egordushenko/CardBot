@@ -322,6 +322,35 @@ def _extract_overlay_facts(product_description: str) -> tuple[str, ...]:
     return tuple(result[:4])
 
 
+def _extract_clothing_overlay_facts(product_description: str) -> tuple[str, ...]:
+    text = product_description.casefold()
+    result: list[str] = []
+
+    def add(value: str) -> None:
+        if value and value not in result:
+            result.append(value)
+
+    cotton_match = re.search(r"100\s*%\s*(?:хлопок|cotton)", text, flags=re.IGNORECASE)
+    if cotton_match:
+        add("100% ХЛОПОК")
+    elif "хлопок" in text or "cotton" in text:
+        add("Хлопок в составе")
+
+    if _has_explicit_print(product_description):
+        if "спин" in text or "back" in text:
+            add("Принт на спине")
+        else:
+            add("Принт на ткани")
+    if "дышащ" in text or "breathable" in text:
+        add("Дышащая ткань")
+    if "облега" in text or "fitted" in text:
+        add("Облегающий крой")
+    if "свобод" in text or "oversize" in text:
+        add("Свободная посадка")
+
+    return tuple(result[:3])
+
+
 def _overlay_for_slide(profile: str, role: str, product_description: str, raw_overlay: tuple[str, ...]) -> tuple[str, ...]:
     cleaned: list[str] = []
     no_print = _has_explicit_no_print(product_description)
@@ -349,6 +378,15 @@ def _overlay_for_slide(profile: str, role: str, product_description: str, raw_ov
             cleaned = [closeup_fact] + [item for item in cleaned if item != closeup_fact]
 
     if profile == "clothing":
+        clothing_facts = list(_extract_clothing_overlay_facts(product_description))
+        if role == "hero":
+            cleaned = []
+        elif role in {"facts", "closeup"} and clothing_facts:
+            cleaned = clothing_facts + [item for item in cleaned if item not in clothing_facts]
+        elif role == "lifestyle_back" and has_print:
+            print_text = "Принт на спине" if "спин" in product_description.casefold() else "Принт на ткани"
+            cleaned = [print_text] + [item for item in cleaned if item != print_text]
+
         fallbacks = {
             "closeup": ("Ткань и швы",) if not has_print else ("Качество печати",),
             "lifestyle_back": ("Посадка со спины",) if not has_print else ("Принт на спине",),
@@ -789,24 +827,21 @@ def build_prompt_from_slide(
 ) -> str:
     profile = detect_visual_profile(product_description, marketplace)
     product_for_prompt = _sanitize_product_description_for_prompt(product_description, profile)
-    overlay = "; ".join(slide.overlay_text) if slide.overlay_text else "No overlay text unless it improves the slide."
-    constraints = "\n".join(f"- {item}" for item in slide.negative_constraints)
-    qa_checks = ", ".join(slide.qa_checks)
     marketplace_name = "Wildberries" if marketplace == "wb" else "Ozon"
+
+    overlay = "; ".join(slide.overlay_text) if slide.overlay_text else ""
+    overlay_part = f'Add text overlay: "{overlay}".' if overlay else ""
+
     return (
-        f"Create a 3:4 marketplace image for {marketplace_name}.\n"
-        f"PRODUCT: {product_for_prompt}\n"
-        f"SLIDE ROLE: {slide.role}\n"
-        f"REFERENCE PHOTO: use only photo {slide.source_photo_index}; do not merge details from other photos.\n"
-        f"COMPOSITION: {slide.composition}.\n"
-        f"BACKGROUND: {slide.background}; Do NOT use a pure white empty background.\n"
-        f"TEXT OVERLAY: {overlay}. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.\n"
-        f"{_visible_text_block(photo_analysis)}\n"
-        f"{_defects_block(photo_analysis)}\n"
-        f"NEGATIVE CONSTRAINTS:\n{constraints}\n"
-        f"QA TARGETS: {qa_checks}.\n"
-        "Make the image polished, commercial and ready for a marketplace gallery."
-    )
+        f"Professional marketplace card image for {marketplace_name}, 3:4 ratio.\n"
+        f"Product: {product_for_prompt}\n"
+        f"Slide role: {slide.role}. {slide.composition}.\n"
+        f"Background: {slide.background}.\n"
+        f"{overlay_part}\n"
+        f"Use reference photo {slide.source_photo_index} as product source. "
+        f"Preserve product appearance exactly: shape, color, print, texture. "
+        f"Make it polished and commercial."
+    ).strip()
 
 
 def build_image_concepts_from_plan(

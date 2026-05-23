@@ -333,3 +333,144 @@ def test_apply_ozon_generation_quality_drops_non_applicable_and_unknown_values()
     assert "Не применимо" not in result.characteristics
     assert "Не указан" not in result.characteristics
     assert "Партномер:" not in result.characteristics
+
+
+def test_apply_ozon_generation_quality_removes_unmentioned_brand_model_and_specs_from_title():
+    card = CardGeneration(
+        title="Смартфон Xiaomi Redmi Note 13 Pro 128 ГБ черный",
+        description="Смартфон Xiaomi Redmi Note 13 Pro с ярким экраном.",
+        keywords="#смартфон #xiaomi #redmi",
+        characteristics=(
+            "Тип: Смартфон\n"
+            "Цвет: черный\n"
+            "Встроенная память: 128 ГБ\n"
+            "Страна-изготовитель: Китай"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "category": "Электроника / Смартфоны",
+            "prompt_characteristics": ["Тип", "Цвет", "Встроенная память", "Страна-изготовитель"],
+        },
+        user_input="Смартфон черный 128 ГБ",
+    )
+
+    assert "Xiaomi" not in result.title
+    assert "Redmi" not in result.title
+    assert "Note" not in result.title
+    assert "13" not in result.title
+    assert "128 ГБ" in result.title
+    assert "Xiaomi" not in result.description
+    assert "Redmi" not in result.description
+
+
+def test_apply_ozon_generation_quality_drops_headphone_fields_from_smartphone():
+    card = CardGeneration(
+        title="Смартфон 128 ГБ черный",
+        description="Смартфон для связи и приложений.",
+        keywords="#смартфон",
+        characteristics=(
+            "Тип: Смартфон\n"
+            "Цвет: черный\n"
+            "Активное: да\n"
+            "Беспроводное: да\n"
+            "В ушной раковине: да\n"
+            "Наличие микрофона: Да\n"
+            "Тип беспроводной связи: Bluetooth\n"
+            "Конструкция наушников: Внутриканальные\n"
+            "Страна-изготовитель: Китай"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "category": "Электроника / Смартфоны",
+            "prompt_characteristics": [
+                "Тип",
+                "Цвет",
+                "Активное",
+                "Беспроводное",
+                "В ушной раковине",
+                "Наличие микрофона",
+                "Тип беспроводной связи",
+                "Конструкция наушников",
+                "Страна-изготовитель",
+            ],
+        },
+        user_input="Смартфон черный 128 ГБ",
+    )
+
+    assert "Тип: Смартфон" in result.characteristics
+    assert "Активное:" not in result.characteristics
+    assert "Беспроводное:" not in result.characteristics
+    assert "В ушной раковине:" not in result.characteristics
+    assert "Наличие микрофона:" not in result.characteristics
+    assert "Тип беспроводной связи:" not in result.characteristics
+    assert "Конструкция наушников:" not in result.characteristics
+
+
+def test_apply_ozon_generation_quality_remaps_clothing_gender_from_height_field():
+    card = CardGeneration(
+        title="Платье женское черное",
+        description="Платье для повседневных образов.",
+        keywords="#платье",
+        characteristics=(
+            "Тип: Платье\n"
+            "Цвет: черный\n"
+            "Рост: Женский\n"
+            "Страна-изготовитель: Россия"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "category": "Одежда / Платья",
+            "prompt_characteristics": ["Тип", "Цвет", "Рост", "Пол", "Страна-изготовитель"],
+        },
+        user_input="Платье женское черное",
+    )
+
+    assert "Пол: Женский" in result.characteristics
+    assert "Рост:" not in result.characteristics
+    assert "Страна-изготовитель: Китай" in result.characteristics
+
+
+def test_apply_ozon_generation_quality_drops_cleaning_fields_from_car_mats():
+    card = CardGeneration(
+        title="Коврики автомобильные EVA черные",
+        description="Коврики для салона автомобиля.",
+        keywords="#коврики #авто",
+        characteristics=(
+            "Тип: Коврики автомобильные\n"
+            "Материал: EVA\n"
+            "Цвет: черный\n"
+            "Особенности инвентаря для уборки: складная ручка\n"
+            "Страна-изготовитель: Китай"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "category": "Автотовары / Автоковрики",
+            "prompt_characteristics": [
+                "Тип",
+                "Материал",
+                "Цвет",
+                "Особенности инвентаря для уборки",
+                "Страна-изготовитель",
+            ],
+        },
+        user_input="Коврики автомобильные EVA черные для салона автомобиля",
+    )
+
+    assert "Тип: Коврики автомобильные" in result.characteristics
+    assert "Особенности инвентаря для уборки:" not in result.characteristics

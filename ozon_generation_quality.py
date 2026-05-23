@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from llm import CardGeneration
+from marketplace_rules import sanitize_description, sanitize_title
 from wb_generation_quality import parse_characteristics_text
 
 
@@ -111,6 +112,52 @@ OZON_PLACEHOLDER_VALUES = {
     "n/a",
 }
 
+OZON_BRAND_MODEL_TOKENS = (
+    "xiaomi",
+    "redmi",
+    "note",
+    "pro",
+    "samsung",
+    "galaxy",
+    "apple",
+    "iphone",
+    "huawei",
+    "honor",
+    "realme",
+    "oppo",
+    "vivo",
+    "sony",
+    "lg",
+    "philips",
+    "bosch",
+    "makita",
+    "dyson",
+    "lenovo",
+    "asus",
+    "acer",
+    "msi",
+)
+
+OZON_HEADPHONE_ONLY_FIELDS = {
+    "Активное",
+    "Беспроводное",
+    "В ушной раковине",
+    "Наличие микрофона",
+    "Тип беспроводной связи",
+    "Конструкция наушников",
+}
+
+OZON_CLEANING_ONLY_FIELD_MARKERS = (
+    "инвентаря для уборки",
+    "щетк",
+    "швабр",
+    "губк",
+)
+
+OZON_AUDIO_CONTEXT_RE = re.compile(r"\b(наушник\w*|гарнитур\w*|колонк\w*|аудио|микрофон\w*)\b", re.IGNORECASE)
+OZON_CLEANING_CONTEXT_RE = re.compile(r"\b(уборк\w*|мыть\w*|чистк\w*|щетк\w*|швабр\w*|губк\w*)\b", re.IGNORECASE)
+OZON_GENDER_VALUE_RE = re.compile(r"\b(женск\w*|мужск\w*|детск\w*)\b", re.IGNORECASE)
+
 
 def _format_characteristics(fields: dict[str, str]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in fields.items()).strip()
@@ -175,6 +222,45 @@ def _mentions_any(text: str, patterns: tuple[str, ...]) -> bool:
 
 def _number_tokens(text: str) -> set[str]:
     return {item.replace(",", ".") for item in re.findall(r"\d+(?:[,.]\d+)?", text)}
+
+
+def _cleanup_text_spacing(value: str) -> str:
+    value = re.sub(r"\s+", " ", value)
+    value = re.sub(r"\s+([,.;:])", r"\1", value)
+    value = re.sub(r"([,.;:]){2,}", r"\1", value)
+    return value.strip(" ,.;:-")
+
+
+def _remove_unmentioned_brand_model_tokens(text: str, user_input: str) -> str:
+    user_lower = user_input.casefold()
+    cleaned = text
+    for token in OZON_BRAND_MODEL_TOKENS:
+        if token in user_lower:
+            continue
+        cleaned = re.sub(rf"(?iu)(?<![\w-]){re.escape(token)}(?![\w-])", " ", cleaned)
+    user_numbers = _number_tokens(user_input.casefold())
+
+    def replace_numeric(match: re.Match[str]) -> str:
+        number = match.group(0).replace(",", ".")
+        return match.group(0) if number in user_numbers else " "
+
+    cleaned = re.sub(r"(?<![\w.,])\d+(?:[,.]\d+)?(?![\w.,])", replace_numeric, cleaned)
+    return _cleanup_text_spacing(cleaned)
+
+
+def _sanitize_ozon_generated_text(text: str, user_input: str, *, is_title: bool) -> str:
+    cleaned = _remove_unmentioned_brand_model_tokens(text, user_input)
+    return sanitize_title(cleaned, "ozon") if is_title else sanitize_description(cleaned, "ozon")
+
+
+def _is_contextually_wrong_field(field: str, user_input: str, title: str, category_profile: dict[str, Any] | None) -> bool:
+    field_lower = field.casefold()
+    context = f"{user_input} {title} {(category_profile or {}).get('category') or ''}".casefold()
+    if field in OZON_HEADPHONE_ONLY_FIELDS and not OZON_AUDIO_CONTEXT_RE.search(context):
+        return True
+    if any(marker in field_lower for marker in OZON_CLEANING_ONLY_FIELD_MARKERS) and not OZON_CLEANING_CONTEXT_RE.search(context):
+        return True
+    return False
 
 
 def _user_mentions_field(user_input: str, field: str) -> bool:
@@ -364,7 +450,12 @@ def apply_ozon_generation_quality(
             else:
                 normalized[clean_key] = OZON_DEFAULT_COUNTRY
             continue
+        if clean_key == "Рост" and OZON_GENDER_VALUE_RE.search(clean_value):
+            normalized["Пол"] = clean_value
+            continue
         if _is_placeholder_value(clean_value):
+            continue
+        if _is_contextually_wrong_field(clean_key, user_input, card.title, category_profile):
             continue
         if _is_blocked_field(clean_key) and not _user_mentions_field(user_input, clean_key):
             continue
@@ -390,8 +481,8 @@ def apply_ozon_generation_quality(
         normalized.setdefault(key, value)
 
     return CardGeneration(
-        title=card.title,
-        description=card.description,
+        title=_sanitize_ozon_generated_text(card.title, user_input, is_title=True),
+        description=_sanitize_ozon_generated_text(card.description, user_input, is_title=False),
         keywords=_trim_ozon_hashtags(card.keywords),
         characteristics=_format_characteristics(normalized),
         tokens_used=card.tokens_used,

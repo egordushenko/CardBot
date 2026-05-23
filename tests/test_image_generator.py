@@ -8,8 +8,6 @@ from image_generator import (
     GeneratedImage,
     ImageGenerationError,
     ImageGenerationUsage,
-    PRODUCT_PRESERVATION_SUFFIX,
-    build_safe_image_prompt,
     extract_openrouter_image_bytes,
     extract_openrouter_image_usage,
 )
@@ -70,17 +68,6 @@ def test_extract_openrouter_image_usage_reads_model_and_cost():
     assert usage.cost_usd == 0.200231
 
 
-def test_build_safe_image_prompt_appends_product_preservation_rules():
-    prompt = build_safe_image_prompt("Show product on white background")
-
-    assert prompt.startswith("Show product on white background")
-    assert PRODUCT_PRESERVATION_SUFFIX in prompt
-    assert "Do NOT add any buttons" in prompt
-    assert "Preserve exact product geometry" in prompt
-    assert "Do NOT squash, stretch, compress or elongate the product" in prompt
-    assert "Preserve original product color and material texture" in prompt
-
-
 def test_generate_single_image_sends_safe_prompt_to_api(monkeypatch):
     captured = {}
 
@@ -133,11 +120,11 @@ def test_generate_single_image_sends_safe_prompt_to_api(monkeypatch):
 
     sent_text = captured["payload"]["messages"][0]["content"][1]["text"]
     assert result == b"png"
-    assert sent_text.startswith("Original prompt")
-    assert PRODUCT_PRESERVATION_SUFFIX in sent_text
+    assert sent_text == "Original prompt"
+    assert "STRICT PRODUCT PRESERVATION RULES" not in sent_text
 
 
-def test_generate_marketplace_image_result_blocks_failed_quality_check(monkeypatch):
+def test_generate_marketplace_image_result_keeps_image_on_failed_quality_check(monkeypatch):
     class FakeFile:
         async def download_as_bytearray(self):
             return bytearray(b"reference")
@@ -170,15 +157,16 @@ def test_generate_marketplace_image_result_blocks_failed_quality_check(monkeypat
         fake_evaluate_generated_image_quality,
     )
 
-    with pytest.raises(ImageGenerationError, match="image QA failed: print_mismatch"):
-        asyncio.run(
-            image_generator.generate_marketplace_image_result(
-                prompt="Prompt",
-                reference_photo_file_id="file-id",
-                bot=FakeBot(),
-                api_key="key",
-                model="image-model",
-                quality_model="vision-model",
-                quality_enabled=True,
-            )
+    result = asyncio.run(
+        image_generator.generate_marketplace_image_result(
+            prompt="Prompt",
+            reference_photo_file_id="file-id",
+            bot=FakeBot(),
+            api_key="key",
+            model="image-model",
+            quality_model="vision-model",
+            quality_enabled=True,
         )
+    )
+    assert result.image_bytes == b"generated"
+    assert result.usage.model == "image-model"
