@@ -81,6 +81,7 @@ IMAGE_COUNT_OPTIONS = (1, 3, 5, 7)
 HOME_CALLBACK = "action:home"
 HOME_BUTTON_TEXT = "🏠 Главная"
 BACK_BUTTON_TEXT = "⬅️ Назад"
+COMBO_PACKAGE_BUTTON_TEXT = "🗂 Комбо: карточки + изображения"
 REPLY_ACTIONS = {
     "⚡ Сгенерировать карточку": "generate",
     "💳 Купить генерации": "buy",
@@ -160,7 +161,7 @@ def build_persistent_main_keyboard() -> Any:
         ["⚡ Сгенерировать карточку"],
         ["💳 Купить генерации", "📊 Мой баланс"],
         ["📋 Мои шаблоны", "📋 История"],
-        ["❓ Помощь", HOME_BUTTON_TEXT],
+        ["❓ Помощь"],
     ]
     try:
         from telegram import ReplyKeyboardMarkup
@@ -224,7 +225,7 @@ def _combo_payment_button(text_count: int, images_per_card: int) -> Any:
 def build_buy_keyboard(show_first_image_promo: bool = False) -> Any:
     return _keyboard(
         [
-            [_button("Комбо: карточки + изображения", "action:buy_combo")],
+            [_button(COMBO_PACKAGE_BUTTON_TEXT, "action:buy_combo")],
             [_button("Только карточки", "action:buy_text")],
             [_button("Только изображения", "action:buy_images")],
             [_home_button()],
@@ -257,7 +258,7 @@ def build_combo_photo_count_keyboard(text_count: int) -> Any:
 def build_balance_keyboard() -> Any:
     return _keyboard(
         [
-            [_button("Комбо: карточки + изображения", "action:buy_combo")],
+            [_button(COMBO_PACKAGE_BUTTON_TEXT, "action:buy_combo")],
             [
                 _button("💳 Купить текстовые", "action:buy_text"),
                 _button("💳 Купить изображения", "action:buy_images"),
@@ -479,7 +480,8 @@ def build_templates_keyboard(
     page: int,
     total: int,
 ) -> Any:
-    rows = [[_button(template["name"], f"template_use:{template['id']}")] for template in templates]
+    rows = [[_button("➕ Создать новый шаблон", "template_new")]]
+    rows.extend([[_button(template["name"], f"template_use:{template['id']}")] for template in templates])
     nav_row: list[Any] = []
     if page > 0:
         nav_row.append(_button("← Назад", f"templates_page:{page - 1}"))
@@ -490,6 +492,10 @@ def build_templates_keyboard(
     rows.append([_button("🗑 Удалить шаблон", f"templates_delete:{page}")])
     rows.append([_home_button()])
     return _keyboard(rows)
+
+
+def build_empty_templates_keyboard() -> Any:
+    return _keyboard([[_button("➕ Создать новый шаблон", "template_new")], [_home_button()]])
 
 def build_templates_delete_keyboard(
     templates: list[dict[str, Any]],
@@ -956,7 +962,10 @@ async def _show_templates(message: Any, context: Any, user_id: int, page: int = 
     )
     context.user_data["template_page"] = page
     if not templates:
-        await message.reply_text("📋 У вас пока нет шаблонов.")
+        await message.reply_text(
+            "📋 У вас пока нет шаблонов.",
+            reply_markup=build_empty_templates_keyboard(),
+        )
         return
 
     lines = [f"📋 Ваши шаблоны ({total} из {TEMPLATES_LIMIT}):", ""]
@@ -1004,6 +1013,15 @@ async def _start_image_flow(message: Any, context: Any, user_id: int) -> None:
     context.user_data["generation_step"] = "marketplace"
     await message.reply_text(
         MARKETPLACE_PROMPT,
+        reply_markup=build_marketplace_keyboard(),
+    )
+
+
+async def _start_new_template_flow(message: Any, context: Any) -> None:
+    _clear_image_session(context)
+    context.user_data["generation_step"] = "marketplace"
+    await message.reply_text(
+        "Выберите маркетплейс для нового шаблона:",
         reply_markup=build_marketplace_keyboard(),
     )
 
@@ -2223,6 +2241,8 @@ async def handle_callback(update: Any, context: Any) -> None:
         except ValueError:
             page = 0
         await _show_templates_delete_list(query.message, context, user_id, page=page)
+    elif data == "template_new":
+        await _start_new_template_flow(query.message, context)
     elif data.startswith("template_use:"):
         if user_id is None:
             return
@@ -2323,17 +2343,7 @@ async def post_init(application: Any) -> None:
         robokassa_password2=settings.robokassa_password2,
         port=settings.cardbot_webhook_port,
     )
-    await application.bot.set_my_commands(
-        [
-            ("start", "Главное меню"),
-            ("generate", "Сгенерировать карточку"),
-            ("balance", "Показать баланс"),
-            ("templates", "Мои шаблоны"),
-            ("history", "Последние 5 генераций"),
-            ("buy", "Купить генерации"),
-            ("help", "Помощь"),
-        ]
-    )
+    await application.bot.delete_my_commands()
 
 
 async def post_shutdown(application: Any) -> None:

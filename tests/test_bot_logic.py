@@ -167,6 +167,7 @@ def test_template_keyboards_use_owner_safe_callbacks():
 
     assert "template_use:11" in list_callbacks
     assert "template_use:12" in list_callbacks
+    assert "template_new" in list_callbacks
     assert "templates_page:1" in list_callbacks
     assert "templates_delete:0" in list_callbacks
     assert details_callbacks == ["template_run:11", "template_edit:11", "template_delete:11", "action:home"]
@@ -284,6 +285,7 @@ def test_balance_keyboard_offers_both_package_types():
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
     assert callbacks == ["action:buy_combo", "action:buy_text", "action:buy_images", "action:home"]
+    assert keyboard.inline_keyboard[0][0].text.startswith("🗂")
 
 
 def test_help_message_contains_contact_and_offer_link_button():
@@ -303,6 +305,7 @@ def test_buy_keyboard_starts_with_package_categories():
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
     assert callbacks == ["action:buy_combo", "action:buy_text", "action:buy_images", "action:home"]
+    assert keyboard.inline_keyboard[0][0].text.startswith("🗂")
     assert all(not callback.startswith("buy:") for callback in callbacks)
 
 
@@ -362,6 +365,7 @@ def test_persistent_reply_keyboard_routes_primary_actions():
     labels = [label for row in keyboard.keyboard for label in row]
 
     assert classify_reply_action(labels[0]) == "generate"
+    assert "\U0001f3e0 \u0413\u043b\u0430\u0432\u043d\u0430\u044f" not in labels
     assert classify_reply_action("\u0413\u043b\u0430\u0432\u043d\u0430\u044f") == "home"
     assert classify_reply_action("\U0001f3e0 \u0413\u043b\u0430\u0432\u043d\u0430\u044f") == "home"
     assert classify_reply_action("\u043e\u0431\u044b\u0447\u043d\u044b\u0439 \u0442\u043e\u0432\u0430\u0440") is None
