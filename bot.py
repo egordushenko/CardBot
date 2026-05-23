@@ -22,7 +22,8 @@ from category_profiles import (
 from core.field_resolver import resolve_fields
 from db import Database, UsageMode
 from image_generator import (
-    generate_marketplace_multi_reference_image_result,
+    ImageBatchConcept,
+    generate_marketplace_batch_image_results,
 )
 from llm import (
     CardGeneration,
@@ -1932,62 +1933,56 @@ async def _generate_and_send_image_concepts(
         )
     )
 
-    async def process_concept(concept: ImageConcept) -> dict[str, Any]:
-        try:
-            image_result = await asyncio.wait_for(
-                generate_marketplace_multi_reference_image_result(
-                    prompt=str(concept.prompt),
-                    reference_photo_file_ids=photo_file_ids,
-                    bot=context.bot,
-                    api_key=settings.openrouter_api_key,
-                    model=settings.gpt_image_model,
-                    site_url=settings.site_url,
-                ),
-                timeout=420,
-            )
-        except Exception as exc:
-            return {
-                "ok": False,
-                "image_index": int(concept.image_index),
-                "reason": classify_generation_error(exc),
-                "error": exc,
-            }
-        return {
-            "ok": True,
-            "image_index": int(concept.image_index),
-            "purpose": concept.purpose,
-            "prompt_used": concept.prompt,
-            "image_bytes": image_result.image_bytes,
-            "model": image_result.usage.model,
-            "cost_usd": image_result.usage.cost_usd,
-        }
-
-    tasks = [asyncio.create_task(process_concept(concept)) for concept in concepts]
+    batch_results = []
     try:
-        for completed in asyncio.as_completed(tasks):
-            result = await completed
-            if not result["ok"]:
-                logging.warning(
-                    "Image generation failed image_index=%s reason=%s: %s",
-                    result["image_index"],
-                    result["reason"],
-                    result["error"],
-                )
-                if result["reason"] in {"api_balance", "429"}:
-                    await message.reply_text(generation_error_message(result["reason"]))
-                else:
-                    await message.reply_text(
-                        f"Изображение {result['image_index']}/{total_count} не удалось сгенерировать."
+        batch_results = await asyncio.wait_for(
+            generate_marketplace_batch_image_results(
+                concepts=[
+                    ImageBatchConcept(
+                        image_index=int(concept.image_index),
+                        purpose=str(concept.purpose),
+                        prompt=str(concept.prompt),
                     )
-                continue
-
-            generated_count += 1
-            try:
-                image_record = await _send_generated_image_result(message, result)
-            except Exception as exc:
-                logging.warning("Failed to send generated image %s: %s", result["image_index"], exc)
+                    for concept in concepts
+                ],
+                reference_photo_file_ids=photo_file_ids,
+                bot=context.bot,
+                api_key=settings.openrouter_api_key,
+                model=settings.gpt_image_model,
+                site_url=settings.site_url,
+            ),
+            timeout=420,
+        )
+    except Exception as exc:
+        reason = classify_generation_error(exc)
+        logging.warning("Batch image generation failed reason=%s: %s", reason, exc)
+        if reason in {"api_balance", "429"}:
+            await message.reply_text(generation_error_message(reason))
+        else:
+            for concept in concepts:
                 await message.reply_text(
-                    f"Изображение {result['image_index']}/{total_count} не удалось отправить."
+                    f"Изображение {int(concept.image_index)}/{total_count} не удалось сгенерировать."
+                )
+    else:
+        generated_count = len(batch_results)
+        for concept, image_result in zip(concepts, batch_results):
+            image_index = int(concept.image_index)
+            try:
+                image_record = await _send_generated_image_result(
+                    message,
+                    {
+                        "image_index": image_index,
+                        "purpose": concept.purpose,
+                        "prompt_used": concept.prompt,
+                        "image_bytes": image_result.image_bytes,
+                        "model": image_result.usage.model,
+                        "cost_usd": image_result.usage.cost_usd,
+                    },
+                )
+            except Exception as exc:
+                logging.warning("Failed to send generated image %s: %s", image_index, exc)
+                await message.reply_text(
+                    f"Изображение {image_index}/{total_count} не удалось отправить."
                 )
                 continue
             generated.append(image_record)
@@ -1999,14 +1994,6 @@ async def _generate_and_send_image_concepts(
     finally:
         stop_progress.set()
         await progress_task
-        for task in tasks:
-            if task.done():
-                with suppress(Exception):
-                    task.result()
-                continue
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
 
     return generated
 
