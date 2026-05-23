@@ -59,7 +59,10 @@ MODE_PROMPT = (
     "Тратит 1 текстовую генерацию.\n\n"
     "🖼 «Текст + изображения»\n"
     "Всё выше плюс изображения для карточки.\n"
-    "Тратит 1 текстовую генерацию + N изображений."
+    "Тратит 1 текстовую генерацию + N изображений.\n\n"
+    "🖼 «Только изображения»\n"
+    "Изображения для карточки по описанию и фото товара.\n"
+    "Тратит только изображения."
 )
 IMAGE_DESCRIPTION_PROMPT = (
     "📝 Опишите товар\n\n"
@@ -316,6 +319,7 @@ def build_generation_mode_keyboard() -> Any:
                 _button("📝 Только текст", "mode:text_only"),
                 _button("📝🖼 Текст + изображения", "mode:text_and_images"),
             ],
+            [_button("🖼 Только изображения", "mode:images_only")],
             _nav_row("action:generate"),
         ]
     )
@@ -419,6 +423,10 @@ def is_allowed_image_count(images_count: int) -> bool:
     return images_count in IMAGE_COUNT_OPTIONS
 
 
+def should_generate_text_with_images(mode: str | None) -> bool:
+    return mode == "text_and_images"
+
+
 def build_after_generation_keyboard() -> Any:
     return _keyboard(
         [
@@ -464,7 +472,11 @@ def format_marketplace(marketplace: str) -> str:
 
 
 def format_template_mode(mode: str) -> str:
-    return "Текст + изображения" if mode == "text_and_images" else "Только текст"
+    if mode == "text_and_images":
+        return "Текст + изображения"
+    if mode == "images_only":
+        return "Только изображения"
+    return "Только текст"
 
 
 def format_template_description_preview(description: str, limit: int = 100) -> str:
@@ -1043,7 +1055,7 @@ async def _start_new_template_flow(message: Any, context: Any) -> None:
 async def _handle_image_description(update: Any, context: Any, user_input: str) -> bool:
     if context.user_data.get("generation_step") != "description":
         return False
-    if context.user_data.get("mode") != "text_and_images":
+    if context.user_data.get("mode") not in {"text_and_images", "images_only"}:
         return False
 
     if len(user_input) < 3:
@@ -1255,6 +1267,14 @@ async def _generate_images_for_user(
         f"✅ Готово: {len(generated)} изображений для карточки.\n"
         f"Остаток: {image_balance} изображений.",
         reply_markup=build_after_image_generation_keyboard(),
+    )
+    _store_last_generation(
+        context,
+        marketplace=marketplace,
+        mode="images_only",
+        description=product_description,
+        photo_file_ids=photo_file_ids,
+        images_count=images_count,
     )
     _clear_image_session(context)
 
@@ -1906,10 +1926,10 @@ async def _handle_repeat_changes(update: Any, context: Any, user_id: int, user_i
 
     combined_description = combine_repeat_description(previous["description"], user_input)
     marketplace = previous["marketplace"]
-    if previous["mode"] == "text_and_images":
+    if previous["mode"] in {"text_and_images", "images_only"}:
         context.user_data["repeat_pending_generation"] = {
             "marketplace": marketplace,
-            "mode": "text_and_images",
+            "mode": previous["mode"],
             "description": combined_description,
             "photo_file_ids": list(previous.get("photo_file_ids") or []),
             "images_count": previous.get("images_count") or 1,
@@ -1945,7 +1965,7 @@ async def _run_last_generation_with_images(
             "В шаблоне нет сохранённых фото. Загрузите новые фото для генерации."
         )
         context.user_data["marketplace"] = generation["marketplace"]
-        context.user_data["mode"] = "text_and_images"
+        context.user_data["mode"] = generation["mode"]
         context.user_data["img_description"] = generation["description"]
         context.user_data["img_photos"] = []
         context.user_data["generation_step"] = "photos"
@@ -1954,7 +1974,7 @@ async def _run_last_generation_with_images(
         return
 
     context.user_data["marketplace"] = generation["marketplace"]
-    context.user_data["mode"] = "text_and_images"
+    context.user_data["mode"] = generation["mode"]
     context.user_data["img_description"] = generation["description"]
     context.user_data["img_photos"] = photo_file_ids
     if not is_allowed_image_count(images_count):
@@ -1966,7 +1986,10 @@ async def _run_last_generation_with_images(
         )
         return
     context.user_data["img_count"] = images_count
-    await _generate_text_and_images_for_user(update, context, user_id, images_count)
+    if should_generate_text_with_images(generation["mode"]):
+        await _generate_text_and_images_for_user(update, context, user_id, images_count)
+    else:
+        await _generate_images_for_user(update, context, user_id, images_count)
 
 
 async def _run_saved_generation(
@@ -1975,7 +1998,7 @@ async def _run_saved_generation(
     user_id: int,
     generation: dict[str, Any],
 ) -> None:
-    if generation["mode"] == "text_and_images":
+    if generation["mode"] in {"text_and_images", "images_only"}:
         await _run_last_generation_with_images(update, context, user_id, generation)
         return
 
@@ -2109,14 +2132,14 @@ async def handle_callback(update: Any, context: Any) -> None:
         )
     elif data.startswith("mode:"):
         mode = data.split(":", 1)[1]
-        if mode not in {"text_only", "text_and_images"}:
+        if mode not in {"text_only", "text_and_images", "images_only"}:
             await query.message.reply_text(
                 MODE_PROMPT,
                 reply_markup=build_generation_mode_keyboard(),
             )
             return
         context.user_data["mode"] = mode
-        if mode == "text_and_images":
+        if mode in {"text_and_images", "images_only"}:
             user = update.effective_user
             if user is None:
                 return
@@ -2169,7 +2192,10 @@ async def handle_callback(update: Any, context: Any) -> None:
                 )
                 return
             context.user_data["img_count"] = images_count
-            await _generate_text_and_images_for_user(update, context, user.id, images_count)
+            if should_generate_text_with_images(context.user_data.get("mode")):
+                await _generate_text_and_images_for_user(update, context, user.id, images_count)
+            else:
+                await _generate_images_for_user(update, context, user.id, images_count)
             return
         context.user_data["generation_step"] = "count"
         user = update.effective_user
@@ -2206,7 +2232,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             )
             return
         context.user_data["img_count"] = images_count
-        if context.user_data.get("mode") == "text_and_images":
+        if should_generate_text_with_images(context.user_data.get("mode")):
             await _generate_text_and_images_for_user(update, context, user.id, images_count)
         else:
             await _generate_images_for_user(update, context, user.id, images_count)
@@ -2275,7 +2301,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         if repeat_mode == "new_photos":
             context.user_data["marketplace"] = pending["marketplace"]
-            context.user_data["mode"] = "text_and_images"
+            context.user_data["mode"] = pending["mode"]
             context.user_data["img_description"] = pending["description"]
             context.user_data["img_photos"] = []
             context.user_data["generation_step"] = "photos"

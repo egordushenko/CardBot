@@ -46,6 +46,10 @@ from bot import (
     classify_reply_action,
     extract_image_file_id,
     format_template_description_preview,
+    format_template_mode,
+    handle_callback,
+    _handle_image_description,
+    should_generate_text_with_images,
     _handle_new_template_text,
     _handle_new_template_name,
     is_allowed_image_count,
@@ -276,12 +280,18 @@ def test_new_template_flow_collects_name_then_saves_text_without_generation():
 
     asyncio.run(run_flow())
 
-def test_generation_mode_keyboard_offers_text_and_combined_modes():
+def test_generation_mode_keyboard_offers_text_combined_and_image_only_modes():
     keyboard = build_generation_mode_keyboard()
 
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert callbacks == ["mode:text_only", "mode:text_and_images", "action:generate", "action:home"]
+    assert callbacks == [
+        "mode:text_only",
+        "mode:text_and_images",
+        "mode:images_only",
+        "action:generate",
+        "action:home",
+    ]
 
 
 def test_generation_mode_prompt_separates_options_visually():
@@ -292,8 +302,21 @@ def test_generation_mode_prompt_separates_options_visually():
         "Тратит 1 текстовую генерацию.\n\n"
         "🖼 «Текст + изображения»\n"
         "Всё выше плюс изображения для карточки.\n"
-        "Тратит 1 текстовую генерацию + N изображений."
+        "Тратит 1 текстовую генерацию + N изображений.\n\n"
+        "🖼 «Только изображения»\n"
+        "Изображения для карточки по описанию и фото товара.\n"
+        "Тратит только изображения."
     )
+
+
+def test_images_only_mode_is_named_for_templates():
+    assert format_template_mode("images_only") == "Только изображения"
+
+
+def test_generation_dispatch_separates_image_only_from_combined_mode():
+    assert should_generate_text_with_images("text_and_images") is True
+    assert should_generate_text_with_images("images_only") is False
+    assert should_generate_text_with_images("text_only") is False
 
 
 def test_primary_prompts_use_clear_visual_blocks():
@@ -370,6 +393,83 @@ def test_image_keyboards_follow_spec_callbacks():
     assert is_allowed_image_count(9) is False
     assert packages_keyboard.inline_keyboard[0][0].callback_data == "buy:addon_img_20"
     assert after_keyboard.inline_keyboard[0][0].callback_data == "action:generate"
+
+
+class _FakeCallbackQuery:
+    def __init__(self, data):
+        self.data = data
+        self.message = _FakeMessage()
+        self.answers = []
+
+    async def answer(self, *args, **kwargs):
+        self.answers.append((args, kwargs))
+
+
+class _FakeUser:
+    id = 123
+    username = "seller"
+    first_name = "Егор"
+
+
+class _FakeCallbackUpdate:
+    def __init__(self, data):
+        self.callback_query = _FakeCallbackQuery(data)
+        self.effective_user = _FakeUser()
+        self.effective_message = self.callback_query.message
+
+
+class _FakeImageModeDb:
+    async def upsert_user(self, *args, **kwargs):
+        return None
+
+    async def get_image_balance(self, user_id):
+        return 3
+
+
+class _FakeImageModeApplication:
+    def __init__(self, db):
+        self.bot_data = {"db": db}
+
+
+class _FakeImageModeContext:
+    def __init__(self, db):
+        self.user_data = {"marketplace": "wb", "generation_step": "mode"}
+        self.application = _FakeImageModeApplication(db)
+
+
+def test_images_only_mode_routes_to_description_without_text_generation():
+    async def run_flow():
+        context = _FakeImageModeContext(_FakeImageModeDb())
+        update = _FakeCallbackUpdate("mode:images_only")
+
+        await handle_callback(update, context)
+
+        assert context.user_data["mode"] == "images_only"
+        assert context.user_data["generation_step"] == "description"
+        assert update.callback_query.message.replies[-1][0] == IMAGE_DESCRIPTION_PROMPT
+
+    asyncio.run(run_flow())
+
+
+def test_images_only_description_step_moves_to_photo_upload():
+    async def run_flow():
+        context = _FakeTemplateContext(_FakeTemplateDb())
+        context.user_data["generation_step"] = "description"
+        context.user_data["mode"] = "images_only"
+        update = _FakeUpdate("Часы песочные, черное основание")
+
+        handled = await _handle_image_description(
+            update,
+            context,
+            "Часы песочные, черное основание",
+        )
+
+        assert handled is True
+        assert context.user_data["img_description"] == "Часы песочные, черное основание"
+        assert context.user_data["generation_step"] == "photos"
+        assert update.effective_message.replies[-1][0] == IMAGE_PHOTO_PROMPT
+
+    asyncio.run(run_flow())
 
 
 def test_image_count_prompt_shows_current_balance():
