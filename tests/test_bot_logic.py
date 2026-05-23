@@ -357,7 +357,7 @@ def test_start_help_and_balance_messages_are_scannable():
     assert build_start_message("Егор") == (
         "Здравствуйте, Егор.\n\n"
         "🛒 Я помогу подготовить карточку товара для Wildberries и Ozon.\n\n"
-        "На старте доступно 3 бесплатные текстовые генерации."
+        "На старте доступно 5 бесплатных текстовых генераций."
     )
 
     help_text = build_help_message()

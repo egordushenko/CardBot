@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Any
 
 
-TRIAL_GENERATIONS = 3
+TRIAL_GENERATIONS = 5
 
 PACKAGES = {
     "starter": {

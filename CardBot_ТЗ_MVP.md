@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS payments (
 ## Пакеты и триал
 
 ```python
-TRIAL_GENERATIONS = 3  # бесплатных генераций при старте
+TRIAL_GENERATIONS = 5  # бесплатных генераций при старте
 
 PACKAGES = {
     'starter': {
@@ -327,7 +327,7 @@ SITE_URL=https://alterega.ru
 CARDBOT_RESULT_URL=https://alterega.ru/api/payment/robokassa/cardbot-result
 
 # Bot settings
-TRIAL_GENERATIONS=3
+TRIAL_GENERATIONS=5
 ```
 
 ---

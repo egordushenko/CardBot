@@ -10,7 +10,7 @@ class Settings:
     bot_token: str
     openrouter_api_key: str
     cardbot_db_url: str
-    trial_generations: int = 3
+    trial_generations: int = 5
     openrouter_model: str = "deepseek/deepseek-v4-flash"
     gpt_image_model: str = "openai/gpt-5.4-image-2"
     site_url: str = "https://alterega.ru"
@@ -76,7 +76,7 @@ def load_settings(load_dotenv_files: bool = True) -> Settings:
             defaults,
             "postgresql://cardbot_user:password@127.0.0.1:5432/cardbot",
         ),
-        trial_generations=int(_env("TRIAL_GENERATIONS", defaults, "3")),
+        trial_generations=int(_env("TRIAL_GENERATIONS", defaults, "5")),
         openrouter_model=_normalize_openrouter_model(
             _env("OPENROUTER_MODEL", defaults, "deepseek/deepseek-v4-flash")
         ),

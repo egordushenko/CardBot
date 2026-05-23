@@ -709,7 +709,7 @@ def build_balance_message(
     trial_used: int,
     balance: int,
     image_balance: int = 0,
-    trial_generations: int = 3,
+    trial_generations: int = 5,
 ) -> str:
     free_left = max(trial_generations - trial_used, 0)
     text_balance = free_left + balance
@@ -744,12 +744,12 @@ def build_help_message() -> str:
 def build_help_keyboard(offer_url: str) -> Any:
     return _keyboard([[_url_button("Публичная оферта", offer_url)], [_home_button()]])
 
-def build_start_message(first_name: str | None) -> str:
+def build_start_message(first_name: str | None, trial_generations: int = 5) -> str:
     name = f", {first_name}" if first_name else ""
     return (
         f"Здравствуйте{name}.\n\n"
         "🛒 Я помогу подготовить карточку товара для Wildberries и Ozon.\n\n"
-        "На старте доступно 3 бесплатные текстовые генерации."
+        f"На старте доступно {trial_generations} бесплатных текстовых генераций."
     )
 
 
@@ -861,8 +861,9 @@ def _reset_navigation_state(context: Any) -> None:
 
 async def _show_home(message: Any, context: Any, first_name: str | None = None) -> None:
     _reset_navigation_state(context)
+    settings = _get_settings(context)
     await message.reply_text(
-        build_start_message(first_name),
+        build_start_message(first_name, settings.trial_generations),
         reply_markup=build_main_menu(),
     )
 
@@ -934,8 +935,9 @@ async def start(update: Any, context: Any) -> None:
     if user_id is None:
         return
     user = update.effective_user
+    settings = _get_settings(context)
     await update.effective_message.reply_text(
-        build_start_message(user.first_name if user else None),
+        build_start_message(user.first_name if user else None, settings.trial_generations),
         reply_markup=build_persistent_main_keyboard(),
     )
     await update.effective_message.reply_text(
