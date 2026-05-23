@@ -143,7 +143,8 @@ def build_category_profile_prompt_block(
             f"Разрешенные характеристики для генерации: {_format_profile_value(prompt_characteristics)}\n"
             f"Типичные слова в названии: {_format_profile_value(category_profile.get('top_title_words'))}\n"
             "Используй только разрешенные характеристики из профиля и очевидные универсальные поля вроде цвета, страны и комплектации. "
-            "Поля упаковки, веса и габаритов упаковки выводи только если пользователь явно дал эти данные."
+            "Поля упаковки, веса и габаритов упаковки выводи только если пользователь явно дал эти данные. "
+            "Для одежды игнорируй размер и состав в формуле названия: S/M/L/XL, 42-56, рост модели и состав ткани выводи только в характеристиках."
         )
 
     prompt_characteristics = category_profile.get("prompt_characteristics") or category_profile.get("top_characteristics")
@@ -233,6 +234,7 @@ def build_image_director_user_prompt(
     photos_count: int,
     images_count: int,
     photo_analyses: list[Any] | None = None,
+    image_guidance: str | None = None,
 ) -> str:
     normalized = normalize_marketplace(marketplace)
     name = MARKETPLACE_NAMES[normalized]
@@ -256,7 +258,22 @@ def build_image_director_user_prompt(
             analysis_lines.append(f"- photo {photo_index}: {details}")
     if analysis_lines:
         prompt += "\n\nФото-анализ без распознавания текста:\n" + "\n".join(analysis_lines)
+    guidance = _normalize_image_guidance(image_guidance)
+    if guidance:
+        prompt += (
+            "\n\nПожелания пользователя к изображениям:\n"
+            f"{guidance}\n"
+            "Учитывай эти пожелания при распределении концепций. "
+            "Если формулировка слишком буквальная, спорная или не подходит для маркетплейса, "
+            "переведи её в безопасный коммерческий язык карточки товара."
+        )
     return prompt
+
+
+def _normalize_image_guidance(image_guidance: str | None) -> str:
+    if not image_guidance:
+        return ""
+    return re.sub(r"\s+", " ", str(image_guidance)).strip()[:1200]
 
 
 def _strip_markdown_fence(payload: str) -> str:
@@ -439,6 +456,7 @@ async def generate_image_prompts(
     model: str = "deepseek/deepseek-v4-flash",
     site_url: str = "https://alterega.ru",
     photo_analyses: list[Any] | None = None,
+    image_guidance: str | None = None,
 ) -> list[ImageConcept]:
     if photos_count < 1 or photos_count > 7:
         raise LLMResponseError("photos_count must be between 1 and 7")
@@ -478,6 +496,7 @@ async def generate_image_prompts(
                         photos_count=photos_count,
                         images_count=images_count,
                         photo_analyses=analyses,
+                        image_guidance=image_guidance,
                     ),
                 },
             ],
@@ -498,4 +517,5 @@ async def generate_image_prompts(
             marketplace=marketplace,
             images_count=images_count,
             photo_analyses=analyses,
+            image_guidance=image_guidance,
         )

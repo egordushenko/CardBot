@@ -4,6 +4,7 @@ from bot import (
     FEEDBACK_MESSAGE,
     GENERATE_PROMPT,
     IMAGE_DESCRIPTION_PROMPT,
+    IMAGE_GUIDANCE_PROMPT,
     IMAGE_PHOTO_PROMPT,
     MARKETPLACE_PROMPT,
     MODE_PROMPT,
@@ -28,6 +29,7 @@ from bot import (
     build_help_message,
     build_image_count_keyboard,
     build_image_count_prompt,
+    build_image_guidance_keyboard,
     build_image_progress_message,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
@@ -48,6 +50,7 @@ from bot import (
     format_template_description_preview,
     format_template_mode,
     handle_callback,
+    _handle_image_guidance,
     _handle_image_description,
     should_generate_text_with_images,
     _handle_new_template_text,
@@ -228,6 +231,9 @@ class _FakeTemplateDb:
         self.saved.append(kwargs)
         return 42
 
+    async def get_image_balance(self, user_id):
+        return 5
+
 
 class _FakeTemplateApplication:
     def __init__(self, db):
@@ -335,6 +341,8 @@ def test_primary_prompts_use_clear_visual_blocks():
         "📸 Загрузите от 1 до 7 фото товара с разных ракурсов.\n\n"
         "Когда все фото загружены, нажмите ✅ Готово"
     )
+    assert "пожелания" in IMAGE_GUIDANCE_PROMPT.casefold()
+    assert "Пропустить" in IMAGE_GUIDANCE_PROMPT
     assert TEMPLATE_NAME_PROMPT.startswith("📋 Введите название шаблона")
     assert NEW_TEMPLATE_TEXT_PROMPT.startswith("✍️ Введите текст шаблона")
     assert REPEAT_CHANGES_PROMPT.startswith("🔄 Что изменить?")
@@ -362,6 +370,7 @@ def test_start_help_and_balance_messages_are_scannable():
 
 def test_image_keyboards_follow_spec_callbacks():
     photo_keyboard = build_image_photo_keyboard(photos_count=2)
+    guidance_keyboard = build_image_guidance_keyboard()
     count_keyboard = build_image_count_keyboard(image_balance=5)
     full_count_keyboard = build_image_count_keyboard(image_balance=20)
     packages_keyboard = build_image_packages_keyboard()
@@ -371,6 +380,10 @@ def test_image_keyboards_follow_spec_callbacks():
     assert photo_keyboard.inline_keyboard[0][1].callback_data == "img_add_more"
     assert len(build_image_photo_keyboard(photos_count=7).inline_keyboard[0]) == 1
     assert build_image_photo_keyboard(photos_count=7).inline_keyboard[-1][0].callback_data == "action:home"
+    guidance_callbacks = [
+        button.callback_data for row in guidance_keyboard.inline_keyboard for button in row
+    ]
+    assert guidance_callbacks == ["img_guidance_write", "img_guidance_skip", "action:home"]
     count_callbacks = [button.callback_data for row in count_keyboard.inline_keyboard for button in row]
     assert [callback for callback in count_callbacks if callback.startswith("img_count:")] == [
         "img_count:1",
@@ -468,6 +481,33 @@ def test_images_only_description_step_moves_to_photo_upload():
         assert context.user_data["img_description"] == "Часы песочные, черное основание"
         assert context.user_data["generation_step"] == "photos"
         assert update.effective_message.replies[-1][0] == IMAGE_PHOTO_PROMPT
+
+    asyncio.run(run_flow())
+
+
+def test_image_guidance_step_saves_text_and_moves_to_count():
+    async def run_flow():
+        context = _FakeTemplateContext(_FakeTemplateDb())
+        context.user_data.update(
+            {
+                "generation_step": "image_guidance",
+                "mode": "images_only",
+                "img_photos": ["photo-1"],
+            }
+        )
+        update = _FakeUpdate("1 спереди на модели, 1 со спины, фон luxury")
+
+        handled = await _handle_image_guidance(
+            update,
+            context,
+            user_id=123,
+            user_input="1 спереди на модели, 1 со спины, фон luxury",
+        )
+
+        assert handled is True
+        assert context.user_data["img_guidance"] == "1 спереди на модели, 1 со спины, фон luxury"
+        assert context.user_data["generation_step"] == "count"
+        assert "5" in update.effective_message.replies[-1][0]
 
     asyncio.run(run_flow())
 

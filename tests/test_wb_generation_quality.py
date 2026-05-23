@@ -77,6 +77,25 @@ def test_apply_wb_generation_quality_removes_clothing_size_and_composition_from_
     assert "Материал изделия:" not in result.characteristics
 
 
+def test_apply_wb_generation_quality_removes_rashguard_size_without_category_profile():
+    card = CardGeneration(
+        title="Рашгард Therapy черный M",
+        description="Рашгард для тренировок.",
+        keywords="",
+        characteristics="Цвет: черный\nСостав: 100% хлопок",
+        marketplace="wb",
+    )
+
+    result = apply_wb_generation_quality(
+        card,
+        user_input="Рашгард Therapy черный размер M 100% хлопок с принтом на спине",
+    )
+
+    assert result.title == "Рашгард Therapy черный"
+    assert " M " not in f" {result.title} "
+    assert "100% хлопок" not in result.title
+
+
 
 def test_apply_wb_generation_quality_converts_live_clothing_material_to_composition():
     card = CardGeneration(

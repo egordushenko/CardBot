@@ -6,6 +6,7 @@ import json
 from contextlib import suppress
 from io import BytesIO
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from config import Settings, load_settings
@@ -75,6 +76,11 @@ IMAGE_DESCRIPTION_PROMPT = (
 IMAGE_PHOTO_PROMPT = (
     "📸 Загрузите от 1 до 7 фото товара с разных ракурсов.\n\n"
     "Когда все фото загружены, нажмите ✅ Готово"
+)
+IMAGE_GUIDANCE_PROMPT = (
+    "🎨 Пожелания к изображениям\n\n"
+    "Можно написать стиль, фон, ракурсы, роли для каждого кадра, текст на картинках или общую концепцию.\n"
+    "Это необязательно: если пожеланий нет, нажмите «Пропустить»."
 )
 TEMPLATE_NAME_PROMPT = (
     "📋 Введите название шаблона\n\n"
@@ -365,6 +371,18 @@ def build_image_photo_keyboard(photos_count: int) -> Any:
     if photos_count < MAX_REFERENCE_PHOTOS:
         row.append(_button(f"📎 Ещё ({photos_count}/{MAX_REFERENCE_PHOTOS})", "img_add_more"))
     return _keyboard([row, [_home_button()]])
+
+
+def build_image_guidance_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("✍️ Написать пожелания", "img_guidance_write"),
+                _button("Пропустить", "img_guidance_skip"),
+            ],
+            [_home_button()],
+        ]
+    )
 
 
 def is_supported_image_document(document: Any) -> bool:
@@ -746,6 +764,7 @@ def _clear_image_session(context: Any) -> None:
         "img_marketplace",
         "img_description",
         "img_photos",
+        "img_guidance",
         "img_count",
         "img_media_groups",
         "repeat_pending_generation",
@@ -783,6 +802,7 @@ def _store_last_generation(
     description: str,
     photo_file_ids: list[str] | None = None,
     images_count: int | None = None,
+    image_guidance: str | None = None,
 ) -> None:
     context.user_data["last_generation"] = {
         "marketplace": marketplace,
@@ -790,6 +810,7 @@ def _store_last_generation(
         "description": description,
         "photo_file_ids": list(photo_file_ids or []),
         "images_count": images_count,
+        "image_guidance": image_guidance or "",
     }
 
 
@@ -800,6 +821,7 @@ def _template_to_last_generation(template: dict[str, Any]) -> dict[str, Any]:
         "description": template["description"],
         "photo_file_ids": _parse_photo_file_ids(template.get("photo_file_ids")),
         "images_count": template.get("images_count"),
+        "image_guidance": template.get("image_guidance") or "",
     }
 
 
@@ -1074,6 +1096,62 @@ async def _handle_image_description(update: Any, context: Any, user_input: str) 
     return True
 
 
+def _normalize_image_guidance_text(value: str | None) -> str:
+    if not value:
+        return ""
+    return " ".join(str(value).split())[:1200]
+
+
+async def _show_image_count_step(message: Any, context: Any, user_id: int) -> None:
+    context.user_data["generation_step"] = "count"
+    image_balance = await _get_db(context).get_image_balance(user_id)
+    await message.reply_text(
+        build_image_count_prompt(image_balance),
+        reply_markup=build_image_count_keyboard(image_balance=image_balance),
+    )
+
+
+async def _continue_after_image_guidance(update: Any, context: Any, user_id: int) -> None:
+    query = getattr(update, "callback_query", None)
+    if context.user_data.get("repeat_images_count"):
+        images_count = int(context.user_data.pop("repeat_images_count"))
+        if not is_allowed_image_count(images_count):
+            await _show_image_count_step(update.effective_message, context, user_id)
+            return
+        context.user_data["img_count"] = images_count
+        generation_update = update
+        if query is None:
+            generation_update = SimpleNamespace(
+                callback_query=SimpleNamespace(message=update.effective_message),
+                effective_message=update.effective_message,
+            )
+        if should_generate_text_with_images(context.user_data.get("mode")):
+            await _generate_text_and_images_for_user(generation_update, context, user_id, images_count)
+        else:
+            await _generate_images_for_user(generation_update, context, user_id, images_count)
+        return
+    await _show_image_count_step(update.effective_message, context, user_id)
+
+
+async def _handle_image_guidance(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if context.user_data.get("generation_step") != "image_guidance":
+        return False
+    if context.user_data.get("mode") not in {"text_and_images", "images_only"}:
+        return False
+
+    guidance = _normalize_image_guidance_text(user_input)
+    if len(guidance) < 3:
+        await update.effective_message.reply_text(
+            IMAGE_GUIDANCE_PROMPT,
+            reply_markup=build_image_guidance_keyboard(),
+        )
+        return True
+
+    context.user_data["img_guidance"] = guidance
+    await _continue_after_image_guidance(update, context, user_id)
+    return True
+
+
 async def handle_photo(update: Any, context: Any) -> None:
     await _handle_image_upload(update, context)
 
@@ -1172,6 +1250,7 @@ async def _generate_images_for_user(
     marketplace = context.user_data.get("marketplace") or context.user_data.get("img_marketplace")
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
+    image_guidance = str(context.user_data.get("img_guidance") or "")
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1208,6 +1287,7 @@ async def _generate_images_for_user(
             api_key=settings.openrouter_api_key,
             model=settings.openrouter_model,
             site_url=settings.site_url,
+            image_guidance=image_guidance,
         )
         await db.update_image_session_prompts(
             session_id,
@@ -1268,6 +1348,7 @@ async def _generate_images_for_user(
         description=product_description,
         photo_file_ids=photo_file_ids,
         images_count=images_count,
+        image_guidance=image_guidance,
     )
     _clear_image_session(context)
 
@@ -1284,6 +1365,7 @@ async def _generate_text_and_images_for_user(
     marketplace = context.user_data.get("marketplace")
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
+    image_guidance = str(context.user_data.get("img_guidance") or "")
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1342,6 +1424,7 @@ async def _generate_text_and_images_for_user(
             marketplace=marketplace,
             photo_file_ids=photo_file_ids,
             images_count=images_count,
+            image_guidance=image_guidance,
         )
     )
 
@@ -1457,6 +1540,7 @@ async def _generate_text_and_images_for_user(
         description=product_description,
         photo_file_ids=photo_file_ids,
         images_count=images_count,
+        image_guidance=image_guidance,
     )
     _clear_image_session(context)
 
@@ -1478,6 +1562,7 @@ async def _generate_image_prompts_for_batch(
     marketplace: str,
     photo_file_ids: list[str],
     images_count: int,
+    image_guidance: str | None = None,
 ) -> list[ImageConcept]:
     return await generate_image_prompts(
         product_description=product_description,
@@ -1487,6 +1572,7 @@ async def _generate_image_prompts_for_batch(
         api_key=settings.openrouter_api_key,
         model=settings.openrouter_model,
         site_url=settings.site_url,
+        image_guidance=image_guidance,
     )
 
 
@@ -1818,6 +1904,7 @@ async def _handle_template_name(update: Any, context: Any, user_id: int, user_in
         description=last_generation["description"],
         photo_file_ids=last_generation.get("photo_file_ids") or [],
         images_count=last_generation.get("images_count"),
+        image_guidance=last_generation.get("image_guidance") or "",
     )
     await update.effective_message.reply_text(
         f"✅ Шаблон \"{name}\" сохранён.\nНайдёте его в «Мои шаблоны»."
@@ -1883,6 +1970,7 @@ async def _handle_repeat_changes(update: Any, context: Any, user_id: int, user_i
             "description": combined_description,
             "photo_file_ids": list(previous.get("photo_file_ids") or []),
             "images_count": previous.get("images_count") or 1,
+            "image_guidance": previous.get("image_guidance") or "",
         }
         await update.effective_message.reply_text(
             REPEAT_PHOTOS_PROMPT,
@@ -1918,6 +2006,7 @@ async def _run_last_generation_with_images(
         context.user_data["mode"] = generation["mode"]
         context.user_data["img_description"] = generation["description"]
         context.user_data["img_photos"] = []
+        context.user_data["img_guidance"] = generation.get("image_guidance") or ""
         context.user_data["generation_step"] = "photos"
         context.user_data["repeat_images_count"] = images_count
         await update.callback_query.message.reply_text(IMAGE_PHOTO_PROMPT)
@@ -1927,6 +2016,7 @@ async def _run_last_generation_with_images(
     context.user_data["mode"] = generation["mode"]
     context.user_data["img_description"] = generation["description"]
     context.user_data["img_photos"] = photo_file_ids
+    context.user_data["img_guidance"] = generation.get("image_guidance") or ""
     if not is_allowed_image_count(images_count):
         context.user_data["generation_step"] = "count"
         image_balance = await _get_db(context).get_image_balance(user_id)
@@ -2009,6 +2099,8 @@ async def handle_text(update: Any, context: Any) -> None:
     if await _handle_template_name(update, context, user_id, user_input):
         return
     if await _handle_repeat_changes(update, context, user_id, user_input):
+        return
+    if await _handle_image_guidance(update, context, user_id, user_input):
         return
     if await _handle_image_description(update, context, user_input):
         return
@@ -2128,32 +2220,23 @@ async def handle_callback(update: Any, context: Any) -> None:
         if not photos:
             await query.message.reply_text(IMAGE_PHOTO_PROMPT)
             return
-        if context.user_data.get("repeat_images_count"):
-            user = update.effective_user
-            if user is None:
-                return
-            images_count = int(context.user_data.pop("repeat_images_count"))
-            if not is_allowed_image_count(images_count):
-                context.user_data["generation_step"] = "count"
-                image_balance = await _get_db(context).get_image_balance(user.id)
-                await query.message.reply_text(
-                    build_image_count_prompt(image_balance),
-                    reply_markup=build_image_count_keyboard(image_balance=image_balance),
-                )
-                return
-            context.user_data["img_count"] = images_count
-            if should_generate_text_with_images(context.user_data.get("mode")):
-                await _generate_text_and_images_for_user(update, context, user.id, images_count)
-            else:
-                await _generate_images_for_user(update, context, user.id, images_count)
-            return
-        context.user_data["generation_step"] = "count"
-        user = update.effective_user
-        image_balance = await _get_db(context).get_image_balance(user.id) if user is not None else 0
+        context.user_data["generation_step"] = "image_guidance"
         await query.message.reply_text(
-            build_image_count_prompt(image_balance),
-            reply_markup=build_image_count_keyboard(image_balance=image_balance),
+            IMAGE_GUIDANCE_PROMPT,
+            reply_markup=build_image_guidance_keyboard(),
         )
+    elif data == "img_guidance_write":
+        context.user_data["generation_step"] = "image_guidance"
+        await query.message.reply_text(
+            IMAGE_GUIDANCE_PROMPT,
+            reply_markup=build_image_guidance_keyboard(),
+        )
+    elif data == "img_guidance_skip":
+        user = update.effective_user
+        if user is None:
+            return
+        context.user_data["img_guidance"] = ""
+        await _continue_after_image_guidance(update, context, user.id)
     elif data.startswith("img_count:"):
         user = update.effective_user
         if user is None:

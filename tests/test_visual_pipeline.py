@@ -142,6 +142,18 @@ def test_build_image_concepts_from_plan_uses_role_templates_and_constraints():
     assert "Do NOT" not in prompt
 
 
+def test_build_image_concepts_from_plan_includes_optional_image_guidance():
+    concepts = build_image_concepts_from_plan(
+        product_description="black Therapy rashguard",
+        marketplace="wb",
+        images_count=1,
+        photo_analyses=[],
+        image_guidance="luxury black background, show fabric quality",
+    )
+
+    assert "User image guidance: luxury black background, show fabric quality" in concepts[0].prompt
+
+
 def test_build_prompt_ignores_reference_visible_text_and_defects():
     concepts = build_image_concepts_from_plan(
         product_description="black Therapy rashguard",

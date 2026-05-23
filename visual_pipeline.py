@@ -824,6 +824,7 @@ def build_prompt_from_slide(
     marketplace: str,
     slide: SlidePlan,
     photo_analysis: PhotoAnalysis | None,
+    image_guidance: str | None = None,
 ) -> str:
     profile = detect_visual_profile(product_description, marketplace)
     product_for_prompt = _sanitize_product_description_for_prompt(product_description, profile)
@@ -832,7 +833,7 @@ def build_prompt_from_slide(
     overlay = "; ".join(slide.overlay_text) if slide.overlay_text else ""
     overlay_part = f'Add text overlay: "{overlay}".' if overlay else ""
 
-    return (
+    prompt = (
         f"Professional marketplace card image for {marketplace_name}, 3:4 ratio.\n"
         f"Product: {product_for_prompt}\n"
         f"Slide role: {slide.role}. {slide.composition}.\n"
@@ -842,6 +843,16 @@ def build_prompt_from_slide(
         f"Preserve product appearance exactly: shape, color, print, texture. "
         f"Make it polished and commercial."
     ).strip()
+    guidance = _normalize_image_guidance(image_guidance)
+    if guidance:
+        prompt += f"\nUser image guidance: {guidance}. Adapt it into a safe commercial marketplace product card style."
+    return prompt
+
+
+def _normalize_image_guidance(image_guidance: str | None) -> str:
+    if not image_guidance:
+        return ""
+    return re.sub(r"\s+", " ", str(image_guidance)).strip()[:1200]
 
 
 def build_image_concepts_from_plan(
@@ -849,6 +860,7 @@ def build_image_concepts_from_plan(
     marketplace: str,
     images_count: int,
     photo_analyses: list[PhotoAnalysis] | None = None,
+    image_guidance: str | None = None,
 ) -> list[ImageConcept]:
     normalized_marketplace = "ozon" if marketplace == "ozon" else "wb"
     plan = build_slide_plan(
@@ -868,6 +880,7 @@ def build_image_concepts_from_plan(
                 marketplace=normalized_marketplace,
                 slide=slide,
                 photo_analysis=analyses_by_index.get(slide.source_photo_index),
+                image_guidance=image_guidance,
             ),
         )
         for slide in plan

@@ -468,6 +468,21 @@ def test_build_image_director_user_prompt_includes_counts_and_marketplace():
     assert "Нужно сгенерировать изображений: 5" in prompt
 
 
+def test_build_image_director_user_prompt_includes_optional_image_guidance():
+    prompt = build_image_director_user_prompt(
+        product_description="black Therapy rashguard",
+        marketplace="wb",
+        photos_count=5,
+        images_count=5,
+        image_guidance="1 фото спереди на модели, 1 со спины, микроплан материала",
+    )
+
+    assert "Пожелания пользователя к изображениям" in prompt
+    assert "1 фото спереди на модели" in prompt
+    assert "микроплан материала" in prompt
+    assert "безопасный коммерческий язык" in prompt
+
+
 def test_build_image_director_user_prompt_uses_photo_roles_without_text_or_defects():
     from visual_pipeline import PhotoAnalysis
 
@@ -531,6 +546,7 @@ async def test_generate_image_prompts_uses_llm_director(monkeypatch):
         api_key="test-key",
         model="deepseek/deepseek-v4-flash:free",
         site_url="https://alterega.ru",
+        image_guidance="make the hero image luxury and show one back-view concept",
     )
 
     assert result == [
@@ -538,6 +554,7 @@ async def test_generate_image_prompts_uses_llm_director(monkeypatch):
         ImageConcept(2, "lifestyle", 1, "Lifestyle marketplace card prompt"),
     ]
     assert captured["messages"][0]["content"] == DIRECTOR_SYSTEM_PROMPT
+    assert "make the hero image luxury" in captured["messages"][1]["content"]
     assert captured["model_candidates"] == [
         "deepseek/deepseek-v4-flash:free",
         "deepseek/deepseek-v4-flash",
@@ -570,11 +587,13 @@ async def test_generate_image_prompts_falls_back_to_code_slide_plan(monkeypatch)
             PhotoAnalysis(2, ("front", "on_model"), (), (), ("front_on_model",)),
             PhotoAnalysis(3, ("flatlay", "front"), (), (), ("hero", "flatlay")),
         ],
+        image_guidance="premium gym background and one closeup of material quality",
     )
 
     assert [concept.purpose for concept in result] == ["hero", "closeup", "lifestyle_back"]
     assert [concept.photo_index for concept in result] == [3, 1, 0]
     assert "Slide role: hero" in result[0].prompt
+    assert "User image guidance: premium gym background" in result[0].prompt
 
 
 @pytest.mark.asyncio
