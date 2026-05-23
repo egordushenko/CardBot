@@ -236,13 +236,15 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
     assert [item.usage.cost_usd for item in result] == [0.2, 0.2]
 
 
-def test_generate_batch_images_rejects_wrong_output_count(monkeypatch):
+def test_generate_batch_images_uses_available_outputs_when_count_differs(monkeypatch):
     class FakeResponse:
         def raise_for_status(self):
             return None
 
         def json(self):
             return {
+                "model": "model-version",
+                "usage": {"cost": 0.6},
                 "choices": [
                     {
                         "message": {
@@ -252,7 +254,19 @@ def test_generate_batch_images_rejects_wrong_output_count(monkeypatch):
                                         "url": "data:image/png;base64,"
                                         + base64.b64encode(b"one").decode("ascii")
                                     }
-                                }
+                                },
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(b"two").decode("ascii")
+                                    }
+                                },
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(b"extra").decode("ascii")
+                                    }
+                                },
                             ]
                         }
                     }
@@ -279,15 +293,17 @@ def test_generate_batch_images_rejects_wrong_output_count(monkeypatch):
         image_generator.ImageBatchConcept(2, "back", "Back prompt"),
     ]
 
-    with pytest.raises(ImageGenerationError, match="expected 2 images, got 1"):
-        asyncio.run(
-            image_generator.generate_batch_image_results(
-                concepts=concepts,
-                reference_photo_bytes=[b"photo"],
-                api_key="key",
-                model="model",
-            )
+    result = asyncio.run(
+        image_generator.generate_batch_image_results(
+            concepts=concepts,
+            reference_photo_bytes=[b"photo"],
+            api_key="key",
+            model="model",
         )
+    )
+
+    assert [item.image_bytes for item in result] == [b"one", b"two"]
+    assert [item.usage.cost_usd for item in result] == [0.3, 0.3]
 
 
 def test_generate_batch_images_rejects_corrupted_prompt_before_paid_request(monkeypatch):

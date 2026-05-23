@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -308,10 +309,17 @@ async def generate_batch_image_results(
         result = response.json()
 
     image_bytes_list = extract_openrouter_image_bytes_list(result)
-    if len(image_bytes_list) != len(concepts):
+    if not image_bytes_list:
         raise ImageGenerationError(
-            f"OpenRouter returned wrong image count: expected {len(concepts)} images, got {len(image_bytes_list)}"
+            f"OpenRouter returned no images: expected {len(concepts)} images"
         )
+    if len(image_bytes_list) != len(concepts):
+        logging.warning(
+            "OpenRouter returned unexpected image count: expected=%s got=%s",
+            len(concepts),
+            len(image_bytes_list),
+        )
+    image_bytes_list = image_bytes_list[: len(concepts)]
 
     usage = extract_openrouter_image_usage(result, fallback_model=model)
     cost_per_image = usage.cost_usd / len(image_bytes_list) if image_bytes_list else 0.0
