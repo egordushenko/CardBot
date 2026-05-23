@@ -35,22 +35,23 @@ from payments import (
 from webhook_server import start_webhook_server
 
 
-PAYMENT_UNAVAILABLE_MESSAGE = "💳 Оплата временно недоступна, скоро откроем!"
+PAYMENT_UNAVAILABLE_MESSAGE = "💳 Оплата временно недоступна.\nПопробуйте немного позже."
 TECHNICAL_WORKS_MESSAGE = (
-    "Сейчас на стороне сервиса временные технические работы. "
+    "⚙️ В сервисе временные технические работы.\n"
     "Попробуйте немного позже. Генерация не списана."
 )
 GENERATE_PROMPT = (
-    "Отправьте описание товара. Минимум — название. "
-    "Можно добавить материал, размер, цвет и особенности. "
-    "Чем больше информации — тем лучше результат."
+    "📝 Опишите товар\n\n"
+    "Минимум — название.\n"
+    "Можно добавить: материал, размер, цвет, особенности.\n"
+    "Чем подробнее описание, тем точнее карточка."
 )
 FEEDBACK_MESSAGE = (
-    "Не понравился результат?\n\n"
-    "Напишите, что именно не так: название, описание, хэштеги или характеристики. "
-    "Контакт для обратной связи: @alterega"
+    "💬 Не понравился результат?\n\n"
+    "Напишите, что нужно исправить: название, описание, хэштеги или характеристики.\n\n"
+    "Контакт: @alterega"
 )
-MARKETPLACE_PROMPT = "Выберите маркетплейс:"
+MARKETPLACE_PROMPT = "🛒 Выберите маркетплейс:"
 MODE_PROMPT = (
     "Что сгенерировать?\n\n"
     "📝 «Только текст»\n"
@@ -61,27 +62,29 @@ MODE_PROMPT = (
     "Тратит 1 текстовую генерацию + N изображений."
 )
 IMAGE_DESCRIPTION_PROMPT = (
-    "Опишите товар: название, материал, размер, цвет, ключевые преимущества. "
-    "Чем подробнее — тем лучше результат. После этого бот попросит загрузить фото товара."
+    "📝 Опишите товар\n\n"
+    "Укажите название, материал, размер, цвет и главные преимущества.\n"
+    "После этого бот попросит загрузить фото товара."
 )
 IMAGE_PHOTO_PROMPT = (
-    "Загрузите от 1 до 7 фото товара с разных ракурсов. "
-    "Когда загрузите все — нажмите ✅ Готово"
+    "📸 Загрузите от 1 до 7 фото товара с разных ракурсов.\n\n"
+    "Когда все фото загружены, нажмите ✅ Готово"
 )
 TEMPLATE_NAME_PROMPT = (
-    "Введите название шаблона.\n"
+    "📋 Введите название шаблона\n\n"
     "Например: \"Лампа спиральная\" или \"Коврик ЭВА\""
 )
 NEW_TEMPLATE_TEXT_PROMPT = (
-    "Введите текст шаблона.\n"
+    "✍️ Введите текст шаблона\n\n"
     "Например: \"Название товара, цвет {цвет}, размер {размер}, материал {материал}\""
 )
 REPEAT_CHANGES_PROMPT = (
-    "Напишите только что изменилось.\n"
+    "🔄 Что изменить?\n\n"
+    "Напишите только то, что поменялось.\n"
     "Например: \"цвет чёрный\" или \"размер XL, вес 2 кг\"\n\n"
-    "Всё остальное останется как в предыдущей карточке."
+    "Остальное останется как в предыдущей карточке."
 )
-REPEAT_PHOTOS_PROMPT = "Использовать те же фото или загрузить новые?"
+REPEAT_PHOTOS_PROMPT = "📸 Какие фото использовать?"
 TEMPLATES_PAGE_SIZE = 5
 TEMPLATES_LIMIT = 10
 MAX_REFERENCE_PHOTOS = 7
@@ -582,7 +585,7 @@ def classify_generation_error(exc: Exception) -> str:
 def generation_error_message(reason: str) -> str:
     if reason in {"api_balance", "429"}:
         return TECHNICAL_WORKS_MESSAGE
-    return "Произошла ошибка, попробуйте ещё раз. Генерация не списана."
+    return "⚠️ Не удалось сгенерировать карточку.\nПопробуйте ещё раз. Генерация не списана."
 
 
 def log_generation_error(
@@ -609,21 +612,25 @@ def build_balance_message(
     free_left = max(trial_generations - trial_used, 0)
     text_balance = free_left + balance
     return (
-        "📊 Ваш баланс:\n\n"
-        f"📝 Текстовых генераций: {text_balance}\n"
-        f"🖼 Изображений: {image_balance}"
+        "📊 Баланс\n\n"
+        f"📝 Текстовые генерации: {text_balance}\n"
+        f"🖼 Изображения: {image_balance}"
     )
 
 
 def build_help_message() -> str:
     return (
         "CardBot генерирует SEO-карточки товаров для Wildberries и Ozon.\n\n"
-        "Просто отправьте описание товара одним сообщением. "
+        "📝 Как пользоваться\n"
+        "Отправьте описание товара одним сообщением. "
         "Бот вернёт название, описание, ключевые слова и характеристики.\n\n"
-        "Контакт для вопросов по оплате и работе сервиса: alterega@list.ru\n"
+        "💳 Оплата и поддержка\n"
+        "Контакт для вопросов по оплате и работе сервиса: alterega@list.ru\n\n"
+        "📄 Реквизиты\n"
         "Самозанятый Дущенко Егор Владимирович\n"
         "ИНН: 615422982815\n"
         "Условия оказания услуги: публичная оферта.\n\n"
+        "⌨️ Команды\n"
         "/generate — создать карточку\n"
         "/balance — баланс\n"
         "/templates — мои шаблоны\n"
@@ -639,8 +646,8 @@ def build_start_message(first_name: str | None) -> str:
     name = f", {first_name}" if first_name else ""
     return (
         f"Здравствуйте{name}.\n\n"
-        "Я помогу быстро подготовить карточку товара для WB и Ozon. "
-        "У вас есть 3 бесплатные генерации."
+        "🛒 Я помогу подготовить карточку товара для Wildberries и Ozon.\n\n"
+        "На старте доступно 3 бесплатные текстовые генерации."
     )
 
 
@@ -860,36 +867,36 @@ async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "
     first_image_purchase = await _get_db(context).is_first_image_purchase(user_id)
     if kind == "combo":
         await message.reply_text(
-            "Сколько карточек нужно в комбо-пакете?",
+            "💳 Сколько карточек нужно в комбо-пакете?",
             reply_markup=build_combo_card_count_keyboard(),
         )
         return
     if kind == "text":
         await message.reply_text(
-            "Выберите пакет текстовых карточек:",
+            "📝 Выберите пакет текстовых карточек:",
             reply_markup=build_text_packages_keyboard(),
         )
         return
     if kind == "images":
         await message.reply_text(
-            "Выберите пакет изображений:",
+            "🖼 Выберите пакет изображений:",
             reply_markup=build_image_packages_keyboard(show_first_image_promo=first_image_purchase),
         )
         return
     await message.reply_text(
-        "Что хотите купить?",
+        "💳 Что хотите купить?",
         reply_markup=build_combined_buy_keyboard(show_first_image_promo=first_image_purchase),
     )
 
 
 async def _send_payment_link(message: Any, context: Any, user_id: int, package_code: str) -> None:
     if package_code not in PAYMENT_PACKAGES:
-        await message.reply_text("Пакет не найден. Откройте /buy и выберите пакет заново.")
+        await message.reply_text("⚠️ Пакет не найден.\nОткройте /buy и выберите пакет заново.")
         return
 
     db = _get_db(context)
     if package_code == PROMO_PACKAGE_CODE and not await db.is_first_image_purchase(user_id):
-        await message.reply_text("Акция первой покупки уже использована.")
+        await message.reply_text("⚠️ Акция первой покупки уже использована.")
         return
 
     settings = _get_settings(context)
@@ -945,7 +952,7 @@ async def history_command(update: Any, context: Any) -> None:
 
     generations = await _get_db(context).get_recent_generations(user_id, limit=5)
     if not generations:
-        await update.effective_message.reply_text("История пока пустая.")
+        await update.effective_message.reply_text("🕐 История пока пустая.")
         return
 
     for index, generation in enumerate(generations, start=1):
@@ -973,7 +980,7 @@ async def _show_templates(message: Any, context: Any, user_id: int, page: int = 
     context.user_data["template_page"] = page
     if not templates:
         await message.reply_text(
-            "📋 У вас пока нет шаблонов.",
+            "📋 У вас пока нет шаблонов.\nСоздайте новый шаблон или сохраните готовую карточку.",
             reply_markup=build_empty_templates_keyboard(),
         )
         return
@@ -1003,17 +1010,17 @@ async def _show_templates_delete_list(message: Any, context: Any, user_id: int, 
         return
 
     await message.reply_text(
-        "Выберите шаблон для удаления:",
+        "🗑 Выберите шаблон для удаления:",
         reply_markup=build_templates_delete_keyboard(templates, page=page, total=total),
     )
 
 
 def build_template_details_message(template: dict[str, Any]) -> str:
     return (
-        f"📋 Шаблон: \"{template['name']}\"\n"
-        f"Маркетплейс: {format_marketplace(template['marketplace'])}\n"
-        f"Режим: {format_template_mode(template['mode'])}\n"
-        f"Описание: {format_template_description_preview(template['description'])}\n\n"
+        f"📋 Шаблон: \"{template['name']}\"\n\n"
+        f"🛒 Маркетплейс: {format_marketplace(template['marketplace'])}\n"
+        f"⚙️ Режим: {format_template_mode(template['mode'])}\n\n"
+        f"📝 Текст: {format_template_description_preview(template['description'])}\n\n"
         "Что сделать?"
     )
 
@@ -1041,7 +1048,7 @@ async def _handle_image_description(update: Any, context: Any, user_input: str) 
 
     if len(user_input) < 3:
         await update.effective_message.reply_text(
-            "Добавьте хотя бы название или категорию товара."
+            "⚠️ Добавьте хотя бы название или категорию товара."
         )
         return True
 
@@ -1069,7 +1076,7 @@ async def _handle_image_upload(update: Any, context: Any) -> None:
     photos = list(context.user_data.get("img_photos") or [])
     if len(photos) >= MAX_REFERENCE_PHOTOS:
         await message.reply_text(
-            f"Максимум {MAX_REFERENCE_PHOTOS} фото. Нажмите ✅ Готово",
+            f"📸 Максимум {MAX_REFERENCE_PHOTOS} фото.\nНажмите ✅ Готово",
             reply_markup=build_image_photo_keyboard(len(photos)),
         )
         return
@@ -1077,7 +1084,7 @@ async def _handle_image_upload(update: Any, context: Any) -> None:
     file_id = extract_image_file_id(message)
     if not file_id:
         await message.reply_text(
-            "Пришлите фото товара или изображение файлом.",
+            "📸 Пришлите фото товара или изображение файлом.",
             reply_markup=build_image_photo_keyboard(len(photos)),
         )
         return
@@ -1153,7 +1160,7 @@ async def _generate_images_for_user(
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
-            "Сессия генерации изображений устарела. Начните заново.",
+            "⚠️ Сессия генерации изображений устарела.\nНачните заново.",
             reply_markup=build_after_image_generation_keyboard(),
         )
         _clear_image_session(context)
@@ -1163,7 +1170,7 @@ async def _generate_images_for_user(
     if current_balance < images_count:
         missing = images_count - current_balance
         await message.reply_text(
-            f"Не хватает {missing} изображений на балансе. Пополните баланс:",
+            f"⚠️ Не хватает изображений на балансе: {missing}.\nПополните баланс:",
             reply_markup=build_image_packages_keyboard(),
         )
         return
@@ -1210,7 +1217,7 @@ async def _generate_images_for_user(
             await message.reply_text(generation_error_message(reason))
         else:
             await message.reply_text(
-                "Не удалось разработать концепцию изображений. Баланс не списан."
+                "⚠️ Не удалось разработать концепцию изображений.\nБаланс не списан."
             )
         return
 
@@ -1240,13 +1247,13 @@ async def _generate_images_for_user(
         logging.exception("Failed to save generated images")
         await db.set_image_session_status(session_id, "failed")
         await message.reply_text(
-            "Изображения отправлены, но не удалось сохранить историю. Баланс не списан."
+            "⚠️ Изображения отправлены, но историю сохранить не удалось.\nБаланс не списан."
         )
         return
 
     await message.reply_text(
-        f"✅ Готово! Сгенерировано {len(generated)} изображений для карточки.\n"
-        f"Остаток: {image_balance} изображений",
+        f"✅ Готово: {len(generated)} изображений для карточки.\n"
+        f"Остаток: {image_balance} изображений.",
         reply_markup=build_after_image_generation_keyboard(),
     )
     _clear_image_session(context)
@@ -1267,7 +1274,7 @@ async def _generate_text_and_images_for_user(
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
-            "Сессия генерации устарела. Начните заново.",
+            "⚠️ Сессия генерации устарела.\nНачните заново.",
             reply_markup=build_after_image_generation_keyboard(),
         )
         _clear_image_session(context)
@@ -1276,7 +1283,7 @@ async def _generate_text_and_images_for_user(
     usage_mode = await db.get_usage_mode(user_id, trial_generations=settings.trial_generations)
     if usage_mode is UsageMode.BLOCKED:
         await message.reply_text(
-            "Бесплатные генерации закончились.",
+            "⚠️ Бесплатные генерации закончились.\nКупите пакет, чтобы продолжить.",
             reply_markup=build_buy_keyboard(),
         )
         return
@@ -1284,7 +1291,7 @@ async def _generate_text_and_images_for_user(
     current_image_balance = await db.get_image_balance(user_id)
     if current_image_balance < images_count:
         await message.reply_text(
-            f"Не хватает {images_count - current_image_balance} изображений на балансе.",
+            f"⚠️ Не хватает изображений на балансе: {images_count - current_image_balance}.",
             reply_markup=build_image_packages_keyboard(),
         )
         return
@@ -1354,14 +1361,14 @@ async def _generate_text_and_images_for_user(
             reason="save_error",
         )
         await message.reply_text(
-            "Карточка создана, но не удалось сохранить историю. Баланс изображений не списан."
+            "⚠️ Карточка создана, но историю сохранить не удалось.\nБаланс изображений не списан."
         )
         return
 
     await message.reply_text("✅ Текстовая карточка готова:")
     for text in build_generation_messages(card):
         await message.reply_text(text)
-    await message.reply_text("🖼 Изображения генерируются... подождите ~1-2 минуты")
+    await message.reply_text("🖼 Генерирую изображения.\nОбычно это занимает 1-2 минуты.")
 
     try:
         concepts = await concepts_task
@@ -1379,14 +1386,15 @@ async def _generate_text_and_images_for_user(
         if reason in {"api_balance", "429"}:
             await message.reply_text(
                 f"{generation_error_message(reason)}\n"
-                f"Списана только текстовая генерация.\n"
-                f"Остаток: {text_left} текстовых / {balance.image_balance} изображений",
+                f"\nСписана только текстовая генерация.\n"
+                f"Остаток: {text_left} текстовых / {balance.image_balance} изображений.",
                 reply_markup=build_after_image_generation_keyboard(),
             )
         else:
             await message.reply_text(
-                "Не удалось разработать концепцию изображений. Списана только текстовая генерация.\n"
-                f"Остаток: {text_left} текстовых / {balance.image_balance} изображений",
+                "⚠️ Не удалось разработать концепцию изображений.\n"
+                "Списана только текстовая генерация.\n"
+                f"Остаток: {text_left} текстовых / {balance.image_balance} изображений.",
                 reply_markup=build_after_image_generation_keyboard(),
             )
         _clear_image_session(context)
@@ -1418,16 +1426,16 @@ async def _generate_text_and_images_for_user(
         logging.exception("Failed to save generated images")
         await db.set_image_session_status(session_id, "failed")
         await message.reply_text(
-            "Изображения отправлены, но не удалось сохранить историю. Баланс изображений не списан."
+            "⚠️ Изображения отправлены, но историю сохранить не удалось.\nБаланс изображений не списан."
         )
         return
 
     balance = await db.get_balance(user_id)
     text_left = max(settings.trial_generations - balance.trial_used, 0) + balance.balance
     await message.reply_text(
-        f"✅ Все изображения готовы!\n"
-        f"Потрачено: 1 текстовая генерация + {len(generated)} изображений\n"
-        f"Остаток: {text_left} текстовых / {image_balance} изображений",
+        f"✅ Готово: текст и {len(generated)} изображений.\n\n"
+        f"Потрачено: 1 текстовая генерация + {len(generated)} изображений.\n"
+        f"Остаток: {text_left} текстовых / {image_balance} изображений.",
         reply_markup=build_after_image_generation_keyboard(),
     )
     _store_last_generation(
@@ -1746,7 +1754,7 @@ async def _generate_and_send_text_card(
     )
     if usage_mode is UsageMode.BLOCKED:
         await message.reply_text(
-            "Бесплатные генерации закончились.",
+            "⚠️ Бесплатные генерации закончились.\nКупите пакет, чтобы продолжить.",
             reply_markup=build_buy_keyboard(),
         )
         return None
@@ -1792,7 +1800,7 @@ async def _generate_and_send_text_card(
             reason="save_error",
         )
         await message.reply_text(
-            "Карточка создана, но не удалось сохранить историю. Попробуйте позже."
+            "⚠️ Карточка создана, но историю сохранить не удалось.\nПопробуйте позже."
         )
         return None
 
@@ -1821,13 +1829,13 @@ async def _handle_template_name(update: Any, context: Any, user_id: int, user_in
     context.user_data.pop("awaiting_template_name", None)
     last_generation = context.user_data.get("last_generation")
     if not last_generation:
-        await update.effective_message.reply_text("Нет данных последней генерации для сохранения.")
+        await update.effective_message.reply_text("⚠️ Нет данных последней генерации для сохранения.")
         return True
 
     count = await _get_db(context).get_templates_count(user_id)
     if count >= TEMPLATES_LIMIT:
         await update.effective_message.reply_text(
-            "У вас уже 10 шаблонов — максимум. Удалите старый шаблон чтобы сохранить новый."
+            "⚠️ У вас уже 10 шаблонов — это максимум.\nУдалите старый шаблон, чтобы сохранить новый."
         )
         return True
 
@@ -1867,7 +1875,7 @@ async def _handle_new_template_text(update: Any, context: Any, user_id: int, use
     count = await _get_db(context).get_templates_count(user_id)
     if count >= TEMPLATES_LIMIT:
         await update.effective_message.reply_text(
-            "У вас уже 10 шаблонов — максимум. Удалите старый шаблон чтобы сохранить новый."
+            "⚠️ У вас уже 10 шаблонов — это максимум.\nУдалите старый шаблон, чтобы сохранить новый."
         )
         return True
 
@@ -1893,7 +1901,7 @@ async def _handle_repeat_changes(update: Any, context: Any, user_id: int, user_i
     context.user_data.pop("awaiting_repeat_changes", None)
     previous = context.user_data.get("last_generation")
     if not previous:
-        await update.effective_message.reply_text("Нет предыдущей генерации для повтора.")
+        await update.effective_message.reply_text("⚠️ Нет предыдущей генерации для повтора.")
         return True
 
     combined_description = combine_repeat_description(previous["description"], user_input)
@@ -2041,7 +2049,7 @@ async def handle_text(update: Any, context: Any) -> None:
 
     if len(user_input) < 3:
         await update.effective_message.reply_text(
-            "Добавьте хотя бы название или категорию товара."
+            "⚠️ Добавьте хотя бы название или категорию товара."
         )
         return
 
@@ -2115,8 +2123,8 @@ async def handle_callback(update: Any, context: Any) -> None:
             image_balance = await _get_db(context).get_image_balance(user.id)
             if image_balance <= 0:
                 await query.message.reply_text(
-                    "У вас нет изображений на балансе.\n"
-                    "Купите пакет изображений чтобы использовать этот режим.",
+                    "⚠️ На балансе нет изображений.\n"
+                    "Купите пакет изображений, чтобы использовать этот режим.",
                     reply_markup=build_no_image_balance_keyboard(),
                 )
                 return
@@ -2235,12 +2243,12 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         if not context.user_data.get("last_generation"):
             await query.answer()
-            await query.message.reply_text("Нет данных последней генерации для сохранения.")
+            await query.message.reply_text("⚠️ Нет данных последней генерации для сохранения.")
             return
         count = await _get_db(context).get_templates_count(user_id)
         if count >= TEMPLATES_LIMIT:
             await query.answer(
-                "У вас уже 10 шаблонов — максимум. Удалите старый шаблон чтобы сохранить новый.",
+                "У вас уже 10 шаблонов — это максимум. Удалите старый шаблон, чтобы сохранить новый.",
                 show_alert=True,
             )
             return
@@ -2249,7 +2257,7 @@ async def handle_callback(update: Any, context: Any) -> None:
         await query.message.reply_text(TEMPLATE_NAME_PROMPT)
     elif data == "action:repeat_edit":
         if not context.user_data.get("last_generation"):
-            await query.message.reply_text("Нет предыдущей генерации для повтора.")
+            await query.message.reply_text("⚠️ Нет предыдущей генерации для повтора.")
             return
         context.user_data["awaiting_repeat_changes"] = True
         await query.message.reply_text(REPEAT_CHANGES_PROMPT)
@@ -2258,7 +2266,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         pending = context.user_data.get("repeat_pending_generation")
         if not pending:
-            await query.message.reply_text("Сессия повтора устарела. Начните заново.")
+            await query.message.reply_text("⚠️ Сессия повтора устарела.\nНачните заново.")
             return
         repeat_mode = data.split(":", 1)[1]
         context.user_data["repeat_mode"] = repeat_mode
@@ -2302,7 +2310,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         template = await _get_db(context).get_template(template_id, user_id)
         if not template:
-            await query.message.reply_text("Шаблон не найден.")
+            await query.message.reply_text("⚠️ Шаблон не найден.")
             return
         await query.message.reply_text(
             build_template_details_message(template),
@@ -2317,7 +2325,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         template = await _get_db(context).get_template(template_id, user_id)
         if not template:
-            await query.message.reply_text("Шаблон не найден.")
+            await query.message.reply_text("⚠️ Шаблон не найден.")
             return
         await _run_saved_generation(update, context, user_id, _template_to_last_generation(template))
     elif data.startswith("template_edit:"):
@@ -2329,7 +2337,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         template = await _get_db(context).get_template(template_id, user_id)
         if not template:
-            await query.message.reply_text("Шаблон не найден.")
+            await query.message.reply_text("⚠️ Шаблон не найден.")
             return
         context.user_data["last_generation"] = _template_to_last_generation(template)
         context.user_data["awaiting_repeat_changes"] = True
@@ -2343,10 +2351,10 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         template = await _get_db(context).get_template(template_id, user_id)
         if not template:
-            await query.message.reply_text("Шаблон не найден.")
+            await query.message.reply_text("⚠️ Шаблон не найден.")
             return
         await query.message.reply_text(
-            f"Удалить шаблон \"{template['name']}\"?",
+            f"🗑 Удалить шаблон \"{template['name']}\"?",
             reply_markup=build_template_delete_confirm_keyboard(template_id),
         )
     elif data.startswith("template_delete_confirm:"):
@@ -2359,7 +2367,7 @@ async def handle_callback(update: Any, context: Any) -> None:
         await _get_db(context).delete_template(template_id, user_id)
         await query.message.reply_text("🗑 Шаблон удалён.")
     elif data.startswith("template_delete_cancel:"):
-        await query.message.reply_text("Удаление отменено.")
+        await query.message.reply_text("✅ Удаление отменено.")
     elif data == "buy_back:root":
         if user_id is not None:
             await _show_buy_menu(query.message, context, user_id, kind="all")
@@ -2372,7 +2380,7 @@ async def handle_callback(update: Any, context: Any) -> None:
         except ValueError:
             return
         await query.message.reply_text(
-            f"{text_count} карточек: выберите количество фото",
+            f"🖼 {text_count} карточек: выберите количество фото",
             reply_markup=build_combo_photo_count_keyboard(text_count),
         )
     elif data.startswith(("buy:", "img_buy:")):

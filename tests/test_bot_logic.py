@@ -2,8 +2,15 @@ import asyncio
 
 from bot import (
     FEEDBACK_MESSAGE,
+    GENERATE_PROMPT,
+    IMAGE_DESCRIPTION_PROMPT,
     IMAGE_PHOTO_PROMPT,
+    MARKETPLACE_PROMPT,
     MODE_PROMPT,
+    NEW_TEMPLATE_TEXT_PROMPT,
+    REPEAT_CHANGES_PROMPT,
+    REPEAT_PHOTOS_PROMPT,
+    TEMPLATE_NAME_PROMPT,
     TECHNICAL_WORKS_MESSAGE,
     classify_generation_error,
     generation_error_message,
@@ -29,6 +36,7 @@ from bot import (
     build_photo_received_message,
     build_marketplace_keyboard,
     build_main_menu,
+    build_start_message,
     build_repeat_photos_keyboard,
     _aggregate_image_generation_cost,
     build_template_delete_confirm_keyboard,
@@ -112,7 +120,7 @@ def test_after_generation_keyboard_offers_template_and_repeat_actions():
     assert text_keyboard.inline_keyboard[0][0].text.startswith("⚡")
     assert "Не понравился результат" in text_keyboard.inline_keyboard[-2][0].text
     assert "@alterega" in FEEDBACK_MESSAGE
-    assert "Контакт для обратной связи: @alterega" in FEEDBACK_MESSAGE
+    assert "Контакт: @alterega" in FEEDBACK_MESSAGE
 
 
 def test_classify_generation_error_returns_safe_reasons():
@@ -286,6 +294,47 @@ def test_generation_mode_prompt_separates_options_visually():
         "Всё выше плюс изображения для карточки.\n"
         "Тратит 1 текстовую генерацию + N изображений."
     )
+
+
+def test_primary_prompts_use_clear_visual_blocks():
+    assert GENERATE_PROMPT == (
+        "📝 Опишите товар\n\n"
+        "Минимум — название.\n"
+        "Можно добавить: материал, размер, цвет, особенности.\n"
+        "Чем подробнее описание, тем точнее карточка."
+    )
+    assert IMAGE_DESCRIPTION_PROMPT == (
+        "📝 Опишите товар\n\n"
+        "Укажите название, материал, размер, цвет и главные преимущества.\n"
+        "После этого бот попросит загрузить фото товара."
+    )
+    assert IMAGE_PHOTO_PROMPT == (
+        "📸 Загрузите от 1 до 7 фото товара с разных ракурсов.\n\n"
+        "Когда все фото загружены, нажмите ✅ Готово"
+    )
+    assert TEMPLATE_NAME_PROMPT.startswith("📋 Введите название шаблона")
+    assert NEW_TEMPLATE_TEXT_PROMPT.startswith("✍️ Введите текст шаблона")
+    assert REPEAT_CHANGES_PROMPT.startswith("🔄 Что изменить?")
+    assert REPEAT_PHOTOS_PROMPT == "📸 Какие фото использовать?"
+    assert MARKETPLACE_PROMPT == "🛒 Выберите маркетплейс:"
+    assert TECHNICAL_WORKS_MESSAGE.startswith("⚙️")
+
+
+def test_start_help_and_balance_messages_are_scannable():
+    assert build_start_message("Егор") == (
+        "Здравствуйте, Егор.\n\n"
+        "🛒 Я помогу подготовить карточку товара для Wildberries и Ozon.\n\n"
+        "На старте доступно 3 бесплатные текстовые генерации."
+    )
+
+    help_text = build_help_message()
+    balance_text = build_balance_message(trial_used=1, balance=7, image_balance=4)
+
+    assert "📝 Как пользоваться" in help_text
+    assert "💳 Оплата и поддержка" in help_text
+    assert balance_text.startswith("📊 Баланс")
+    assert "📝 Текстовые генерации:" in balance_text
+    assert "🖼 Изображения:" in balance_text
 
 
 def test_image_keyboards_follow_spec_callbacks():
