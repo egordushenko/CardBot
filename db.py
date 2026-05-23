@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS image_sessions (
     photos_count INT,
     images_requested INT,
     prompts_json TEXT,
+    report_json TEXT,
     status TEXT DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -142,10 +143,17 @@ CREATE TABLE IF NOT EXISTS templates (
     photo_file_ids TEXT,
     images_count INT,
     image_guidance TEXT,
+    image_text_mode TEXT,
+    image_style_preset TEXT,
+    image_style_custom TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_guidance TEXT;
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_text_mode TEXT;
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_style_preset TEXT;
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_style_custom TEXT;
+ALTER TABLE image_sessions ADD COLUMN IF NOT EXISTS report_json TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_generations_user_created
     ON generations(user_id, created_at DESC);
@@ -502,6 +510,9 @@ class Database:
         photo_file_ids: list[str] | str | None,
         images_count: int | None,
         image_guidance: str | None = None,
+        image_text_mode: str | None = None,
+        image_style_preset: str | None = None,
+        image_style_custom: str | None = None,
     ) -> int:
         if isinstance(photo_file_ids, list):
             photo_file_ids = json.dumps(photo_file_ids, ensure_ascii=False)
@@ -519,9 +530,12 @@ class Database:
                         description,
                         photo_file_ids,
                         images_count,
-                        image_guidance
+                        image_guidance,
+                        image_text_mode,
+                        image_style_preset,
+                        image_style_custom
                     )
-                    VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+                    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     RETURNING id
                     """,
                     user_id,
@@ -532,6 +546,9 @@ class Database:
                     photo_file_ids,
                     images_count,
                     image_guidance,
+                    image_text_mode,
+                    image_style_preset,
+                    image_style_custom,
                 )
             )
 
@@ -565,6 +582,9 @@ class Database:
                     photo_file_ids,
                     images_count,
                     image_guidance,
+                    image_text_mode,
+                    image_style_preset,
+                    image_style_custom,
                     created_at
                 FROM templates
                 WHERE user_id = $1
@@ -593,6 +613,9 @@ class Database:
                     photo_file_ids,
                     images_count,
                     image_guidance,
+                    image_text_mode,
+                    image_style_preset,
+                    image_style_custom,
                     created_at
                 FROM templates
                 WHERE id = $1 AND user_id = $2
@@ -618,6 +641,7 @@ class Database:
         marketplace: str,
         photos_count: int,
         images_requested: int,
+        report_json: str | None = None,
     ) -> int:
         pool = self._require_pool()
         async with pool.acquire() as conn:
@@ -630,9 +654,10 @@ class Database:
                         marketplace,
                         photos_count,
                         images_requested,
+                        report_json,
                         status
                     )
-                    VALUES($1, $2, $3, $4, $5, 'pending')
+                    VALUES($1, $2, $3, $4, $5, $6, 'pending')
                     RETURNING id
                     """,
                     user_id,
@@ -640,6 +665,7 @@ class Database:
                     marketplace,
                     photos_count,
                     images_requested,
+                    report_json,
                 )
             )
 
@@ -660,6 +686,23 @@ class Database:
                 session_id,
                 prompts_json,
                 status,
+            )
+
+    async def update_image_session_report(
+        self,
+        session_id: int,
+        report_json: str,
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE image_sessions
+                SET report_json = $2
+                WHERE id = $1
+                """,
+                session_id,
+                report_json,
             )
 
     async def set_image_session_status(self, session_id: int, status: str) -> None:

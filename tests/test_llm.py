@@ -549,10 +549,12 @@ async def test_generate_image_prompts_uses_llm_director(monkeypatch):
         image_guidance="make the hero image luxury and show one back-view concept",
     )
 
-    assert result == [
+    assert result.concepts == [
         ImageConcept(1, "hero", 0, "Hero marketplace card prompt"),
         ImageConcept(2, "lifestyle", 1, "Lifestyle marketplace card prompt"),
     ]
+    assert result.source == "llm"
+    assert result.director_model == "deepseek/deepseek-v4-flash:free"
     assert captured["messages"][0]["content"] == DIRECTOR_SYSTEM_PROMPT
     assert "make the hero image luxury" in captured["messages"][1]["content"]
     assert captured["model_candidates"] == [
@@ -590,10 +592,12 @@ async def test_generate_image_prompts_falls_back_to_code_slide_plan(monkeypatch)
         image_guidance="premium gym background and one closeup of material quality",
     )
 
-    assert [concept.purpose for concept in result] == ["hero", "closeup", "lifestyle_back"]
-    assert [concept.photo_index for concept in result] == [3, 1, 0]
-    assert "Slide role: hero" in result[0].prompt
-    assert "User image guidance: premium gym background" in result[0].prompt
+    assert result.source == "fallback"
+    assert result.director_model == "deterministic_fallback"
+    assert [concept.purpose for concept in result.concepts] == ["hero", "closeup", "lifestyle_back"]
+    assert [concept.photo_index for concept in result.concepts] == [3, 1, 0]
+    assert "Slide role: hero" in result.concepts[0].prompt
+    assert "User image guidance: premium gym background" in result.concepts[0].prompt
 
 
 @pytest.mark.asyncio

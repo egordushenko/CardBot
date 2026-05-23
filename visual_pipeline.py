@@ -5,7 +5,12 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from llm import ImageConcept
+from llm import (
+    ImageConcept,
+    normalize_image_style_custom,
+    normalize_image_style_preset,
+    normalize_image_text_mode,
+)
 
 
 PHOTO_TAGS = {
@@ -825,6 +830,9 @@ def build_prompt_from_slide(
     slide: SlidePlan,
     photo_analysis: PhotoAnalysis | None,
     image_guidance: str | None = None,
+    image_text_mode: str | None = None,
+    image_style_preset: str | None = None,
+    image_style_custom: str | None = None,
 ) -> str:
     profile = detect_visual_profile(product_description, marketplace)
     product_for_prompt = _sanitize_product_description_for_prompt(product_description, profile)
@@ -846,6 +854,10 @@ def build_prompt_from_slide(
     guidance = _normalize_image_guidance(image_guidance)
     if guidance:
         prompt += f"\nUser image guidance: {guidance}. Adapt it into a safe commercial marketplace product card style."
+    prompt += f"\nText mode: {_fallback_text_mode_instruction(image_text_mode)}"
+    style_instruction = _fallback_style_instruction(image_style_preset, image_style_custom)
+    if style_instruction:
+        prompt += f"\nStyle direction: {style_instruction}"
     return prompt
 
 
@@ -855,12 +867,41 @@ def _normalize_image_guidance(image_guidance: str | None) -> str:
     return re.sub(r"\s+", " ", str(image_guidance)).strip()[:1200]
 
 
+def _fallback_text_mode_instruction(image_text_mode: str | None) -> str:
+    mode = normalize_image_text_mode(image_text_mode)
+    if mode == "no_text":
+        return "no extra overlay text"
+    if mode == "infographic":
+        return "clear Russian infographic overlays are allowed"
+    return "minimal overlay text only"
+
+
+def _fallback_style_instruction(image_style_preset: str | None, image_style_custom: str | None) -> str:
+    custom = normalize_image_style_custom(image_style_custom)
+    if custom:
+        return custom
+    preset = normalize_image_style_preset(image_style_preset)
+    mapping = {
+        "minimalism": "minimal clean premium marketplace style",
+        "luxury": "luxury premium marketplace style",
+        "sport": "dynamic sport commercial style",
+        "dark_premium": "dark premium commercial style",
+        "light_wb": "bright light WB retail style",
+        "kids": "friendly kids commercial style",
+        "eco": "natural eco commercial style",
+    }
+    return mapping.get(preset, "")
+
+
 def build_image_concepts_from_plan(
     product_description: str,
     marketplace: str,
     images_count: int,
     photo_analyses: list[PhotoAnalysis] | None = None,
     image_guidance: str | None = None,
+    image_text_mode: str | None = None,
+    image_style_preset: str | None = None,
+    image_style_custom: str | None = None,
 ) -> list[ImageConcept]:
     normalized_marketplace = "ozon" if marketplace == "ozon" else "wb"
     plan = build_slide_plan(
@@ -881,6 +922,9 @@ def build_image_concepts_from_plan(
                 slide=slide,
                 photo_analysis=analyses_by_index.get(slide.source_photo_index),
                 image_guidance=image_guidance,
+                image_text_mode=image_text_mode,
+                image_style_preset=image_style_preset,
+                image_style_custom=image_style_custom,
             ),
         )
         for slide in plan

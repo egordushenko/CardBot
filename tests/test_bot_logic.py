@@ -30,6 +30,8 @@ from bot import (
     build_image_count_keyboard,
     build_image_count_prompt,
     build_image_guidance_keyboard,
+    build_image_style_keyboard,
+    build_image_text_mode_keyboard,
     build_image_progress_message,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
@@ -485,7 +487,7 @@ def test_images_only_description_step_moves_to_photo_upload():
     asyncio.run(run_flow())
 
 
-def test_image_guidance_step_saves_text_and_moves_to_count():
+def test_image_guidance_step_saves_text_and_moves_to_text_mode():
     async def run_flow():
         context = _FakeTemplateContext(_FakeTemplateDb())
         context.user_data.update(
@@ -506,14 +508,45 @@ def test_image_guidance_step_saves_text_and_moves_to_count():
 
         assert handled is True
         assert context.user_data["img_guidance"] == "1 спереди на модели, 1 со спины, фон luxury"
-        assert context.user_data["generation_step"] == "count"
-        assert "5" in update.effective_message.replies[-1][0]
+        assert context.user_data["generation_step"] == "image_text_mode"
+        assert "Текст на изображениях" in update.effective_message.replies[-1][0]
 
     asyncio.run(run_flow())
 
 
 def test_image_count_prompt_shows_current_balance():
     assert "5" in build_image_count_prompt(image_balance=5)
+
+
+def test_image_text_mode_and_style_keyboards_use_expected_callbacks():
+    text_mode_keyboard = build_image_text_mode_keyboard()
+    style_keyboard = build_image_style_keyboard()
+
+    text_mode_callbacks = [
+        button.callback_data for row in text_mode_keyboard.inline_keyboard for button in row
+    ]
+    style_callbacks = [
+        button.callback_data for row in style_keyboard.inline_keyboard for button in row
+    ]
+
+    assert text_mode_callbacks == [
+        "img_text_mode:no_text",
+        "img_text_mode:minimal",
+        "img_text_mode:infographic",
+        "action:home",
+    ]
+    assert style_callbacks == [
+        "img_style:minimalism",
+        "img_style:luxury",
+        "img_style:sport",
+        "img_style:dark_premium",
+        "img_style:light_wb",
+        "img_style:kids",
+        "img_style:eco",
+        "img_style:custom",
+        "img_style:skip",
+        "action:home",
+    ]
 
 
 def test_image_progress_message_uses_single_ready_counter():

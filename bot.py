@@ -25,7 +25,17 @@ from image_generator import (
     ImageBatchConcept,
     generate_marketplace_batch_image_results,
 )
-from llm import CardGeneration, ImageConcept, generate_card, generate_image_prompts, normalize_marketplace
+from llm import (
+    CardGeneration,
+    ImageConcept,
+    ImagePromptPlan,
+    generate_card,
+    generate_image_prompts,
+    normalize_image_style_custom,
+    normalize_image_style_preset,
+    normalize_image_text_mode,
+    normalize_marketplace,
+)
 from payments import (
     IMAGE_ADDON_CODES,
     MAIN_PACKAGE_CODES,
@@ -81,6 +91,18 @@ IMAGE_GUIDANCE_PROMPT = (
     "🎨 Пожелания к изображениям\n\n"
     "Можно написать стиль, фон, ракурсы, роли для каждого кадра, текст на картинках или общую концепцию.\n"
     "Это необязательно: если пожеланий нет, нажмите «Пропустить»."
+)
+IMAGE_TEXT_MODE_PROMPT = (
+    "Текст на изображениях\n\n"
+    "Выберите режим: без текста, минимум текста или инфографика."
+)
+IMAGE_STYLE_PROMPT = (
+    "Стиль изображений\n\n"
+    "Выберите пресет или задайте свой стиль. Этот шаг необязательный."
+)
+IMAGE_STYLE_CUSTOM_PROMPT = (
+    "Напишите свой стиль\n\n"
+    "Например: luxury studio, dark premium, sporty dynamic, warm eco."
 )
 TEMPLATE_NAME_PROMPT = (
     "📋 Введите название шаблона\n\n"
@@ -380,6 +402,44 @@ def build_image_guidance_keyboard() -> Any:
                 _button("✍️ Написать пожелания", "img_guidance_write"),
                 _button("Пропустить", "img_guidance_skip"),
             ],
+            [_home_button()],
+        ]
+    )
+
+
+def build_image_text_mode_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("Без текста", "img_text_mode:no_text"),
+                _button("Минимум текста", "img_text_mode:minimal"),
+            ],
+            [_button("Инфографика", "img_text_mode:infographic")],
+            [_home_button()],
+        ]
+    )
+
+
+def build_image_style_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("Минимализм", "img_style:minimalism"),
+                _button("Luxury", "img_style:luxury"),
+            ],
+            [
+                _button("Спорт", "img_style:sport"),
+                _button("Темный премиум", "img_style:dark_premium"),
+            ],
+            [
+                _button("Светлый WB", "img_style:light_wb"),
+                _button("Детский", "img_style:kids"),
+            ],
+            [
+                _button("Eco", "img_style:eco"),
+                _button("Свой стиль", "img_style:custom"),
+            ],
+            [_button("Пропустить", "img_style:skip")],
             [_home_button()],
         ]
     )
@@ -766,10 +826,14 @@ def _clear_image_session(context: Any) -> None:
         "img_photos",
         "img_guidance",
         "img_count",
+        "img_text_mode",
+        "img_style_preset",
+        "img_style_custom",
         "img_media_groups",
         "repeat_pending_generation",
         "repeat_mode",
         "repeat_images_count",
+        "awaiting_image_style_custom",
     ):
         context.user_data.pop(key, None)
 
@@ -803,6 +867,9 @@ def _store_last_generation(
     photo_file_ids: list[str] | None = None,
     images_count: int | None = None,
     image_guidance: str | None = None,
+    image_text_mode: str | None = None,
+    image_style_preset: str | None = None,
+    image_style_custom: str | None = None,
 ) -> None:
     context.user_data["last_generation"] = {
         "marketplace": marketplace,
@@ -811,6 +878,9 @@ def _store_last_generation(
         "photo_file_ids": list(photo_file_ids or []),
         "images_count": images_count,
         "image_guidance": image_guidance or "",
+        "image_text_mode": normalize_image_text_mode(image_text_mode),
+        "image_style_preset": normalize_image_style_preset(image_style_preset),
+        "image_style_custom": normalize_image_style_custom(image_style_custom),
     }
 
 
@@ -822,6 +892,9 @@ def _template_to_last_generation(template: dict[str, Any]) -> dict[str, Any]:
         "photo_file_ids": _parse_photo_file_ids(template.get("photo_file_ids")),
         "images_count": template.get("images_count"),
         "image_guidance": template.get("image_guidance") or "",
+        "image_text_mode": normalize_image_text_mode(template.get("image_text_mode")),
+        "image_style_preset": normalize_image_style_preset(template.get("image_style_preset")),
+        "image_style_custom": normalize_image_style_custom(template.get("image_style_custom")),
     }
 
 
@@ -1102,6 +1175,104 @@ def _normalize_image_guidance_text(value: str | None) -> str:
     return " ".join(str(value).split())[:1200]
 
 
+def _image_text_mode_label(value: str | None) -> str:
+    mapping = {
+        "no_text": "no_text",
+        "minimal": "minimal",
+        "infographic": "infographic",
+    }
+    return mapping.get(normalize_image_text_mode(value), "minimal")
+
+
+def _serialize_image_report(report: dict[str, Any]) -> str:
+    return json.dumps(report, ensure_ascii=False)
+
+
+def _build_image_report_base(
+    *,
+    generation_mode: str,
+    marketplace: str,
+    product_description: str,
+    photo_file_ids: list[str],
+    images_count: int,
+    image_guidance: str,
+    image_text_mode: str,
+    image_style_preset: str,
+    image_style_custom: str,
+) -> dict[str, Any]:
+    return {
+        "generation_mode": generation_mode,
+        "image_pipeline": "batch",
+        "marketplace": marketplace,
+        "product_description": product_description,
+        "photo_file_ids": list(photo_file_ids),
+        "photos_count": len(photo_file_ids),
+        "images_requested": images_count,
+        "image_guidance": image_guidance,
+        "image_text_mode": normalize_image_text_mode(image_text_mode),
+        "image_style_preset": normalize_image_style_preset(image_style_preset),
+        "image_style_custom": normalize_image_style_custom(image_style_custom),
+        "director_source": "pending",
+        "director_model": "",
+        "concepts": [],
+        "status": "pending",
+    }
+
+
+def _apply_prompt_plan_to_report(report: dict[str, Any], plan: ImagePromptPlan) -> None:
+    report["director_source"] = plan.source
+    report["director_model"] = plan.director_model
+    report["concepts"] = [
+        {
+            "image_index": concept.image_index,
+            "purpose": concept.purpose,
+            "photo_index": concept.photo_index,
+            "prompt": concept.prompt,
+        }
+        for concept in plan.concepts
+    ]
+    report["status"] = "generating"
+
+
+def _apply_generation_summary_to_report(
+    report: dict[str, Any],
+    *,
+    generated: list[dict[str, Any]],
+    requested_count: int,
+    fallback_model: str,
+) -> dict[str, Any]:
+    summary = _aggregate_image_generation_cost(
+        generated,
+        requested_count=requested_count,
+        fallback_model=fallback_model,
+    )
+    report["generation_model"] = summary["model"]
+    report["cost_usd"] = summary["cost_usd"]
+    report["generated_count"] = summary["image_count"]
+    report["failed_count"] = summary["failed_count"]
+    report["generated_images"] = [
+        {
+            "image_index": item["image_index"],
+            "prompt_used": item["prompt_used"],
+            "telegram_file_id": item["telegram_file_id"],
+            "model": item.get("model"),
+            "cost_usd": item.get("cost_usd", 0),
+        }
+        for item in generated
+    ]
+    report["status"] = "done" if summary["image_count"] else "failed"
+    return summary
+
+
+async def _save_image_report(
+    db: Database,
+    *,
+    session_id: int,
+    report: dict[str, Any],
+) -> None:
+    await db.update_image_session_report(session_id, _serialize_image_report(report))
+
+
 async def _show_image_count_step(message: Any, context: Any, user_id: int) -> None:
     context.user_data["generation_step"] = "count"
     image_balance = await _get_db(context).get_image_balance(user_id)
@@ -1111,7 +1282,39 @@ async def _show_image_count_step(message: Any, context: Any, user_id: int) -> No
     )
 
 
+async def _show_image_guidance_step(message: Any, context: Any) -> None:
+    context.user_data["generation_step"] = "image_guidance"
+    await message.reply_text(
+        IMAGE_GUIDANCE_PROMPT,
+        reply_markup=build_image_guidance_keyboard(),
+    )
+
+
+async def _show_image_text_mode_step(message: Any, context: Any) -> None:
+    context.user_data["generation_step"] = "image_text_mode"
+    await message.reply_text(
+        IMAGE_TEXT_MODE_PROMPT,
+        reply_markup=build_image_text_mode_keyboard(),
+    )
+
+
+async def _show_image_style_step(message: Any, context: Any) -> None:
+    context.user_data["generation_step"] = "image_style"
+    await message.reply_text(
+        IMAGE_STYLE_PROMPT,
+        reply_markup=build_image_style_keyboard(),
+    )
+
+
 async def _continue_after_image_guidance(update: Any, context: Any, user_id: int) -> None:
+    await _show_image_text_mode_step(update.effective_message, context)
+
+
+async def _continue_after_image_text_mode(update: Any, context: Any, user_id: int) -> None:
+    await _show_image_style_step(update.effective_message, context)
+
+
+async def _continue_after_image_style(update: Any, context: Any, user_id: int) -> None:
     query = getattr(update, "callback_query", None)
     if context.user_data.get("repeat_images_count"):
         images_count = int(context.user_data.pop("repeat_images_count"))
@@ -1130,7 +1333,14 @@ async def _continue_after_image_guidance(update: Any, context: Any, user_id: int
         else:
             await _generate_images_for_user(generation_update, context, user_id, images_count)
         return
-    await _show_image_count_step(update.effective_message, context, user_id)
+    images_count = int(context.user_data.get("img_count") or 0)
+    if not is_allowed_image_count(images_count):
+        await _show_image_count_step(update.effective_message, context, user_id)
+        return
+    if should_generate_text_with_images(context.user_data.get("mode")):
+        await _generate_text_and_images_for_user(update, context, user_id, images_count)
+    else:
+        await _generate_images_for_user(update, context, user_id, images_count)
 
 
 async def _handle_image_guidance(update: Any, context: Any, user_id: int, user_input: str) -> bool:
@@ -1149,6 +1359,24 @@ async def _handle_image_guidance(update: Any, context: Any, user_id: int, user_i
 
     context.user_data["img_guidance"] = guidance
     await _continue_after_image_guidance(update, context, user_id)
+    return True
+
+
+async def _handle_image_style_custom(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if not context.user_data.get("awaiting_image_style_custom"):
+        return False
+    if context.user_data.get("mode") not in {"text_and_images", "images_only"}:
+        return False
+
+    style = normalize_image_style_custom(user_input)
+    if len(style) < 3:
+        await update.effective_message.reply_text(IMAGE_STYLE_CUSTOM_PROMPT)
+        return True
+
+    context.user_data.pop("awaiting_image_style_custom", None)
+    context.user_data["img_style_preset"] = ""
+    context.user_data["img_style_custom"] = style
+    await _continue_after_image_style(update, context, user_id)
     return True
 
 
@@ -1251,6 +1479,9 @@ async def _generate_images_for_user(
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
     image_guidance = str(context.user_data.get("img_guidance") or "")
+    image_text_mode = normalize_image_text_mode(context.user_data.get("img_text_mode"))
+    image_style_preset = normalize_image_style_preset(context.user_data.get("img_style_preset"))
+    image_style_custom = normalize_image_style_custom(context.user_data.get("img_style_custom"))
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1269,17 +1500,30 @@ async def _generate_images_for_user(
         )
         return
 
+    report = _build_image_report_base(
+        generation_mode="images_only",
+        marketplace=marketplace,
+        product_description=product_description,
+        photo_file_ids=photo_file_ids,
+        images_count=images_count,
+        image_guidance=image_guidance,
+        image_text_mode=image_text_mode,
+        image_style_preset=image_style_preset,
+        image_style_custom=image_style_custom,
+    )
+
     session_id = await db.create_image_session(
         user_id=user_id,
         product_description=product_description,
         marketplace=marketplace,
         photos_count=len(photo_file_ids),
         images_requested=images_count,
+        report_json=_serialize_image_report(report),
     )
 
     await message.reply_text("⏳ Разрабатываю концепцию изображений...")
     try:
-        concepts = await generate_image_prompts(
+        prompt_plan = await generate_image_prompts(
             product_description=product_description,
             marketplace=marketplace,
             photos_count=len(photo_file_ids),
@@ -1288,16 +1532,25 @@ async def _generate_images_for_user(
             model=settings.openrouter_model,
             site_url=settings.site_url,
             image_guidance=image_guidance,
+            image_text_mode=image_text_mode,
+            image_style_preset=image_style_preset,
+            image_style_custom=image_style_custom,
         )
+        concepts = prompt_plan.concepts
+        _apply_prompt_plan_to_report(report, prompt_plan)
         await db.update_image_session_prompts(
             session_id,
             _serialize_image_concepts(concepts),
             status="generating",
         )
+        await _save_image_report(db, session_id=session_id, report=report)
     except Exception as exc:
         reason = classify_generation_error(exc)
         log_generation_error(exc, marketplace=marketplace, mode="images_only", reason=reason)
         await db.set_image_session_status(session_id, "failed")
+        report["status"] = "failed"
+        report["error_reason"] = reason
+        await _save_image_report(db, session_id=session_id, report=report)
         if reason in {"api_balance", "429"}:
             await message.reply_text(generation_error_message(reason))
         else:
@@ -1328,9 +1581,19 @@ async def _generate_images_for_user(
             requested_count=images_count,
             fallback_model=settings.gpt_image_model,
         )
+        _apply_generation_summary_to_report(
+            report,
+            generated=generated,
+            requested_count=images_count,
+            fallback_model=settings.gpt_image_model,
+        )
+        await _save_image_report(db, session_id=session_id, report=report)
     except Exception:
         logging.exception("Failed to save generated images")
         await db.set_image_session_status(session_id, "failed")
+        report["status"] = "failed"
+        report["error_reason"] = "save_error"
+        await _save_image_report(db, session_id=session_id, report=report)
         await message.reply_text(
             "⚠️ Изображения отправлены, но историю сохранить не удалось.\nБаланс не списан."
         )
@@ -1349,6 +1612,9 @@ async def _generate_images_for_user(
         photo_file_ids=photo_file_ids,
         images_count=images_count,
         image_guidance=image_guidance,
+        image_text_mode=image_text_mode,
+        image_style_preset=image_style_preset,
+        image_style_custom=image_style_custom,
     )
     _clear_image_session(context)
 
@@ -1366,6 +1632,9 @@ async def _generate_text_and_images_for_user(
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
     image_guidance = str(context.user_data.get("img_guidance") or "")
+    image_text_mode = normalize_image_text_mode(context.user_data.get("img_text_mode"))
+    image_style_preset = normalize_image_style_preset(context.user_data.get("img_style_preset"))
+    image_style_custom = normalize_image_style_custom(context.user_data.get("img_style_custom"))
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1391,12 +1660,25 @@ async def _generate_text_and_images_for_user(
         )
         return
 
+    report = _build_image_report_base(
+        generation_mode="text_and_images",
+        marketplace=marketplace,
+        product_description=product_description,
+        photo_file_ids=photo_file_ids,
+        images_count=images_count,
+        image_guidance=image_guidance,
+        image_text_mode=image_text_mode,
+        image_style_preset=image_style_preset,
+        image_style_custom=image_style_custom,
+    )
+
     session_id = await db.create_image_session(
         user_id=user_id,
         product_description=product_description,
         marketplace=marketplace,
         photos_count=len(photo_file_ids),
         images_requested=images_count,
+        report_json=_serialize_image_report(report),
     )
 
     await message.reply_text("⏳ Генерирую карточку...")
@@ -1425,6 +1707,9 @@ async def _generate_text_and_images_for_user(
             photo_file_ids=photo_file_ids,
             images_count=images_count,
             image_guidance=image_guidance,
+            image_text_mode=image_text_mode,
+            image_style_preset=image_style_preset,
+            image_style_custom=image_style_custom,
         )
     )
 
@@ -1435,6 +1720,9 @@ async def _generate_text_and_images_for_user(
         await db.set_image_session_status(session_id, "failed")
         reason = classify_generation_error(exc)
         log_generation_error(exc, marketplace=marketplace, mode="text_and_images", reason=reason)
+        report["status"] = "failed"
+        report["error_reason"] = reason
+        await _save_image_report(db, session_id=session_id, report=report)
         await message.reply_text(generation_error_message(reason))
         return
 
@@ -1455,6 +1743,9 @@ async def _generate_text_and_images_for_user(
             mode="text_and_images",
             reason="save_error",
         )
+        report["status"] = "failed"
+        report["error_reason"] = "save_error"
+        await _save_image_report(db, session_id=session_id, report=report)
         await message.reply_text(
             "⚠️ Карточка создана, но историю сохранить не удалось.\nБаланс изображений не списан."
         )
@@ -1466,16 +1757,22 @@ async def _generate_text_and_images_for_user(
     await message.reply_text("🖼 Генерирую изображения.\nОбычно это занимает 1-2 минуты.")
 
     try:
-        concepts = await concepts_task
+        prompt_plan = await concepts_task
+        concepts = prompt_plan.concepts
+        _apply_prompt_plan_to_report(report, prompt_plan)
         await db.update_image_session_prompts(
             session_id,
             _serialize_image_concepts(concepts),
             status="generating",
         )
+        await _save_image_report(db, session_id=session_id, report=report)
     except Exception as exc:
         reason = classify_generation_error(exc)
         log_generation_error(exc, marketplace=marketplace, mode="text_and_images", reason=reason)
         await db.set_image_session_status(session_id, "failed")
+        report["status"] = "failed"
+        report["error_reason"] = reason
+        await _save_image_report(db, session_id=session_id, report=report)
         balance = await db.get_balance(user_id)
         text_left = max(settings.trial_generations - balance.trial_used, 0) + balance.balance
         if reason in {"api_balance", "429"}:
@@ -1517,9 +1814,19 @@ async def _generate_text_and_images_for_user(
             requested_count=images_count,
             fallback_model=settings.gpt_image_model,
         )
+        _apply_generation_summary_to_report(
+            report,
+            generated=generated,
+            requested_count=images_count,
+            fallback_model=settings.gpt_image_model,
+        )
+        await _save_image_report(db, session_id=session_id, report=report)
     except Exception:
         logging.exception("Failed to save generated images")
         await db.set_image_session_status(session_id, "failed")
+        report["status"] = "failed"
+        report["error_reason"] = "save_error"
+        await _save_image_report(db, session_id=session_id, report=report)
         await message.reply_text(
             "⚠️ Изображения отправлены, но историю сохранить не удалось.\nБаланс изображений не списан."
         )
@@ -1541,6 +1848,9 @@ async def _generate_text_and_images_for_user(
         photo_file_ids=photo_file_ids,
         images_count=images_count,
         image_guidance=image_guidance,
+        image_text_mode=image_text_mode,
+        image_style_preset=image_style_preset,
+        image_style_custom=image_style_custom,
     )
     _clear_image_session(context)
 
@@ -1563,7 +1873,10 @@ async def _generate_image_prompts_for_batch(
     photo_file_ids: list[str],
     images_count: int,
     image_guidance: str | None = None,
-) -> list[ImageConcept]:
+    image_text_mode: str | None = None,
+    image_style_preset: str | None = None,
+    image_style_custom: str | None = None,
+) -> ImagePromptPlan:
     return await generate_image_prompts(
         product_description=product_description,
         marketplace=marketplace,
@@ -1573,6 +1886,9 @@ async def _generate_image_prompts_for_batch(
         model=settings.openrouter_model,
         site_url=settings.site_url,
         image_guidance=image_guidance,
+        image_text_mode=image_text_mode,
+        image_style_preset=image_style_preset,
+        image_style_custom=image_style_custom,
     )
 
 
@@ -1905,6 +2221,9 @@ async def _handle_template_name(update: Any, context: Any, user_id: int, user_in
         photo_file_ids=last_generation.get("photo_file_ids") or [],
         images_count=last_generation.get("images_count"),
         image_guidance=last_generation.get("image_guidance") or "",
+        image_text_mode=last_generation.get("image_text_mode") or "",
+        image_style_preset=last_generation.get("image_style_preset") or "",
+        image_style_custom=last_generation.get("image_style_custom") or "",
     )
     await update.effective_message.reply_text(
         f"✅ Шаблон \"{name}\" сохранён.\nНайдёте его в «Мои шаблоны»."
@@ -1971,6 +2290,9 @@ async def _handle_repeat_changes(update: Any, context: Any, user_id: int, user_i
             "photo_file_ids": list(previous.get("photo_file_ids") or []),
             "images_count": previous.get("images_count") or 1,
             "image_guidance": previous.get("image_guidance") or "",
+            "image_text_mode": previous.get("image_text_mode") or "minimal",
+            "image_style_preset": previous.get("image_style_preset") or "",
+            "image_style_custom": previous.get("image_style_custom") or "",
         }
         await update.effective_message.reply_text(
             REPEAT_PHOTOS_PROMPT,
@@ -2007,6 +2329,9 @@ async def _run_last_generation_with_images(
         context.user_data["img_description"] = generation["description"]
         context.user_data["img_photos"] = []
         context.user_data["img_guidance"] = generation.get("image_guidance") or ""
+        context.user_data["img_text_mode"] = generation.get("image_text_mode") or "minimal"
+        context.user_data["img_style_preset"] = generation.get("image_style_preset") or ""
+        context.user_data["img_style_custom"] = generation.get("image_style_custom") or ""
         context.user_data["generation_step"] = "photos"
         context.user_data["repeat_images_count"] = images_count
         await update.callback_query.message.reply_text(IMAGE_PHOTO_PROMPT)
@@ -2017,6 +2342,9 @@ async def _run_last_generation_with_images(
     context.user_data["img_description"] = generation["description"]
     context.user_data["img_photos"] = photo_file_ids
     context.user_data["img_guidance"] = generation.get("image_guidance") or ""
+    context.user_data["img_text_mode"] = generation.get("image_text_mode") or "minimal"
+    context.user_data["img_style_preset"] = generation.get("image_style_preset") or ""
+    context.user_data["img_style_custom"] = generation.get("image_style_custom") or ""
     if not is_allowed_image_count(images_count):
         context.user_data["generation_step"] = "count"
         image_balance = await _get_db(context).get_image_balance(user_id)
@@ -2099,6 +2427,8 @@ async def handle_text(update: Any, context: Any) -> None:
     if await _handle_template_name(update, context, user_id, user_input):
         return
     if await _handle_repeat_changes(update, context, user_id, user_input):
+        return
+    if await _handle_image_style_custom(update, context, user_id, user_input):
         return
     if await _handle_image_guidance(update, context, user_id, user_input):
         return
@@ -2216,27 +2546,46 @@ async def handle_callback(update: Any, context: Any) -> None:
     elif data == "img_add_more":
         await query.message.reply_text(IMAGE_PHOTO_PROMPT)
     elif data == "img_photos_done":
+        user = update.effective_user
+        if user is None:
+            return
         photos = list(context.user_data.get("img_photos") or [])
         if not photos:
             await query.message.reply_text(IMAGE_PHOTO_PROMPT)
             return
-        context.user_data["generation_step"] = "image_guidance"
-        await query.message.reply_text(
-            IMAGE_GUIDANCE_PROMPT,
-            reply_markup=build_image_guidance_keyboard(),
-        )
+        await _show_image_count_step(query.message, context, user.id)
     elif data == "img_guidance_write":
-        context.user_data["generation_step"] = "image_guidance"
-        await query.message.reply_text(
-            IMAGE_GUIDANCE_PROMPT,
-            reply_markup=build_image_guidance_keyboard(),
-        )
+        await _show_image_guidance_step(query.message, context)
     elif data == "img_guidance_skip":
         user = update.effective_user
         if user is None:
             return
         context.user_data["img_guidance"] = ""
         await _continue_after_image_guidance(update, context, user.id)
+    elif data.startswith("img_text_mode:"):
+        user = update.effective_user
+        if user is None:
+            return
+        context.user_data["img_text_mode"] = normalize_image_text_mode(data.split(":", 1)[1])
+        await _continue_after_image_text_mode(update, context, user.id)
+    elif data.startswith("img_style:"):
+        user = update.effective_user
+        if user is None:
+            return
+        style_value = data.split(":", 1)[1]
+        if style_value == "custom":
+            context.user_data["generation_step"] = "image_style"
+            context.user_data["awaiting_image_style_custom"] = True
+            await query.message.reply_text(IMAGE_STYLE_CUSTOM_PROMPT)
+            return
+        if style_value == "skip":
+            context.user_data["img_style_preset"] = ""
+            context.user_data["img_style_custom"] = ""
+            await _continue_after_image_style(update, context, user.id)
+            return
+        context.user_data["img_style_preset"] = normalize_image_style_preset(style_value)
+        context.user_data["img_style_custom"] = ""
+        await _continue_after_image_style(update, context, user.id)
     elif data.startswith("img_count:"):
         user = update.effective_user
         if user is None:
@@ -2265,10 +2614,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             )
             return
         context.user_data["img_count"] = images_count
-        if should_generate_text_with_images(context.user_data.get("mode")):
-            await _generate_text_and_images_for_user(update, context, user.id, images_count)
-        else:
-            await _generate_images_for_user(update, context, user.id, images_count)
+        await _show_image_guidance_step(query.message, context)
     elif data == "action:balance":
         await balance_command(update, context)
     elif data == "action:buy":
@@ -2337,6 +2683,10 @@ async def handle_callback(update: Any, context: Any) -> None:
             context.user_data["mode"] = pending["mode"]
             context.user_data["img_description"] = pending["description"]
             context.user_data["img_photos"] = []
+            context.user_data["img_guidance"] = pending.get("image_guidance") or ""
+            context.user_data["img_text_mode"] = pending.get("image_text_mode") or "minimal"
+            context.user_data["img_style_preset"] = pending.get("image_style_preset") or ""
+            context.user_data["img_style_custom"] = pending.get("image_style_custom") or ""
             context.user_data["generation_step"] = "photos"
             context.user_data["repeat_images_count"] = int(pending.get("images_count") or 1)
             await query.message.reply_text(IMAGE_PHOTO_PROMPT)

@@ -40,6 +40,13 @@ class ImageConcept:
     prompt: str
 
 
+@dataclass(frozen=True)
+class ImagePromptPlan:
+    concepts: list[ImageConcept]
+    source: str
+    director_model: str
+
+
 MARKETPLACE_NAMES = {
     "wb": "Wildberries",
     "wildberries": "Wildberries",
@@ -235,6 +242,9 @@ def build_image_director_user_prompt(
     images_count: int,
     photo_analyses: list[Any] | None = None,
     image_guidance: str | None = None,
+    image_text_mode: str | None = None,
+    image_style_preset: str | None = None,
+    image_style_custom: str | None = None,
 ) -> str:
     normalized = normalize_marketplace(marketplace)
     name = MARKETPLACE_NAMES[normalized]
@@ -267,6 +277,10 @@ def build_image_director_user_prompt(
             "Если формулировка слишком буквальная, спорная или не подходит для маркетплейса, "
             "переведи её в безопасный коммерческий язык карточки товара."
         )
+    prompt += "\n\nText policy:\n" + _image_text_mode_instruction(image_text_mode)
+    style_instruction = _image_style_instruction(image_style_preset, image_style_custom)
+    if style_instruction:
+        prompt += "\n\nStyle preset:\n" + style_instruction
     return prompt
 
 
@@ -274,6 +288,61 @@ def _normalize_image_guidance(image_guidance: str | None) -> str:
     if not image_guidance:
         return ""
     return re.sub(r"\s+", " ", str(image_guidance)).strip()[:1200]
+
+
+def normalize_image_text_mode(image_text_mode: str | None) -> str:
+    value = str(image_text_mode or "").strip().lower()
+    if value in {"no_text", "minimal", "infographic"}:
+        return value
+    return "minimal"
+
+
+def normalize_image_style_preset(image_style_preset: str | None) -> str:
+    value = str(image_style_preset or "").strip().lower()
+    allowed = {
+        "minimalism",
+        "luxury",
+        "sport",
+        "dark_premium",
+        "light_wb",
+        "kids",
+        "eco",
+    }
+    if value in allowed:
+        return value
+    return ""
+
+
+def normalize_image_style_custom(image_style_custom: str | None) -> str:
+    if not image_style_custom:
+        return ""
+    return re.sub(r"\s+", " ", str(image_style_custom)).strip()[:400]
+
+
+def _image_text_mode_instruction(image_text_mode: str | None) -> str:
+    mode = normalize_image_text_mode(image_text_mode)
+    if mode == "no_text":
+        return "No extra overlay text. Only preserve text that physically exists on the product itself."
+    if mode == "infographic":
+        return "Infographic mode. Use clear readable Russian overlay text with concrete facts and benefits."
+    return "Minimal text mode. If overlay is needed, keep it to one short Russian phrase per image."
+
+
+def _image_style_instruction(image_style_preset: str | None, image_style_custom: str | None) -> str:
+    custom = normalize_image_style_custom(image_style_custom)
+    if custom:
+        return f"Custom style direction: {custom}"
+    preset = normalize_image_style_preset(image_style_preset)
+    mapping = {
+        "minimalism": "Minimalism: clean premium composition, restrained palette, tidy spacing, light commercial styling.",
+        "luxury": "Luxury: elevated premium look, rich materials, refined highlights, expensive commercial mood.",
+        "sport": "Sport: dynamic athletic energy, active commercial framing, crisp contrast, training context.",
+        "dark_premium": "Dark premium: dark controlled background, glossy premium contrast, dramatic but clean lighting.",
+        "light_wb": "Light WB: bright marketplace look, airy background, clean readable composition, light retail styling.",
+        "kids": "Kids: friendly bright tone, softer palette, playful but commercial composition, safe family-oriented look.",
+        "eco": "Natural eco: natural materials, warm daylight, organic textures, calm earthy commercial styling.",
+    }
+    return mapping.get(preset, "")
 
 
 def _strip_markdown_fence(payload: str) -> str:
@@ -457,7 +526,10 @@ async def generate_image_prompts(
     site_url: str = "https://alterega.ru",
     photo_analyses: list[Any] | None = None,
     image_guidance: str | None = None,
-) -> list[ImageConcept]:
+    image_text_mode: str | None = None,
+    image_style_preset: str | None = None,
+    image_style_custom: str | None = None,
+) -> ImagePromptPlan:
     if photos_count < 1 or photos_count > 7:
         raise LLMResponseError("photos_count must be between 1 and 7")
     if images_count < 1 or images_count > 7:
@@ -497,6 +569,9 @@ async def generate_image_prompts(
                         images_count=images_count,
                         photo_analyses=analyses,
                         image_guidance=image_guidance,
+                        image_text_mode=image_text_mode,
+                        image_style_preset=image_style_preset,
+                        image_style_custom=image_style_custom,
                     ),
                 },
             ],
@@ -505,17 +580,28 @@ async def generate_image_prompts(
             extra_body=OPENROUTER_NO_REASONING_BODY,
         )
         content = response.choices[0].message.content
-        return parse_image_concepts_payload(
-            content,
-            photos_count=photos_count,
-            images_count=images_count,
+        return ImagePromptPlan(
+            concepts=parse_image_concepts_payload(
+                content,
+                photos_count=photos_count,
+                images_count=images_count,
+            ),
+            source="llm",
+            director_model=str(getattr(response, "model", None) or model),
         )
     except Exception:
         logging.warning("Image director failed, using deterministic fallback", exc_info=True)
-        return build_image_concepts_from_plan(
-            product_description=product_description,
-            marketplace=marketplace,
-            images_count=images_count,
-            photo_analyses=analyses,
-            image_guidance=image_guidance,
+        return ImagePromptPlan(
+            concepts=build_image_concepts_from_plan(
+                product_description=product_description,
+                marketplace=marketplace,
+                images_count=images_count,
+                photo_analyses=analyses,
+                image_guidance=image_guidance,
+                image_text_mode=image_text_mode,
+                image_style_preset=image_style_preset,
+                image_style_custom=image_style_custom,
+            ),
+            source="fallback",
+            director_model="deterministic_fallback",
         )
