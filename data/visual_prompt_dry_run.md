@@ -1005,7 +1005,7 @@ QA TARGETS: pure_white_background, small_text, bad_typography, deformation, prin
 Make the image polished, commercial and ready for a marketplace gallery.
 ```
 
-## Case 8: electronics / ozon
+## Case 8: bags / ozon
 
 Input: Рюкзак городской черный 22 литра, полиэстер, отделение для ноутбука 15.6, внешний карман, USB кабель
 
@@ -1028,8 +1028,8 @@ PRODUCT: Рюкзак городской черный 22 литра, полиэ�
 SLIDE ROLE: hero
 REFERENCE PHOTO: use only photo 0; do not merge details from other photos.
 COMPOSITION: hero product shot, full product visible, premium marketplace framing.
-BACKGROUND: modern desk setup with soft screen glow and blurred accessories; Do NOT use a pure white empty background.
-TEXT OVERLAY: Чистый звук. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
+BACKGROUND: urban desk or travel scene with blurred laptop, notebook or suitcase elements; Do NOT use a pure white empty background.
+TEXT OVERLAY: Городской формат. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
 No trusted visible text detected.
 No specific source photo defects detected.
 NEGATIVE CONSTRAINTS:
@@ -1053,8 +1053,8 @@ PRODUCT: Рюкзак городской черный 22 литра, полиэ�
 SLIDE ROLE: facts
 REFERENCE PHOTO: use only photo 2; do not merge details from other photos.
 COMPOSITION: facts card with product and 3 concise benefits.
-BACKGROUND: modern desk setup with soft screen glow and blurred accessories; Do NOT use a pure white empty background.
-TEXT OVERLAY: Подключение без лишних проводов. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
+BACKGROUND: urban desk or travel scene with blurred laptop, notebook or suitcase elements; Do NOT use a pure white empty background.
+TEXT OVERLAY: Все помещается. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
 No trusted visible text detected.
 No specific source photo defects detected.
 NEGATIVE CONSTRAINTS:
@@ -1079,7 +1079,7 @@ SLIDE ROLE: closeup
 REFERENCE PHOTO: use only photo 1; do not merge details from other photos.
 COMPOSITION: close-up of material, texture, connector, label or functional detail.
 BACKGROUND: macro version of the contextual scene with shallow depth of field; Do NOT use a pure white empty background.
-TEXT OVERLAY: Разъемы крупно. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
+TEXT OVERLAY: Карманы крупно. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
 No trusted visible text detected.
 No specific source photo defects detected.
 NEGATIVE CONSTRAINTS:
@@ -1103,8 +1103,8 @@ PRODUCT: Рюкзак городской черный 22 литра, полиэ�
 SLIDE ROLE: lifestyle_front
 REFERENCE PHOTO: use only photo 0; do not merge details from other photos.
 COMPOSITION: realistic use-case lifestyle image, product naturally used in context.
-BACKGROUND: modern desk setup with soft screen glow and blurred accessories; Do NOT use a pure white empty background.
-TEXT OVERLAY: Для работы и прогулок. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
+BACKGROUND: urban desk or travel scene with blurred laptop, notebook or suitcase elements; Do NOT use a pure white empty background.
+TEXT OVERLAY: Для работы и поездок. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
 No trusted visible text detected.
 No specific source photo defects detected.
 NEGATIVE CONSTRAINTS:
@@ -1128,8 +1128,8 @@ PRODUCT: Рюкзак городской черный 22 литра, полиэ�
 SLIDE ROLE: scenario
 REFERENCE PHOTO: use only photo 0; do not merge details from other photos.
 COMPOSITION: scenario image showing where and how the customer uses the product.
-BACKGROUND: modern desk setup with soft screen glow and blurred accessories; Do NOT use a pure white empty background.
-TEXT OVERLAY: Всегда под рукой. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
+BACKGROUND: urban desk or travel scene with blurred laptop, notebook or suitcase elements; Do NOT use a pure white empty background.
+TEXT OVERLAY: Удобно каждый день. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
 No trusted visible text detected.
 No specific source photo defects detected.
 NEGATIVE CONSTRAINTS:
@@ -1357,18 +1357,18 @@ QA TARGETS: pure_white_background, small_text, bad_typography, deformation, prin
 Make the image polished, commercial and ready for a marketplace gallery.
 ```
 
-### Image 4: hero / photo 0
+### Image 4: lifestyle_back / photo 0
 
 Issues: none
 
 ```text
 Create a 3:4 marketplace image for Ozon.
 PRODUCT: Детская куртка демисезонная синяя, капюшон, молния, утепленная, для мальчика 6 лет
-SLIDE ROLE: hero
+SLIDE ROLE: lifestyle_back
 REFERENCE PHOTO: use only photo 0; do not merge details from other photos.
-COMPOSITION: clean product hero flatlay, full item visible.
-BACKGROUND: soft pastel studio surface with gentle shadows, not empty white; Do NOT use a pure white empty background.
-TEXT OVERLAY: Комфорт каждый день. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
+COMPOSITION: child model of appropriate age wearing the item, back view, neutral safe pose.
+BACKGROUND: bright child-safe room or outdoor studio background, softly blurred; Do NOT use a pure white empty background.
+TEXT OVERLAY: Свободно двигаться. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
 No trusted visible text detected.
 No specific source photo defects detected.
 NEGATIVE CONSTRAINTS:
@@ -1387,18 +1387,18 @@ QA TARGETS: pure_white_background, small_text, bad_typography, deformation, prin
 Make the image polished, commercial and ready for a marketplace gallery.
 ```
 
-### Image 5: lifestyle_front / photo 0
+### Image 5: scenario / photo 0
 
 Issues: none
 
 ```text
 Create a 3:4 marketplace image for Ozon.
 PRODUCT: Детская куртка демисезонная синяя, капюшон, молния, утепленная, для мальчика 6 лет
-SLIDE ROLE: lifestyle_front
+SLIDE ROLE: scenario
 REFERENCE PHOTO: use only photo 0; do not merge details from other photos.
-COMPOSITION: child model of appropriate age wearing the item, neutral safe pose.
-BACKGROUND: bright child-safe room or studio background, softly blurred; Do NOT use a pure white empty background.
-TEXT OVERLAY: Удобно ребенку. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
+COMPOSITION: child model of appropriate age using the item in a calm everyday scenario.
+BACKGROUND: safe playground, school or home scene with soft natural light; Do NOT use a pure white empty background.
+TEXT OVERLAY: Для прогулок и школы. Typography must be large readable modern sans-serif, 1-2 text blocks, safe margins. Do NOT place text in random corners.
 No trusted visible text detected.
 No specific source photo defects detected.
 NEGATIVE CONSTRAINTS:

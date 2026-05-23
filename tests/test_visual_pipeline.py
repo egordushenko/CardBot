@@ -61,6 +61,7 @@ def test_detect_visual_profile_supports_russian_product_descriptions():
     assert detect_visual_profile("Наушники беспроводные Bluetooth") == "electronics"
     assert detect_visual_profile("Органайзер для ванной комнаты") == "home_decor"
     assert detect_visual_profile("Настольная лампа LED спиральная USB") == "home_decor"
+    assert detect_visual_profile("Рюкзак городской с USB кабелем и отделением для ноутбука") == "bags"
 
 
 def test_build_slide_plan_uses_clothing_five_image_sequence_and_photo_analysis():
@@ -231,6 +232,18 @@ def test_home_decor_subtypes_have_five_distinct_slide_roles():
     assert [slide.role for slide in organizer] == ["hero", "facts", "closeup", "scenario", "interior"]
     assert [slide.role for slide in bath_mat] == ["hero", "facts", "closeup", "scenario", "interior"]
     assert [slide.role for slide in lamp] == ["hero", "facts", "closeup", "scenario", "interior"]
+
+
+def test_kids_clothing_has_five_distinct_safe_slide_roles():
+    plan = build_slide_plan(
+        product_description="Детская куртка демисезонная синяя, капюшон, для мальчика 6 лет",
+        marketplace="ozon",
+        images_count=5,
+        photo_analyses=[],
+    )
+
+    assert [slide.role for slide in plan] == ["hero", "lifestyle_front", "closeup", "lifestyle_back", "scenario"]
+    assert all("Do NOT use adult models" in " ".join(slide.negative_constraints) for slide in plan)
 
 
 def test_electronics_and_cosmetics_prompts_do_not_use_generic_placeholder_copy():

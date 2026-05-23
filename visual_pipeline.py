@@ -137,6 +137,8 @@ def detect_visual_profile(product_description: str, marketplace: str = "wb") -> 
     text = product_description.casefold()
     if any(keyword in text for keyword in ("ламп", "светильник", "lamp")):
         return "home_decor"
+    if any(keyword in text for keyword in ("рюкзак", "сумк", "кошелек", "чемодан", "backpack", "bag")):
+        return "bags"
     profiles: list[tuple[str, tuple[str, ...]]] = [
         ("kids", ("детск", "ребен", "ребён", "малыш", "baby", "kids", "child", "подгуз")),
         ("clothing", ("рашгард", "футбол", "плать", "худи", "куртк", "брюк", "одежд", "shirt", "jacket", "dress", "rashguard", "hoodie")),
@@ -332,6 +334,18 @@ def _profile_sequence(profile: str, product_description: str = "") -> list[dict[
                 "composition": "close-up of fabric, seam or functional detail",
                 "background": "soft studio macro background",
                 "overlay": _overlay("Мягкая ткань"),
+            },
+            {
+                "role": "lifestyle_back",
+                "composition": "child model of appropriate age wearing the item, back view, neutral safe pose",
+                "background": "bright child-safe room or outdoor studio background, softly blurred",
+                "overlay": _overlay("Свободно двигаться"),
+            },
+            {
+                "role": "scenario",
+                "composition": "child model of appropriate age using the item in a calm everyday scenario",
+                "background": "safe playground, school or home scene with soft natural light",
+                "overlay": _overlay("Для прогулок и школы"),
             },
         ]
     return _generic_sequence(profile, product_description)
