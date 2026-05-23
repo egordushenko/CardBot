@@ -228,6 +228,9 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
 
     assert len(image_items) == 2
     assert "Generate exactly 2 separate marketplace-ready output images" in prompt_text
+    assert "The response must contain exactly 2 items in message.images." in prompt_text
+    assert "Do not generate alternate versions or any extra images." in prompt_text
+    assert "If you cannot generate exactly 2 images, generate fewer images rather than extra images." in prompt_text
     assert "Image 1 (hero): Hero prompt" in prompt_text
     assert "Image 2 (back): Back prompt" in prompt_text
     assert captured["timeout"] >= 420

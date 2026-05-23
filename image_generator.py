@@ -162,6 +162,10 @@ def _build_batch_image_prompt(concepts: list[ImageBatchConcept]) -> str:
         validate_prompt_text(str(concept.prompt))
     lines = [
         f"Generate exactly {len(concepts)} separate marketplace-ready output images.",
+        f"The response must contain exactly {len(concepts)} items in message.images.",
+        "Do not generate alternate versions or any extra images.",
+        "Do not generate preview, cover, contact sheet, collage, grid, comparison image, or fallback image.",
+        f"If you cannot generate exactly {len(concepts)} images, generate fewer images rather than extra images.",
         "Return each result as a separate image output in message.images, not a collage and not a grid.",
         "Use the input photos as references of the same product.",
         "Preserve product identity, shape, color, material, visible text, and distinctive details from the references.",
