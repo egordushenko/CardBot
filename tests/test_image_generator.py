@@ -5,12 +5,15 @@ import pytest
 
 import image_generator
 from image_generator import (
+    GeneratedImage,
     ImageGenerationError,
+    ImageGenerationUsage,
     PRODUCT_PRESERVATION_SUFFIX,
     build_safe_image_prompt,
     extract_openrouter_image_bytes,
     extract_openrouter_image_usage,
 )
+from visual_pipeline import ImageQualityReport
 
 
 def test_extract_openrouter_image_bytes_reads_data_url():
@@ -132,3 +135,50 @@ def test_generate_single_image_sends_safe_prompt_to_api(monkeypatch):
     assert result == b"png"
     assert sent_text.startswith("Original prompt")
     assert PRODUCT_PRESERVATION_SUFFIX in sent_text
+
+
+def test_generate_marketplace_image_result_blocks_failed_quality_check(monkeypatch):
+    class FakeFile:
+        async def download_as_bytearray(self):
+            return bytearray(b"reference")
+
+    class FakeBot:
+        async def get_file(self, file_id):
+            return FakeFile()
+
+    async def fake_generate_single_image_result(**kwargs):
+        return GeneratedImage(
+            image_bytes=b"generated",
+            usage=ImageGenerationUsage(model="image-model", cost_usd=0.2),
+        )
+
+    async def fake_evaluate_generated_image_quality(**kwargs):
+        return ImageQualityReport(
+            passed=False,
+            issues=("print_mismatch",),
+            summary="print changed",
+        )
+
+    monkeypatch.setattr(
+        image_generator,
+        "generate_single_image_result",
+        fake_generate_single_image_result,
+    )
+    monkeypatch.setattr(
+        image_generator,
+        "evaluate_generated_image_quality",
+        fake_evaluate_generated_image_quality,
+    )
+
+    with pytest.raises(ImageGenerationError, match="image QA failed: print_mismatch"):
+        asyncio.run(
+            image_generator.generate_marketplace_image_result(
+                prompt="Prompt",
+                reference_photo_file_id="file-id",
+                bot=FakeBot(),
+                api_key="key",
+                model="image-model",
+                quality_model="vision-model",
+                quality_enabled=True,
+            )
+        )

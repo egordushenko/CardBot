@@ -20,7 +20,7 @@ from category_profiles import (
 )
 from core.field_resolver import resolve_fields
 from db import Database, UsageMode
-from image_generator import generate_marketplace_image_result
+from image_generator import analyze_marketplace_reference_photos, generate_marketplace_image_result
 from llm import CardGeneration, ImageConcept, generate_card, generate_image_prompts, normalize_marketplace
 from payments import (
     IMAGE_ADDON_CODES,
@@ -1072,6 +1072,15 @@ async def _generate_images_for_user(
 
     await message.reply_text("⏳ Разрабатываю концепцию изображений...")
     try:
+        photo_analyses = await analyze_marketplace_reference_photos(
+            product_description=product_description,
+            marketplace=marketplace,
+            photo_file_ids=photo_file_ids,
+            bot=context.bot,
+            api_key=settings.openrouter_api_key,
+            model=settings.vision_model,
+            site_url=settings.site_url,
+        )
         concepts = await generate_image_prompts(
             product_description=product_description,
             marketplace=marketplace,
@@ -1080,6 +1089,7 @@ async def _generate_images_for_user(
             api_key=settings.openrouter_api_key,
             model=settings.openrouter_model,
             site_url=settings.site_url,
+            photo_analyses=photo_analyses,
         )
         await db.update_image_session_prompts(
             session_id,
@@ -1200,14 +1210,13 @@ async def _generate_text_and_images_for_user(
         )
     )
     concepts_task = asyncio.create_task(
-        generate_image_prompts(
+        _generate_image_prompts_with_photo_analysis(
+            context=context,
+            settings=settings,
             product_description=product_description,
             marketplace=marketplace,
-            photos_count=len(photo_file_ids),
+            photo_file_ids=photo_file_ids,
             images_count=images_count,
-            api_key=settings.openrouter_api_key,
-            model=settings.openrouter_model,
-            site_url=settings.site_url,
         )
     )
 
@@ -1334,6 +1343,36 @@ async def _cancel_task(task: asyncio.Task[Any]) -> None:
     task.cancel()
     with suppress(asyncio.CancelledError):
         await task
+
+
+async def _generate_image_prompts_with_photo_analysis(
+    *,
+    context: Any,
+    settings: Settings,
+    product_description: str,
+    marketplace: str,
+    photo_file_ids: list[str],
+    images_count: int,
+) -> list[ImageConcept]:
+    photo_analyses = await analyze_marketplace_reference_photos(
+        product_description=product_description,
+        marketplace=marketplace,
+        photo_file_ids=photo_file_ids,
+        bot=context.bot,
+        api_key=settings.openrouter_api_key,
+        model=settings.vision_model,
+        site_url=settings.site_url,
+    )
+    return await generate_image_prompts(
+        product_description=product_description,
+        marketplace=marketplace,
+        photos_count=len(photo_file_ids),
+        images_count=images_count,
+        api_key=settings.openrouter_api_key,
+        model=settings.openrouter_model,
+        site_url=settings.site_url,
+        photo_analyses=photo_analyses,
+    )
 
 
 def _serialize_image_concepts(concepts: list[ImageConcept]) -> str:
@@ -1538,8 +1577,10 @@ async def _generate_single_image_result(
                 api_key=settings.openrouter_api_key,
                 model=settings.gpt_image_model,
                 site_url=settings.site_url,
+                quality_model=settings.vision_model,
+                quality_enabled=settings.image_qa_enabled,
             ),
-            timeout=180,
+            timeout=240,
         )
     except Exception as exc:
         return {

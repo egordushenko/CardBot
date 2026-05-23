@@ -425,51 +425,24 @@ async def generate_image_prompts(
     api_key: str,
     model: str = "deepseek/deepseek-v4-flash",
     site_url: str = "https://alterega.ru",
+    photo_analyses: list[Any] | None = None,
 ) -> list[ImageConcept]:
-    from openai import AsyncOpenAI
-
     if photos_count < 1 or photos_count > 7:
         raise LLMResponseError("photos_count must be between 1 and 7")
-    if images_count < 1 or images_count > 9:
-        raise LLMResponseError("images_count must be between 1 and 9")
+    if images_count < 1 or images_count > 7:
+        raise LLMResponseError("images_count must be between 1 and 7")
 
-    client = AsyncOpenAI(
-        api_key=api_key,
-        base_url=OPENROUTER_BASE_URL,
-        timeout=45.0,
-        max_retries=1,
-        default_headers={
-            "HTTP-Referer": site_url,
-            "X-Title": "CardBot",
-        },
-    )
+    from visual_pipeline import build_image_concepts_from_plan, fallback_photo_analysis
 
-    messages = [
-        {"role": "system", "content": DIRECTOR_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": build_image_director_user_prompt(
-                product_description=product_description,
-                marketplace=marketplace,
-                photos_count=photos_count,
-                images_count=images_count,
-            ),
-        },
-    ]
-    response = await request_chat_completion_with_fallback(
-        client,
-        model_candidates=build_openrouter_model_fallbacks(model),
-        messages=messages,
-        max_tokens=2000,
-        temperature=0.8,
-        extra_body=OPENROUTER_NO_REASONING_BODY,
-    )
-
-    content = response.choices[0].message.content
-    if not content:
-        raise LLMResponseError("LLM returned empty image concepts response")
-    return parse_image_concepts_payload(
-        content,
-        photos_count=photos_count,
+    analyses = list(photo_analyses or [])
+    if not analyses:
+        analyses = [
+            fallback_photo_analysis(index, product_description, photos_count)
+            for index in range(photos_count)
+        ]
+    return build_image_concepts_from_plan(
+        product_description=product_description,
+        marketplace=marketplace,
         images_count=images_count,
+        photo_analyses=analyses,
     )

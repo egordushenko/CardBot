@@ -13,6 +13,8 @@ class Settings:
     trial_generations: int = 3
     openrouter_model: str = "deepseek/deepseek-v4-flash"
     gpt_image_model: str = "openai/gpt-5.4-image-2"
+    vision_model: str = "google/gemini-2.5-flash"
+    image_qa_enabled: bool = True
     site_url: str = "https://alterega.ru"
     cardbot_result_url: str = "https://alterega.ru/api/payment/robokassa/cardbot-result"
     cardbot_bot_url: str = "https://t.me/CaardMakerBot"
@@ -77,6 +79,8 @@ def load_settings(load_dotenv_files: bool = True) -> Settings:
             _env("OPENROUTER_MODEL", defaults, "deepseek/deepseek-v4-flash")
         ),
         gpt_image_model=_env("GPT_IMAGE_MODEL", defaults, "openai/gpt-5.4-image-2"),
+        vision_model=_env("VISION_MODEL", defaults, "google/gemini-2.5-flash"),
+        image_qa_enabled=_bool_env(_env("IMAGE_QA_ENABLED", defaults, "1")),
         site_url=_env("SITE_URL", defaults, "https://alterega.ru"),
         cardbot_result_url=_env(
             "CARDBOT_RESULT_URL",

@@ -469,41 +469,40 @@ def test_build_image_director_user_prompt_includes_counts_and_marketplace():
 
 
 @pytest.mark.asyncio
-async def test_generate_image_prompts_uses_paid_fallback_after_free_rate_limit(monkeypatch):
-    client = _FakeClient(
-        [
-            _RateLimitError(),
-            _chat_response(
-                '{"concepts":['
-                '{"image_index":1,"purpose":"main","photo_index":0,"prompt":"Prompt one"},'
-                '{"image_index":2,"purpose":"details","photo_index":1,"prompt":"Prompt two"},'
-                '{"image_index":3,"purpose":"lifestyle","photo_index":2,"prompt":"Prompt three"}'
-                ']}'
-            ),
-        ]
-    )
-
-    monkeypatch.setitem(
-        sys.modules,
-        "openai",
-        SimpleNamespace(AsyncOpenAI=lambda **_kwargs: client),
-    )
+async def test_generate_image_prompts_uses_code_slide_plan_with_photo_analysis():
+    from visual_pipeline import PhotoAnalysis
 
     result = await generate_image_prompts(
-        product_description="Песочные часы 5 минут",
+        product_description="black Therapy rashguard cotton fitted",
         marketplace="ozon",
         photos_count=4,
         images_count=3,
         api_key="test-key",
         model="deepseek/deepseek-v4-flash:free",
         site_url="https://alterega.ru",
+        photo_analyses=[
+            PhotoAnalysis(0, ("back", "on_model"), ("THERAPY FOR YOU",), (), ("back_on_model",)),
+            PhotoAnalysis(1, ("closeup", "label"), ("100% COTTON",), (), ("closeup",)),
+            PhotoAnalysis(2, ("front", "on_model"), (), (), ("front_on_model",)),
+            PhotoAnalysis(3, ("flatlay", "front"), (), (), ("hero", "flatlay")),
+        ],
     )
 
-    assert [concept.prompt for concept in result] == ["Prompt one", "Prompt two", "Prompt three"]
-    assert client.chat.completions.calls == [
-        "deepseek/deepseek-v4-flash:free",
-        "deepseek/deepseek-v4-flash",
-    ]
+    assert [concept.purpose for concept in result] == ["hero", "closeup", "lifestyle_back"]
+    assert [concept.photo_index for concept in result] == [3, 1, 0]
+    assert "SLIDE ROLE: hero" in result[0].prompt
+
+
+@pytest.mark.asyncio
+async def test_generate_image_prompts_rejects_more_than_seven_images():
+    with pytest.raises(LLMResponseError, match="images_count must be between 1 and 7"):
+        await generate_image_prompts(
+            product_description="hourglass",
+            marketplace="ozon",
+            photos_count=1,
+            images_count=8,
+            api_key="test-key",
+        )
 
 
 def test_director_system_prompt_requires_product_preservation_rules():
