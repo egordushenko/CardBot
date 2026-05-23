@@ -23,6 +23,7 @@ from core.field_resolver import resolve_fields
 from db import Database, UsageMode
 from image_generator import (
     ImageBatchConcept,
+    batch_image_timeout_seconds,
     generate_marketplace_batch_image_results,
 )
 from llm import (
@@ -1957,7 +1958,7 @@ async def _generate_and_send_image_concepts(
                 model=settings.gpt_image_model,
                 site_url=settings.site_url,
             ),
-            timeout=420,
+            timeout=batch_image_timeout_seconds(total_count) + 60,
         )
     except Exception as exc:
         reason = classify_generation_error(exc)

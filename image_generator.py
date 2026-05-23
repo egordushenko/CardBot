@@ -9,6 +9,8 @@ import httpx
 
 
 OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
+MIN_BATCH_IMAGE_TIMEOUT_SECONDS = 420.0
+BATCH_IMAGE_TIMEOUT_SECONDS_PER_IMAGE = 180.0
 
 
 class ImageGenerationError(RuntimeError):
@@ -32,6 +34,13 @@ class ImageBatchConcept:
     image_index: int
     purpose: str
     prompt: str
+
+
+def batch_image_timeout_seconds(concept_count: int) -> float:
+    return max(
+        MIN_BATCH_IMAGE_TIMEOUT_SECONDS,
+        float(max(1, concept_count)) * BATCH_IMAGE_TIMEOUT_SECONDS_PER_IMAGE,
+    )
 
 
 _QUESTION_MARK_RUN_RE = re.compile(r"\?{4,}")
@@ -284,7 +293,7 @@ async def generate_batch_image_results(
         "max_tokens": 4096,
     }
 
-    async with httpx.AsyncClient(timeout=300.0) as client:
+    async with httpx.AsyncClient(timeout=batch_image_timeout_seconds(len(concepts))) as client:
         response = await client.post(
             OPENROUTER_CHAT_COMPLETIONS_URL,
             headers={

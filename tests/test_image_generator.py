@@ -186,6 +186,7 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
     class FakeClient:
         def __init__(self, timeout):
             self.timeout = timeout
+            captured["timeout"] = timeout
 
         async def __aenter__(self):
             return self
@@ -229,6 +230,7 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
     assert "Generate exactly 2 separate marketplace-ready output images" in prompt_text
     assert "Image 1 (hero): Hero prompt" in prompt_text
     assert "Image 2 (back): Back prompt" in prompt_text
+    assert captured["timeout"] >= 420
     assert [item.image_bytes for item in result] == [b"one", b"two"]
     assert [item.usage.model for item in result] == ["model-version", "model-version"]
     assert [item.usage.cost_usd for item in result] == [0.2, 0.2]
