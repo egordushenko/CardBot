@@ -68,6 +68,10 @@ TEMPLATE_NAME_PROMPT = (
     "Введите название шаблона.\n"
     "Например: \"Лампа спиральная\" или \"Коврик ЭВА\""
 )
+NEW_TEMPLATE_TEXT_PROMPT = (
+    "Введите текст шаблона.\n"
+    "Например: \"Название товара, цвет {цвет}, размер {размер}, материал {материал}\""
+)
 REPEAT_CHANGES_PROMPT = (
     "Напишите только что изменилось.\n"
     "Например: \"цвет чёрный\" или \"размер XL, вес 2 кг\"\n\n"
@@ -731,6 +735,9 @@ def _reset_navigation_state(context: Any) -> None:
     for key in (
         "awaiting_template_name",
         "awaiting_repeat_changes",
+        "awaiting_new_template_name",
+        "awaiting_new_template_text",
+        "new_template_name",
     ):
         context.user_data.pop(key, None)
 
@@ -1019,11 +1026,8 @@ async def _start_image_flow(message: Any, context: Any, user_id: int) -> None:
 
 async def _start_new_template_flow(message: Any, context: Any) -> None:
     _clear_image_session(context)
-    context.user_data["generation_step"] = "marketplace"
-    await message.reply_text(
-        "Выберите маркетплейс для нового шаблона:",
-        reply_markup=build_marketplace_keyboard(),
-    )
+    context.user_data["awaiting_new_template_name"] = True
+    await message.reply_text(TEMPLATE_NAME_PROMPT)
 
 
 async def _handle_image_description(update: Any, context: Any, user_input: str) -> bool:
@@ -1840,6 +1844,45 @@ async def _handle_template_name(update: Any, context: Any, user_id: int, user_in
     return True
 
 
+async def _handle_new_template_name(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if not context.user_data.get("awaiting_new_template_name"):
+        return False
+
+    context.user_data.pop("awaiting_new_template_name", None)
+    context.user_data["new_template_name"] = truncate_template_name(user_input)
+    context.user_data["awaiting_new_template_text"] = True
+    await update.effective_message.reply_text(NEW_TEMPLATE_TEXT_PROMPT)
+    return True
+
+
+async def _handle_new_template_text(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if not context.user_data.get("awaiting_new_template_text"):
+        return False
+
+    context.user_data.pop("awaiting_new_template_text", None)
+    name = context.user_data.pop("new_template_name", None) or "Шаблон"
+    count = await _get_db(context).get_templates_count(user_id)
+    if count >= TEMPLATES_LIMIT:
+        await update.effective_message.reply_text(
+            "У вас уже 10 шаблонов — максимум. Удалите старый шаблон чтобы сохранить новый."
+        )
+        return True
+
+    await _get_db(context).save_template(
+        user_id=user_id,
+        name=name,
+        marketplace="wb",
+        mode="text_only",
+        description=user_input,
+        photo_file_ids=[],
+        images_count=None,
+    )
+    await update.effective_message.reply_text(
+        f"✅ Шаблон \"{name}\" сохранён.\nНайти его можно через /templates"
+    )
+    return True
+
+
 async def _handle_repeat_changes(update: Any, context: Any, user_id: int, user_input: str) -> bool:
     if not context.user_data.get("awaiting_repeat_changes"):
         return False
@@ -1975,6 +2018,10 @@ async def handle_text(update: Any, context: Any) -> None:
         await _handle_reply_action(update, context, user_id, reply_action)
         return
 
+    if await _handle_new_template_name(update, context, user_id, user_input):
+        return
+    if await _handle_new_template_text(update, context, user_id, user_input):
+        return
     if await _handle_template_name(update, context, user_id, user_input):
         return
     if await _handle_repeat_changes(update, context, user_id, user_input):

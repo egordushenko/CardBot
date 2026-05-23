@@ -1,3 +1,5 @@
+import asyncio
+
 from bot import (
     FEEDBACK_MESSAGE,
     IMAGE_PHOTO_PROMPT,
@@ -34,6 +36,8 @@ from bot import (
     classify_reply_action,
     extract_image_file_id,
     format_template_description_preview,
+    _handle_new_template_text,
+    _handle_new_template_name,
     is_allowed_image_count,
     is_supported_image_document,
     truncate_template_name,
@@ -182,6 +186,84 @@ def test_template_helpers_truncate_and_combine_description():
     assert combine_repeat_description("old", "new color") == "old\n\nИзменения: new color"
     assert format_template_description_preview("a" * 130, limit=20) == ("a" * 20) + "..."
 
+
+class _FakeMessage:
+    def __init__(self):
+        self.replies = []
+
+    async def reply_text(self, text, **kwargs):
+        self.replies.append((text, kwargs))
+
+
+class _FakeUpdate:
+    def __init__(self, text):
+        self.effective_message = _FakeMessage()
+        self.effective_message.text = text
+
+
+class _FakeTemplateDb:
+    def __init__(self, count=0):
+        self.count = count
+        self.saved = []
+
+    async def get_templates_count(self, user_id):
+        return self.count
+
+    async def save_template(self, **kwargs):
+        self.saved.append(kwargs)
+        return 42
+
+
+class _FakeTemplateApplication:
+    def __init__(self, db):
+        self.bot_data = {"db": db}
+
+
+class _FakeTemplateContext:
+    def __init__(self, db):
+        self.user_data = {}
+        self.application = _FakeTemplateApplication(db)
+
+
+def test_new_template_flow_collects_name_then_saves_text_without_generation():
+    async def run_flow():
+        db = _FakeTemplateDb()
+        context = _FakeTemplateContext(db)
+        context.user_data["awaiting_new_template_name"] = True
+
+        name_update = _FakeUpdate("Зимняя шапка")
+        handled_name = await _handle_new_template_name(name_update, context, user_id=123, user_input="Зимняя шапка")
+
+        assert handled_name is True
+        assert context.user_data["new_template_name"] == "Зимняя шапка"
+        assert context.user_data["awaiting_new_template_text"] is True
+        assert "текст шаблона" in name_update.effective_message.replies[0][0].casefold()
+
+        text_update = _FakeUpdate("Шапка, цвет {цвет}, размер {размер}")
+        handled_text = await _handle_new_template_text(
+            text_update,
+            context,
+            user_id=123,
+            user_input="Шапка, цвет {цвет}, размер {размер}",
+        )
+
+        assert handled_text is True
+        assert db.saved == [
+            {
+                "user_id": 123,
+                "name": "Зимняя шапка",
+                "marketplace": "wb",
+                "mode": "text_only",
+                "description": "Шапка, цвет {цвет}, размер {размер}",
+                "photo_file_ids": [],
+                "images_count": None,
+            }
+        ]
+        assert "сохранён" in text_update.effective_message.replies[0][0]
+        assert "awaiting_new_template_text" not in context.user_data
+        assert "new_template_name" not in context.user_data
+
+    asyncio.run(run_flow())
 
 def test_generation_mode_keyboard_offers_text_and_combined_modes():
     keyboard = build_generation_mode_keyboard()
