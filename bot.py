@@ -23,7 +23,7 @@ from db import Database, UsageMode
 from image_generator import (
     ImageBatchConcept,
     batch_image_timeout_seconds,
-    generate_marketplace_batch_image_results,
+    iter_marketplace_batch_image_results,
 )
 from llm import (
     CardGeneration,
@@ -1435,69 +1435,71 @@ async def _generate_and_send_image_concepts(
         )
     )
 
-    batch_results = []
     try:
-        batch_results = await asyncio.wait_for(
-            generate_marketplace_batch_image_results(
-                concepts=[
-                    ImageBatchConcept(
-                        image_index=int(concept.image_index),
-                        purpose=str(concept.purpose),
-                        prompt=str(concept.prompt),
-                    )
-                    for concept in concepts
-                ],
-                reference_photo_file_ids=photo_file_ids,
-                bot=context.bot,
-                api_key=settings.openrouter_api_key,
-                model=settings.gpt_image_model,
-                site_url=settings.site_url,
-            ),
-            timeout=batch_image_timeout_seconds(total_count) + 60,
+        stream = iter_marketplace_batch_image_results(
+            concepts=[
+                ImageBatchConcept(
+                    image_index=int(concept.image_index),
+                    purpose=str(concept.purpose),
+                    prompt=str(concept.prompt),
+                )
+                for concept in concepts
+            ],
+            reference_photo_file_ids=photo_file_ids,
+            bot=context.bot,
+            api_key=settings.openrouter_api_key,
+            model=settings.gpt_image_model,
+            site_url=settings.site_url,
         )
+        async with asyncio.timeout(batch_image_timeout_seconds(total_count) + 60):
+            async for _, batch_result in stream:
+                generated_count += 1
+                concept = batch_result.concept
+                image_result = batch_result.image
+                image_index = int(concept.image_index)
+                try:
+                    image_record = await _send_generated_image_result(
+                        message,
+                        {
+                            "image_index": image_index,
+                            "purpose": concept.purpose,
+                            "prompt_used": concept.prompt,
+                            "image_bytes": image_result.image_bytes,
+                            "model": image_result.usage.model,
+                            "cost_usd": image_result.usage.cost_usd,
+                        },
+                    )
+                except Exception as exc:
+                    logging.warning("Failed to send generated image %s: %s", image_index, exc)
+                    await message.reply_text(
+                        f"Изображение {image_index}/{total_count} не удалось отправить."
+                    )
+                    continue
+                generated.append(image_record)
+                sent_count += 1
+                await _safe_edit_message_text(
+                    status_message,
+                    build_image_progress_message(total_count, generated_count, sent_count),
+                )
     except Exception as exc:
         reason = classify_generation_error(exc)
         logging.warning("Batch image generation failed reason=%s: %s", reason, exc)
         if reason in {"api_balance", "429"}:
             await message.reply_text(generation_error_message(reason))
         else:
+            sent_indexes = {int(item["image_index"]) for item in generated}
             for concept in concepts:
+                image_index = int(concept.image_index)
+                if image_index in sent_indexes:
+                    continue
                 await message.reply_text(
-                    f"Изображение {int(concept.image_index)}/{total_count} не удалось сгенерировать."
+                    f"Изображение {image_index}/{total_count} не удалось сгенерировать."
                 )
-    else:
-        generated_count = len(batch_results)
-        for concept, image_result in zip(concepts, batch_results):
-            image_index = int(concept.image_index)
-            try:
-                image_record = await _send_generated_image_result(
-                    message,
-                    {
-                        "image_index": image_index,
-                        "purpose": concept.purpose,
-                        "prompt_used": concept.prompt,
-                        "image_bytes": image_result.image_bytes,
-                        "model": image_result.usage.model,
-                        "cost_usd": image_result.usage.cost_usd,
-                    },
-                )
-            except Exception as exc:
-                logging.warning("Failed to send generated image %s: %s", image_index, exc)
-                await message.reply_text(
-                    f"Изображение {image_index}/{total_count} не удалось отправить."
-                )
-                continue
-            generated.append(image_record)
-            sent_count += 1
-            await _safe_edit_message_text(
-                status_message,
-                build_image_progress_message(total_count, generated_count, sent_count),
-            )
     finally:
         stop_progress.set()
         await progress_task
 
-    return generated
+    return sorted(generated, key=lambda item: int(item["image_index"]))
 
 
 def _aggregate_image_generation_cost(

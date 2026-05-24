@@ -54,6 +54,7 @@ from bot import (
     format_template_mode,
     handle_callback,
     _build_image_guidance_with_style,
+    _generate_and_send_image_concepts,
     _handle_image_guidance,
     _handle_image_style_custom,
     _handle_image_description,
@@ -65,6 +66,12 @@ from bot import (
     truncate_template_name,
 )
 from db import TRIAL_GENERATIONS
+from image_generator import (
+    GeneratedImage,
+    GeneratedImageResult,
+    ImageBatchConcept,
+    ImageGenerationUsage,
+)
 from llm import CardGeneration
 
 
@@ -628,6 +635,74 @@ def test_image_progress_message_uses_sent_counter_after_batch_arrives():
 
     assert "Отправлено: 2 из 7" in text
     assert "Готово:" not in text
+
+
+def test_generate_and_send_image_concepts_sends_each_streamed_result(monkeypatch):
+    async def run_flow():
+        events = []
+
+        class StatusMessage:
+            async def edit_text(self, text):
+                events.append(("edit", text))
+
+        class SentPhoto:
+            photo = [type("Photo", (), {"file_id": "telegram-file-id"})()]
+
+        class Message:
+            async def reply_text(self, text, **kwargs):
+                events.append(("text", text))
+                return StatusMessage()
+
+            async def reply_photo(self, photo, caption):
+                events.append(("photo", caption))
+                return SentPhoto()
+
+        class Context:
+            bot = object()
+
+        async def fake_iter_marketplace_batch_image_results(**kwargs):
+            for concept in kwargs["concepts"]:
+                yield (
+                    int(concept.image_index) - 1,
+                    GeneratedImageResult(
+                        concept=concept,
+                        image=GeneratedImage(
+                            image_bytes=f"image-{concept.image_index}".encode("ascii"),
+                            usage=ImageGenerationUsage(model="model", cost_usd=0.1),
+                        ),
+                    ),
+                )
+                events.append(("generated", int(concept.image_index)))
+
+        monkeypatch.setattr(
+            "bot.iter_marketplace_batch_image_results",
+            fake_iter_marketplace_batch_image_results,
+        )
+
+        generated = await _generate_and_send_image_concepts(
+            message=Message(),
+            context=Context(),
+            concepts=[
+                ImageBatchConcept(1, "hero", "prompt 1"),
+                ImageBatchConcept(2, "detail", "prompt 2"),
+            ],
+            photo_file_ids=["photo"],
+            settings=type(
+                "Settings",
+                (),
+                {
+                    "openrouter_api_key": "key",
+                    "gpt_image_model": "model",
+                    "site_url": "https://alterega.ru",
+                },
+            )(),
+        )
+
+        assert [event[0] for event in events].count("photo") == 2
+        assert events.index(("photo", "Изображение 1: hero")) < events.index(("generated", 1))
+        assert [item["telegram_file_id"] for item in generated] == ["telegram-file-id", "telegram-file-id"]
+
+    asyncio.run(run_flow())
 
 
 def test_extract_image_file_id_accepts_photo_and_image_document():

@@ -194,6 +194,80 @@ def test_generate_batch_images_sends_collage_once_per_concept(monkeypatch):
     assert [item.usage.cost_usd for item in result] == [0.2, 0.2]
 
 
+def test_generate_batch_images_runs_requests_with_bounded_parallelism(monkeypatch):
+    captured = {"active": 0, "max_active": 0, "starts": [], "finishes": []}
+
+    class FakeResponse:
+        def __init__(self, image_bytes):
+            self.image_bytes = image_bytes
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "model": "model-version",
+                "usage": {"cost": 0.1},
+                "choices": [
+                    {
+                        "message": {
+                            "images": [
+                                {
+                                    "image_url": {
+                                        "url": "data:image/png;base64,"
+                                        + base64.b64encode(self.image_bytes).decode("ascii")
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                ],
+            }
+
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, headers, json):
+            prompt = json["messages"][0]["content"][-1]["text"]
+            marker = next(line for line in prompt.splitlines() if line.startswith("prompt-"))
+            captured["starts"].append(marker)
+            captured["active"] += 1
+            captured["max_active"] = max(captured["max_active"], captured["active"])
+            await asyncio.sleep({"prompt-1": 0.03, "prompt-2": 0.01, "prompt-3": 0.02, "prompt-4": 0.0}[marker])
+            captured["active"] -= 1
+            captured["finishes"].append(marker)
+            return FakeResponse(marker.encode("ascii"))
+
+    monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
+
+    concepts = [
+        image_generator.ImageBatchConcept(index, f"purpose-{index}", f"prompt-{index}")
+        for index in range(1, 5)
+    ]
+
+    result = asyncio.run(
+        image_generator.generate_batch_image_results(
+            concepts=concepts,
+            reference_photo_bytes=[_png_bytes("red")],
+            api_key="key",
+            model="model",
+        )
+    )
+
+    assert captured["starts"][:3] == ["prompt-1", "prompt-2", "prompt-3"]
+    assert captured["starts"][-1] == "prompt-4"
+    assert captured["max_active"] == 3
+    assert captured["finishes"][0] == "prompt-2"
+    assert [item.image_bytes for item in result] == [b"prompt-1", b"prompt-2", b"prompt-3", b"prompt-4"]
+
+
 def test_generate_batch_images_uses_available_outputs_when_count_differs(monkeypatch):
     class FakeResponse:
         def raise_for_status(self):

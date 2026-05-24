@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import re
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 from PIL import Image, ImageOps
@@ -17,6 +18,7 @@ BATCH_IMAGE_TIMEOUT_SECONDS_PER_IMAGE = 180.0
 REFERENCE_COLLAGE_SIZE = (1536, 1536)
 REFERENCE_COLLAGE_BACKGROUND = (246, 246, 244)
 REFERENCE_COLLAGE_GAP = 16
+MAX_PARALLEL_IMAGE_REQUESTS = 3
 REFERENCE_COLLAGE_LAYOUTS = {
     1: (1,),
     2: (2,),
@@ -42,6 +44,12 @@ class ImageGenerationUsage:
 class GeneratedImage:
     image_bytes: bytes
     usage: ImageGenerationUsage
+
+
+@dataclass(frozen=True)
+class GeneratedImageResult:
+    concept: "ImageBatchConcept"
+    image: GeneratedImage
 
 
 @dataclass(frozen=True)
@@ -226,6 +234,134 @@ def _build_single_image_prompt(
     )
 
 
+def _build_image_request_payload(
+    *,
+    concept: ImageBatchConcept,
+    total_count: int,
+    collage_bytes: bytes,
+    model: str,
+) -> dict[str, Any]:
+    return {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    _image_content_item(collage_bytes),
+                    {"type": "text", "text": "Input reference collage"},
+                    {
+                        "type": "text",
+                        "text": _build_single_image_prompt(concept, total_count=total_count),
+                    },
+                ],
+            }
+        ],
+        "modalities": ["image", "text"],
+        "image_config": {
+            "aspect_ratio": "3:4",
+            "image_size": "1K",
+        },
+        "max_tokens": 4096,
+    }
+
+
+async def _request_generated_image(
+    *,
+    client: httpx.AsyncClient,
+    concept: ImageBatchConcept,
+    total_count: int,
+    collage_bytes: bytes,
+    api_key: str,
+    model: str,
+    site_url: str,
+) -> GeneratedImageResult:
+    payload = _build_image_request_payload(
+        concept=concept,
+        total_count=total_count,
+        collage_bytes=collage_bytes,
+        model=model,
+    )
+    response = await client.post(
+        OPENROUTER_CHAT_COMPLETIONS_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": site_url,
+            "X-Title": "CardBot",
+        },
+        json=payload,
+    )
+    response.raise_for_status()
+    result = response.json()
+
+    image_bytes_list = extract_openrouter_image_bytes_list(result)
+    if not image_bytes_list:
+        raise ImageGenerationError("OpenRouter returned no images")
+    if len(image_bytes_list) > 1:
+        logging.warning(
+            "OpenRouter returned multiple images for single-image request: got=%s",
+            len(image_bytes_list),
+        )
+
+    usage = extract_openrouter_image_usage(result, fallback_model=model)
+    return GeneratedImageResult(
+        concept=concept,
+        image=GeneratedImage(
+            image_bytes=image_bytes_list[0],
+            usage=ImageGenerationUsage(model=usage.model, cost_usd=usage.cost_usd),
+        ),
+    )
+
+
+async def iter_batch_image_results(
+    *,
+    concepts: list[ImageBatchConcept],
+    reference_photo_bytes: list[bytes],
+    api_key: str,
+    model: str,
+    site_url: str = "https://alterega.ru",
+    max_parallel_requests: int = MAX_PARALLEL_IMAGE_REQUESTS,
+) -> AsyncIterator[tuple[int, GeneratedImageResult]]:
+    if not concepts:
+        return
+    if not reference_photo_bytes:
+        raise ImageGenerationError("Batch image generation requires at least one reference photo")
+
+    for concept in concepts:
+        validate_prompt_text(str(concept.prompt))
+
+    collage_bytes = build_reference_photo_collage(reference_photo_bytes)
+    semaphore = asyncio.Semaphore(max(1, int(max_parallel_requests)))
+
+    async def run_one(position: int, concept: ImageBatchConcept) -> tuple[int, GeneratedImageResult]:
+        async with semaphore:
+            result = await _request_generated_image(
+                client=client,
+                concept=concept,
+                total_count=len(concepts),
+                collage_bytes=collage_bytes,
+                api_key=api_key,
+                model=model,
+                site_url=site_url,
+            )
+            return position, result
+
+    async with httpx.AsyncClient(timeout=batch_image_timeout_seconds(len(concepts))) as client:
+        tasks = [
+            asyncio.create_task(run_one(position, concept))
+            for position, concept in enumerate(concepts)
+        ]
+        try:
+            for task in asyncio.as_completed(tasks):
+                yield await task
+        except Exception:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+
+
 async def generate_batch_image_results(
     *,
     concepts: list[ImageBatchConcept],
@@ -234,72 +370,17 @@ async def generate_batch_image_results(
     model: str,
     site_url: str = "https://alterega.ru",
 ) -> list[GeneratedImage]:
-    if not concepts:
-        return []
-    if not reference_photo_bytes:
-        raise ImageGenerationError("Batch image generation requires at least one reference photo")
+    generated_results: list[tuple[int, GeneratedImage]] = []
+    async for position, result in iter_batch_image_results(
+        concepts=concepts,
+        reference_photo_bytes=reference_photo_bytes,
+        api_key=api_key,
+        model=model,
+        site_url=site_url,
+    ):
+        generated_results.append((position, result.image))
 
-    for concept in concepts:
-        validate_prompt_text(str(concept.prompt))
-
-    collage_bytes = build_reference_photo_collage(reference_photo_bytes)
-    generated_images: list[GeneratedImage] = []
-
-    async with httpx.AsyncClient(timeout=batch_image_timeout_seconds(len(concepts))) as client:
-        for concept in concepts:
-            content: list[dict[str, Any]] = [
-                _image_content_item(collage_bytes),
-                {"type": "text", "text": "Input reference collage"},
-                {
-                    "type": "text",
-                    "text": _build_single_image_prompt(concept, total_count=len(concepts)),
-                },
-            ]
-            payload = {
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": content,
-                    }
-                ],
-                "modalities": ["image", "text"],
-                "image_config": {
-                    "aspect_ratio": "3:4",
-                    "image_size": "1K",
-                },
-                "max_tokens": 4096,
-            }
-
-            response = await client.post(
-                OPENROUTER_CHAT_COMPLETIONS_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": site_url,
-                    "X-Title": "CardBot",
-                },
-                json=payload,
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            image_bytes_list = extract_openrouter_image_bytes_list(result)
-            if not image_bytes_list:
-                raise ImageGenerationError("OpenRouter returned no images")
-            if len(image_bytes_list) > 1:
-                logging.warning(
-                    "OpenRouter returned multiple images for single-image request: got=%s",
-                    len(image_bytes_list),
-                )
-
-            usage = extract_openrouter_image_usage(result, fallback_model=model)
-            generated_images.append(
-                GeneratedImage(
-                    image_bytes=image_bytes_list[0],
-                    usage=ImageGenerationUsage(model=usage.model, cost_usd=usage.cost_usd),
-                )
-            )
+    generated_images = [image for _, image in sorted(generated_results, key=lambda item: item[0])]
 
     if len(generated_images) != len(concepts):
         raise ImageGenerationError(
@@ -330,3 +411,30 @@ async def generate_marketplace_batch_image_results(
         model=model,
         site_url=site_url,
     )
+
+
+async def iter_marketplace_batch_image_results(
+    *,
+    concepts: list[ImageBatchConcept],
+    reference_photo_file_ids: list[str],
+    bot: Any,
+    api_key: str,
+    model: str,
+    site_url: str = "https://alterega.ru",
+    max_parallel_requests: int = MAX_PARALLEL_IMAGE_REQUESTS,
+) -> AsyncIterator[tuple[int, GeneratedImageResult]]:
+    reference_photo_bytes: list[bytes] = []
+    for file_id in reference_photo_file_ids:
+        telegram_file = await bot.get_file(file_id)
+        photo_bytes = await telegram_file.download_as_bytearray()
+        reference_photo_bytes.append(bytes(photo_bytes))
+
+    async for item in iter_batch_image_results(
+        concepts=concepts,
+        reference_photo_bytes=reference_photo_bytes,
+        api_key=api_key,
+        model=model,
+        site_url=site_url,
+        max_parallel_requests=max_parallel_requests,
+    ):
+        yield item
