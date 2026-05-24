@@ -201,15 +201,28 @@ def _build_single_image_prompt(
     total_count: int,
 ) -> str:
     validate_prompt_text(str(concept.prompt))
+    shot_goal = str(concept.purpose).strip() or "marketplace product-card image"
     return (
-        "Generate exactly one image for a marketplace product card. "
-        "The input reference is a collage with the same product from several angles; "
-        "use all views to preserve the product identity, shape, materials, and colors. "
-        f"Image {int(concept.image_index)} of {int(total_count)}. "
-        f"Purpose: {str(concept.purpose).strip() or 'marketplace'}.\n"
-        f"Product and visual direction: {str(concept.prompt).strip()}\n\n"
-        "Return one polished 3:4 product-card image only. "
-        "Do not create a collage, grid, contact sheet, split-screen, labels, or multiple images."
+        "Draw one photorealistic 3:4 marketplace product-card image.\n\n"
+        "Reference:\n"
+        "The attached image is a reference collage showing the same product from multiple angles. "
+        "Use it only to understand the real product identity, shape, proportions, materials, "
+        "colors, markings, and construction. Do not reproduce the collage layout.\n\n"
+        "Product facts:\n"
+        f"{str(concept.prompt).strip()}\n\n"
+        "Shot goal:\n"
+        f"{shot_goal}\n\n"
+        "Composition:\n"
+        "Return exactly one image only. "
+        "Create a polished commercial marketplace image for Ozon/Wildberries. "
+        "Show one clear product scene only. Keep the product large, centered, sharp, "
+        "and easy to inspect.\n\n"
+        "Preserve:\n"
+        "Preserve the product's exact shape, proportions, colors, materials, visible markings, "
+        "and functional details from the reference collage.\n\n"
+        "Avoid:\n"
+        "No collage, no grid, no split-screen, no multiple product variants, no extra products, "
+        "no watermark, no unreadable overlay text, no invented labels."
     )
 
 

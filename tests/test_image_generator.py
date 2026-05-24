@@ -182,8 +182,12 @@ def test_generate_batch_images_sends_collage_once_per_concept(monkeypatch):
     assert all("black hourglass white sand wooden base" in text for text in prompt_texts)
     assert all("collage" in text for text in prompt_texts)
     assert all("one image" in text for text in prompt_texts)
-    assert "Image 1 of 2" in prompt_texts[0]
-    assert "Image 2 of 2" in prompt_texts[1]
+    assert all("Reference:" in text for text in prompt_texts)
+    assert all("Product facts:" in text for text in prompt_texts)
+    assert all("Shot goal:" in text for text in prompt_texts)
+    assert all("Preserve:" in text for text in prompt_texts)
+    assert all("Avoid:" in text for text in prompt_texts)
+    assert all("Image 1 of 2" not in text for text in prompt_texts)
     assert captured["timeout"] >= 420
     assert [item.image_bytes for item in result] == [b"image-1", b"image-2"]
     assert [item.usage.model for item in result] == ["model-version", "model-version"]
