@@ -44,6 +44,7 @@ from bot import (
     build_main_menu,
     build_start_message,
     build_repeat_photos_keyboard,
+    broadcast_command,
     _aggregate_image_generation_cost,
     build_template_delete_confirm_keyboard,
     build_template_details_keyboard,
@@ -610,6 +611,81 @@ class _FakeImageModeContext:
     def __init__(self, db):
         self.user_data = {"marketplace": "wb", "generation_step": "mode"}
         self.application = _FakeImageModeApplication(db)
+
+
+class _FakeBroadcastDb:
+    def __init__(self):
+        self.deliveries = []
+        self.finished = None
+        self.recipients = [{"id": 123}, {"id": 456}]
+
+    async def upsert_user(self, *args, **kwargs):
+        return None
+
+    async def get_broadcast_recipients(self):
+        return self.recipients
+
+    async def create_broadcast_message(self, admin_user_id, message_text):
+        self.created = (admin_user_id, message_text)
+        return 77
+
+    async def log_broadcast_delivery(self, **kwargs):
+        self.deliveries.append(kwargs)
+
+    async def finish_broadcast_message(self, **kwargs):
+        self.finished = kwargs
+
+    async def mark_user_blocked(self, user_id):
+        self.blocked_user_id = user_id
+
+
+class _FakeBroadcastBot:
+    def __init__(self):
+        self.messages = []
+
+    async def send_message(self, chat_id, text):
+        self.messages.append((chat_id, text))
+
+
+class _FakeBroadcastApplication:
+    def __init__(self, db, bot):
+        self.bot_data = {
+            "db": db,
+            "settings": type("Settings", (), {"admin_user_ids": (123,)})(),
+        }
+        self.bot = bot
+
+
+class _FakeBroadcastContext:
+    def __init__(self, db, bot, args):
+        self.args = args
+        self.bot = bot
+        self.user_data = {}
+        self.application = _FakeBroadcastApplication(db, bot)
+
+
+class _FakeCommandUpdate:
+    def __init__(self):
+        self.effective_user = _FakeUser()
+        self.effective_message = _FakeMessage()
+
+
+def test_broadcast_command_sends_only_for_admin_and_logs_delivery():
+    async def run_flow():
+        db = _FakeBroadcastDb()
+        bot = _FakeBroadcastBot()
+        context = _FakeBroadcastContext(db, bot, ["service", "update"])
+        update = _FakeCommandUpdate()
+
+        await broadcast_command(update, context)
+
+        assert db.created == (123, "service update")
+        assert bot.messages == [(123, "service update"), (456, "service update")]
+        assert [delivery["status"] for delivery in db.deliveries] == ["sent", "sent"]
+        assert db.finished["sent_count"] == 2
+        assert db.finished["recipients_count"] == 2
+
+    asyncio.run(run_flow())
 
 
 def test_images_only_mode_routes_to_description_without_text_generation():

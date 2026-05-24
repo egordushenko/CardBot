@@ -29,6 +29,8 @@ class FakeDb:
             "status": "pending",
         }
         self.mark_calls = 0
+        self.payment_events = []
+        self.blocked_users = []
 
     async def get_payment_by_inv_id(self, inv_id):
         return self.payment if inv_id == self.payment["inv_id"] else None
@@ -41,6 +43,12 @@ class FakeDb:
     async def get_user(self, user_id):
         return {"balance": 3, "image_balance": 20}
 
+    async def log_payment_event(self, **kwargs):
+        self.payment_events.append(kwargs)
+
+    async def mark_user_blocked(self, user_id):
+        self.blocked_users.append(user_id)
+
 
 class FakeBot:
     def __init__(self):
@@ -48,6 +56,13 @@ class FakeBot:
 
     async def send_message(self, chat_id, text):
         self.messages.append((chat_id, text))
+
+
+class BlockingBot:
+    async def send_message(self, chat_id, text):
+        from telegram.error import Forbidden
+
+        raise Forbidden("bot was blocked by the user")
 
 
 @pytest.mark.asyncio
@@ -76,8 +91,37 @@ async def test_robokassa_result_validates_signature_marks_paid_and_notifies_user
     assert response.status == 200
     assert response.text == "OKabc123"
     assert db.mark_calls == 1
+    assert db.payment_events[-1]["status"] == "paid"
     assert bot.messages[0][0] == 598380407
     assert "+20" in bot.messages[0][1]
+
+
+@pytest.mark.asyncio
+async def test_robokassa_result_stays_ok_when_payment_notification_is_blocked():
+    db = FakeDb()
+    signature = robokassa_result_signature(
+        out_sum="1150.00",
+        inv_id="abc123",
+        password2="pass2",
+        shp_params={"Shp_package": "addon_img_20", "Shp_user_id": "598380407"},
+    )
+    request = FakeRequest(
+        {
+            "OutSum": "1150.00",
+            "InvId": "abc123",
+            "SignatureValue": signature,
+            "Shp_user_id": "598380407",
+            "Shp_package": "addon_img_20",
+        },
+        {"db": db, "bot": BlockingBot(), "robokassa_password2": "pass2"},
+    )
+
+    response = await handle_robokassa_result(request)
+
+    assert response.status == 200
+    assert response.text == "OKabc123"
+    assert db.payment_events[-1]["status"] == "paid"
+    assert db.blocked_users == [598380407]
 
 
 @pytest.mark.asyncio
@@ -99,6 +143,7 @@ async def test_robokassa_result_rejects_invalid_signature_before_balance_change(
 
     assert response.status == 400
     assert db.mark_calls == 0
+    assert db.payment_events[-1]["status"] == "invalid_signature"
     assert bot.messages == []
 
 
@@ -129,6 +174,7 @@ async def test_robokassa_result_is_idempotent_for_already_paid_payment():
     assert response.status == 200
     assert response.text == "OKabc123"
     assert db.mark_calls == 0
+    assert db.payment_events[-1]["status"] == "already_paid"
     assert bot.messages == []
 
 

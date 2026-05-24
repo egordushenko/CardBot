@@ -15,6 +15,17 @@ def test_load_settings_reads_required_environment(monkeypatch):
     assert settings.trial_generations == 5
 
 
+def test_load_settings_parses_admin_user_ids(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "telegram-token")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-key")
+    monkeypatch.setenv("CARDBOT_DB_URL", "postgresql://user:pass@127.0.0.1:5432/cardbot")
+    monkeypatch.setenv("CARDBOT_ADMIN_IDS", "123, bad, 456,123")
+
+    settings = load_settings(load_dotenv_files=False)
+
+    assert settings.admin_user_ids == (123, 456)
+
+
 def test_load_settings_reads_gpt_image_model(monkeypatch):
     monkeypatch.setenv("BOT_TOKEN", "telegram-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-key")

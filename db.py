@@ -61,6 +61,11 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS image_balance INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS language_code TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS generations (
     id SERIAL PRIMARY KEY,
@@ -104,6 +109,17 @@ CREATE TABLE IF NOT EXISTS payments (
 
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS text_count INT DEFAULT 0;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS images_count INT DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS payment_events (
+    id SERIAL PRIMARY KEY,
+    inv_id TEXT,
+    user_id BIGINT REFERENCES users(id),
+    event_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload_json TEXT,
+    error_reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS image_sessions (
     id SERIAL PRIMARY KEY,
@@ -155,10 +171,33 @@ CREATE TABLE IF NOT EXISTS templates (
 ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_guidance TEXT;
 ALTER TABLE image_sessions ADD COLUMN IF NOT EXISTS report_json TEXT;
 
+CREATE TABLE IF NOT EXISTS broadcast_messages (
+    id SERIAL PRIMARY KEY,
+    admin_user_id BIGINT,
+    message_text TEXT NOT NULL,
+    recipients_count INT DEFAULT 0,
+    sent_count INT DEFAULT 0,
+    failed_count INT DEFAULT 0,
+    blocked_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    finished_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS broadcast_deliveries (
+    id SERIAL PRIMARY KEY,
+    broadcast_id INT REFERENCES broadcast_messages(id),
+    user_id BIGINT REFERENCES users(id),
+    status TEXT NOT NULL,
+    error_text TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_generations_user_created
     ON generations(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_user_created
     ON payments(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_events_inv_created
+    ON payment_events(inv_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_image_sessions_user_created
     ON image_sessions(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generated_images_session
@@ -167,6 +206,8 @@ CREATE INDEX IF NOT EXISTS idx_image_generation_costs_session
     ON image_generation_costs(session_id);
 CREATE INDEX IF NOT EXISTS idx_templates_user_created
     ON templates(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_broadcast_deliveries_message
+    ON broadcast_deliveries(broadcast_id);
 """
 
 
@@ -256,20 +297,63 @@ class Database:
                 package_rows(),
             )
 
-    async def upsert_user(self, user_id: int, username: str | None, first_name: str | None) -> None:
+    @staticmethod
+    def _sanitize_payload(payload: dict[str, Any] | None) -> str | None:
+        if payload is None:
+            return None
+        sensitive_markers = ("signature", "password", "token", "secret")
+        sanitized = {
+            str(key): str(value)
+            for key, value in payload.items()
+            if not any(marker in str(key).casefold() for marker in sensitive_markers)
+        }
+        return json.dumps(sanitized, ensure_ascii=False, sort_keys=True)
+
+    async def upsert_user(
+        self,
+        user_id: int,
+        username: str | None,
+        first_name: str | None,
+        *,
+        last_name: str | None = None,
+        language_code: str | None = None,
+    ) -> None:
         pool = self._require_pool()
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO users(id, username, first_name)
-                VALUES($1, $2, $3)
+                INSERT INTO users(id, username, first_name, last_name, language_code, last_seen_at)
+                VALUES($1, $2, $3, $4, $5, NOW())
                 ON CONFLICT (id) DO UPDATE SET
                     username = EXCLUDED.username,
-                    first_name = EXCLUDED.first_name
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
+                    language_code = EXCLUDED.language_code,
+                    last_seen_at = NOW(),
+                    blocked_at = NULL
                 """,
                 user_id,
                 username,
                 first_name,
+                last_name,
+                language_code,
+            )
+
+    async def set_notifications_enabled(self, user_id: int, enabled: bool) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE users SET notifications_enabled = $2 WHERE id = $1",
+                user_id,
+                enabled,
+            )
+
+    async def mark_user_blocked(self, user_id: int) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE users SET blocked_at = NOW() WHERE id = $1",
+                user_id,
             )
 
     async def get_balance(self, user_id: int) -> UserBalance:
@@ -514,6 +598,38 @@ class Database:
                 images_count,
             )
 
+    async def log_payment_event(
+        self,
+        *,
+        inv_id: str | None,
+        user_id: int | None,
+        event_type: str,
+        status: str,
+        payload: dict[str, Any] | None = None,
+        error_reason: str | None = None,
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO payment_events(
+                    inv_id,
+                    user_id,
+                    event_type,
+                    status,
+                    payload_json,
+                    error_reason
+                )
+                VALUES($1, $2, $3, $4, $5, $6)
+                """,
+                inv_id,
+                user_id,
+                event_type,
+                status,
+                self._sanitize_payload(payload),
+                error_reason,
+            )
+
     async def get_payment_by_inv_id(self, inv_id: str) -> dict[str, Any] | None:
         pool = self._require_pool()
         async with pool.acquire() as conn:
@@ -585,13 +701,105 @@ class Database:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT id, username, first_name, trial_used, balance, image_balance, created_at
+                SELECT
+                    id,
+                    username,
+                    first_name,
+                    last_name,
+                    language_code,
+                    trial_used,
+                    balance,
+                    image_balance,
+                    notifications_enabled,
+                    blocked_at,
+                    created_at,
+                    last_seen_at
                 FROM users
                 WHERE id = $1
                 """,
                 user_id,
             )
         return dict(row) if row else None
+
+    async def create_broadcast_message(self, admin_user_id: int, message_text: str) -> int:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            return int(
+                await conn.fetchval(
+                    """
+                    INSERT INTO broadcast_messages(admin_user_id, message_text)
+                    VALUES($1, $2)
+                    RETURNING id
+                    """,
+                    admin_user_id,
+                    message_text,
+                )
+            )
+
+    async def get_broadcast_recipients(self, limit: int = 5000) -> list[dict[str, Any]]:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, username, first_name, last_name
+                FROM users
+                WHERE notifications_enabled IS TRUE
+                  AND blocked_at IS NULL
+                ORDER BY last_seen_at DESC NULLS LAST, created_at DESC
+                LIMIT $1
+                """,
+                max(1, int(limit)),
+            )
+        return [dict(row) for row in rows]
+
+    async def log_broadcast_delivery(
+        self,
+        *,
+        broadcast_id: int,
+        user_id: int,
+        status: str,
+        error_text: str | None = None,
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO broadcast_deliveries(broadcast_id, user_id, status, error_text)
+                VALUES($1, $2, $3, $4)
+                """,
+                broadcast_id,
+                user_id,
+                status,
+                (error_text or "")[:500] or None,
+            )
+
+    async def finish_broadcast_message(
+        self,
+        *,
+        broadcast_id: int,
+        recipients_count: int,
+        sent_count: int,
+        failed_count: int,
+        blocked_count: int,
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE broadcast_messages
+                SET recipients_count = $2,
+                    sent_count = $3,
+                    failed_count = $4,
+                    blocked_count = $5,
+                    finished_at = NOW()
+                WHERE id = $1
+                """,
+                broadcast_id,
+                recipients_count,
+                sent_count,
+                failed_count,
+                blocked_count,
+            )
 
     async def save_template(
         self,

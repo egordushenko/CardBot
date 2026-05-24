@@ -18,6 +18,11 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     schema = CREATE_TABLES_SQL.lower()
 
     assert "create table if not exists users" in schema
+    assert "add column if not exists last_name" in schema
+    assert "add column if not exists language_code" in schema
+    assert "add column if not exists last_seen_at" in schema
+    assert "add column if not exists notifications_enabled" in schema
+    assert "add column if not exists blocked_at" in schema
     assert "add column if not exists image_balance" in schema
     assert "create table if not exists generations" in schema
     assert "create table if not exists packages" in schema
@@ -30,6 +35,9 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     assert "cost_usd numeric(12,6)" in schema
     assert "failed_count int default 0" in schema
     assert "create table if not exists templates" in schema
+    assert "create table if not exists payment_events" in schema
+    assert "create table if not exists broadcast_messages" in schema
+    assert "create table if not exists broadcast_deliveries" in schema
     assert "photo_file_ids text" in schema
     assert "images_count int" in schema
     assert "image_guidance text" in schema
@@ -45,6 +53,8 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     assert "status text default 'pending'" in schema
     assert "idx_image_generation_costs_session" in schema
     assert "idx_templates_user_created" in schema
+    assert "idx_payment_events_inv_created" in schema
+    assert "idx_broadcast_deliveries_message" in schema
 
 
 @pytest.mark.parametrize(
@@ -112,6 +122,10 @@ class _FakeConn:
         self.calls.append((query, args))
         return self.fetchrow_result
 
+    async def fetch(self, query, *args):
+        self.calls.append((query, args))
+        return self.fetchval_result
+
 
 class _FakeAcquire:
     def __init__(self, conn):
@@ -133,6 +147,29 @@ class _FakePool:
 
 
 @pytest.mark.asyncio
+async def test_upsert_user_stores_support_profile_and_refreshes_last_seen():
+    conn = _FakeConn()
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    await db.upsert_user(
+        598380407,
+        "alterega",
+        "Egor",
+        last_name="Duschenko",
+        language_code="ru",
+    )
+
+    query, args = conn.calls[0]
+    normalized = " ".join(query.casefold().split())
+    assert "last_name" in normalized
+    assert "language_code" in normalized
+    assert "last_seen_at = now()" in normalized
+    assert "blocked_at = null" in normalized
+    assert args == (598380407, "alterega", "Egor", "Duschenko", "ru")
+
+
+@pytest.mark.asyncio
 async def test_create_pending_payment_uses_matching_sql_arguments():
     conn = _FakeConn()
     db = Database("postgresql://test")
@@ -149,6 +186,44 @@ async def test_create_pending_payment_uses_matching_sql_arguments():
 
     _, args = conn.calls[0]
     assert args == (598380407, "abc123", "text_pro_x5", 22990, 100, 500)
+
+
+@pytest.mark.asyncio
+async def test_log_payment_event_stores_sanitized_audit_payload():
+    conn = _FakeConn()
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    await db.log_payment_event(
+        inv_id="abc123",
+        user_id=598380407,
+        event_type="result",
+        status="invalid_signature",
+        payload={"InvId": "abc123", "SignatureValue": "secret"},
+        error_reason="invalid_signature",
+    )
+
+    query, args = conn.calls[0]
+    normalized = " ".join(query.casefold().split())
+    assert "insert into payment_events" in normalized
+    assert "signaturevalue" not in args[4].casefold()
+    assert args[:4] == ("abc123", 598380407, "result", "invalid_signature")
+    assert args[5] == "invalid_signature"
+
+
+@pytest.mark.asyncio
+async def test_get_broadcast_recipients_filters_opt_out_and_blocked_users():
+    conn = _FakeConn(fetchval_result=[])
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    await db.get_broadcast_recipients(limit=100)
+
+    query, args = conn.calls[0]
+    normalized = " ".join(query.casefold().split())
+    assert "notifications_enabled is true" in normalized
+    assert "blocked_at is null" in normalized
+    assert args == (100,)
 
 
 @pytest.mark.asyncio

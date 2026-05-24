@@ -258,7 +258,9 @@ def build_help_message() -> str:
         "/balance — баланс\n"
         "/templates — мои шаблоны\n"
         "/history — последние генерации\n"
-        "/buy — пакеты генераций"
+        "/buy — пакеты генераций\n"
+        "/unsubscribe — отключить рассылки\n"
+        "/subscribe — включить рассылки"
     )
 
 
@@ -450,7 +452,13 @@ async def _ensure_user(update: Any, context: Any) -> int | None:
     user = update.effective_user
     if user is None:
         return None
-    await _get_db(context).upsert_user(user.id, user.username, user.first_name)
+    await _get_db(context).upsert_user(
+        user.id,
+        user.username,
+        user.first_name,
+        last_name=getattr(user, "last_name", None),
+        language_code=getattr(user, "language_code", None),
+    )
     return user.id
 
 
@@ -580,6 +588,102 @@ async def help_command(update: Any, context: Any) -> None:
     await update.effective_message.reply_text(
         build_help_message(),
         reply_markup=build_help_keyboard(settings.cardbot_offer_url),
+    )
+
+
+async def unsubscribe_command(update: Any, context: Any) -> None:
+    user_id = await _ensure_user(update, context)
+    if user_id is None:
+        return
+    await _get_db(context).set_notifications_enabled(user_id, False)
+    await update.effective_message.reply_text(
+        "✅ Уведомления отключены. Сервисные сообщения по оплатам и генерациям останутся доступны."
+    )
+
+
+async def subscribe_command(update: Any, context: Any) -> None:
+    user_id = await _ensure_user(update, context)
+    if user_id is None:
+        return
+    await _get_db(context).set_notifications_enabled(user_id, True)
+    await update.effective_message.reply_text("✅ Уведомления включены.")
+
+
+def _is_admin_user(user_id: int | None, settings: Settings) -> bool:
+    return user_id is not None and user_id in settings.admin_user_ids
+
+
+async def broadcast_command(update: Any, context: Any) -> None:
+    user_id = await _ensure_user(update, context)
+    settings = _get_settings(context)
+    if not _is_admin_user(user_id, settings):
+        await update.effective_message.reply_text("⚠️ Команда доступна только администратору.")
+        return
+
+    message_text = " ".join(getattr(context, "args", []) or []).strip()
+    if not message_text:
+        await update.effective_message.reply_text("Использование: /broadcast текст сообщения")
+        return
+    if len(message_text) > 4000:
+        await update.effective_message.reply_text("⚠️ Сообщение слишком длинное. Максимум 4000 символов.")
+        return
+
+    db = _get_db(context)
+    recipients = await db.get_broadcast_recipients()
+    broadcast_id = await db.create_broadcast_message(int(user_id), message_text)
+    sent_count = 0
+    failed_count = 0
+    blocked_count = 0
+
+    try:
+        from telegram.error import Forbidden, TelegramError
+    except ImportError:  # pragma: no cover - fallback for unit environments without telegram
+        Forbidden = Exception
+        TelegramError = Exception
+
+    for recipient in recipients:
+        recipient_id = int(recipient["id"])
+        try:
+            await context.bot.send_message(chat_id=recipient_id, text=message_text)
+        except Forbidden as exc:
+            blocked_count += 1
+            await db.mark_user_blocked(recipient_id)
+            await db.log_broadcast_delivery(
+                broadcast_id=broadcast_id,
+                user_id=recipient_id,
+                status="blocked",
+                error_text=str(exc),
+            )
+        except TelegramError as exc:
+            failed_count += 1
+            await db.log_broadcast_delivery(
+                broadcast_id=broadcast_id,
+                user_id=recipient_id,
+                status="failed",
+                error_text=str(exc),
+            )
+        else:
+            sent_count += 1
+            await db.log_broadcast_delivery(
+                broadcast_id=broadcast_id,
+                user_id=recipient_id,
+                status="sent",
+            )
+        await asyncio.sleep(0.04)
+
+    await db.finish_broadcast_message(
+        broadcast_id=broadcast_id,
+        recipients_count=len(recipients),
+        sent_count=sent_count,
+        failed_count=failed_count,
+        blocked_count=blocked_count,
+    )
+    await update.effective_message.reply_text(
+        "✅ Рассылка завершена.\n"
+        f"Получателей: {len(recipients)}\n"
+        f"Отправлено: {sent_count}\n"
+        f"Ошибок: {failed_count}\n"
+        f"Заблокировали бота: {blocked_count}"
     )
 
 
@@ -2443,6 +2547,10 @@ def create_application(settings: Settings) -> Any:
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("buy", buy_command))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("unsubscribe", unsubscribe_command))
+    application.add_handler(CommandHandler("subscribe", subscribe_command))
+    application.add_handler(CommandHandler("stop", unsubscribe_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.Document.IMAGE, handle_document))

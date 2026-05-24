@@ -172,8 +172,35 @@ def _same_amount(received: str, expected_rub: int) -> bool:
     return received_amount == Decimal(format_out_sum(expected_rub))
 
 
+def _parse_int_or_none(value: str) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+async def _log_payment_event(
+    db: Any,
+    *,
+    inv_id: str,
+    user_id: str,
+    status: str,
+    payload: dict[str, Any],
+    error_reason: str | None = None,
+) -> None:
+    await db.log_payment_event(
+        inv_id=inv_id or None,
+        user_id=_parse_int_or_none(user_id),
+        event_type="robokassa_result",
+        status=status,
+        payload=payload,
+        error_reason=error_reason,
+    )
+
+
 async def handle_robokassa_result(request: Any) -> web.Response:
     data = await request.post()
+    payload = {str(key): str(value) for key, value in data.items()}
 
     out_sum = str(data.get("OutSum", ""))
     inv_id = str(data.get("InvId", ""))
@@ -191,29 +218,76 @@ async def handle_robokassa_result(request: Any) -> web.Response:
             "Shp_user_id": user_id,
         },
     )
+    db = request.app["db"]
     if signature.upper() != expected:
         logger.warning("Invalid Robokassa signature for InvId=%s", inv_id)
+        await _log_payment_event(
+            db,
+            inv_id=inv_id,
+            user_id=user_id,
+            status="invalid_signature",
+            payload=payload,
+            error_reason="invalid_signature",
+        )
         return web.Response(text="Invalid signature", status=400)
 
-    db = request.app["db"]
     payment = await db.get_payment_by_inv_id(inv_id)
     if not payment:
         logger.warning("Robokassa payment not found: InvId=%s", inv_id)
+        await _log_payment_event(
+            db,
+            inv_id=inv_id,
+            user_id=user_id,
+            status="payment_not_found",
+            payload=payload,
+            error_reason="payment_not_found",
+        )
         return web.Response(text=f"OK{inv_id}")
 
     if payment["status"] == "paid":
+        await _log_payment_event(
+            db,
+            inv_id=inv_id,
+            user_id=user_id,
+            status="already_paid",
+            payload=payload,
+        )
         return web.Response(text=f"OK{inv_id}")
 
     if payment["package_code"] != package_code or str(payment["user_id"]) != user_id:
         logger.warning("Robokassa Shp mismatch for InvId=%s", inv_id)
+        await _log_payment_event(
+            db,
+            inv_id=inv_id,
+            user_id=user_id,
+            status="payment_mismatch",
+            payload=payload,
+            error_reason="payment_mismatch",
+        )
         return web.Response(text="Payment mismatch", status=400)
 
     if package_code not in PACKAGES:
         logger.error("Unknown CardBot payment package: %s", package_code)
+        await _log_payment_event(
+            db,
+            inv_id=inv_id,
+            user_id=user_id,
+            status="unknown_package",
+            payload=payload,
+            error_reason="unknown_package",
+        )
         return web.Response(text="Unknown package", status=400)
 
     if not _same_amount(out_sum, int(payment["amount_rub"])):
         logger.warning("Robokassa amount mismatch for InvId=%s", inv_id)
+        await _log_payment_event(
+            db,
+            inv_id=inv_id,
+            user_id=user_id,
+            status="amount_mismatch",
+            payload=payload,
+            error_reason="amount_mismatch",
+        )
         return web.Response(text="Amount mismatch", status=400)
 
     paid_now = await db.mark_payment_paid_and_add_balance(inv_id)
@@ -226,6 +300,13 @@ async def handle_robokassa_result(request: Any) -> web.Response:
             payment["images_count"],
         )
         await _notify_user_about_payment(request.app["bot"], db, int(user_id), payment)
+    await _log_payment_event(
+        db,
+        inv_id=inv_id,
+        user_id=user_id,
+        status="paid" if paid_now else "already_paid",
+        payload=payload,
+    )
 
     return web.Response(text=f"OK{inv_id}")
 
@@ -234,18 +315,32 @@ async def _notify_user_about_payment(bot: Any, db: Any, user_id: int, payment: d
     user = await db.get_user(user_id)
     if not user:
         return
-    await bot.send_message(
-        chat_id=user_id,
-        text=(
-            "✅ Оплата получена!\n\n"
-            "Зачислено:\n"
-            f"📝 Текстовых карточек: +{payment['text_count']}\n"
-            f"🖼 Изображений: +{payment['images_count']}\n\n"
-            "Текущий баланс:\n"
-            f"📝 {user['balance']} карточек\n"
-            f"🖼 {user['image_balance']} изображений"
-        ),
-    )
+    try:
+        await bot.send_message(
+            chat_id=user_id,
+            text=(
+                "✅ Оплата получена!\n\n"
+                "Зачислено:\n"
+                f"📝 Текстовых карточек: +{payment['text_count']}\n"
+                f"🖼 Изображений: +{payment['images_count']}\n\n"
+                "Текущий баланс:\n"
+                f"📝 {user['balance']} карточек\n"
+                f"🖼 {user['image_balance']} изображений"
+            ),
+        )
+    except Exception as exc:
+        try:
+            from telegram.error import Forbidden, TelegramError
+        except ImportError:  # pragma: no cover
+            Forbidden = TelegramError = ()
+        if Forbidden and isinstance(exc, Forbidden):
+            await db.mark_user_blocked(user_id)
+            logger.info("CardBot payment notification blocked by user=%s", user_id)
+            return
+        if TelegramError and isinstance(exc, TelegramError):
+            logger.warning("CardBot payment notification failed for user=%s: %s", user_id, exc)
+            return
+        raise
 
 
 async def start_webhook_server(

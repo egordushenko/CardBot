@@ -26,6 +26,7 @@ class Settings:
     robokassa_payment_method: str = "full_payment"
     robokassa_payment_object: str = "service"
     robokassa_tax: str = "none"
+    admin_user_ids: tuple[int, ...] = ()
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -58,6 +59,19 @@ def _normalize_openrouter_model(model: str) -> str:
     if value.endswith(":free"):
         return value[: -len(":free")]
     return value
+
+
+def _parse_admin_user_ids(value: str) -> tuple[int, ...]:
+    result: list[int] = []
+    for part in value.replace(";", ",").split(","):
+        item = part.strip()
+        if not item:
+            continue
+        try:
+            result.append(int(item))
+        except ValueError:
+            continue
+    return tuple(dict.fromkeys(result))
 
 
 def load_settings(load_dotenv_files: bool = True) -> Settings:
@@ -108,4 +122,5 @@ def load_settings(load_dotenv_files: bool = True) -> Settings:
         ),
         robokassa_payment_object=_env("ROBOKASSA_PAYMENT_OBJECT", defaults, "service"),
         robokassa_tax=_env("ROBOKASSA_TAX", defaults, "none"),
+        admin_user_ids=_parse_admin_user_ids(_env("CARDBOT_ADMIN_IDS", defaults)),
     )
