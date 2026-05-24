@@ -203,6 +203,17 @@ def test_detect_wb_category_profile_uses_gender_and_product_guards():
     assert pet_food["category"] == "Товары для животных"
 
 
+def test_detect_wb_category_profile_routes_rashguard_to_clothing():
+    profile = detect_wb_category_profile(
+        load_wb_category_profiles(),
+        "Рашгард therapy черный размер M, 100% хлопок, тянущийся облегающий с горловиной качественная печать текста на спине (Therapy)",
+    )
+
+    assert profile is not None
+    assert "Одежда" in profile["category"]
+    assert "Состав" in profile["prompt_characteristics"]
+
+
 def test_detect_wb_category_profile_falls_back_to_safe_synthetic_profiles():
     profiles = load_wb_category_profiles()
 

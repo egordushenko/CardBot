@@ -517,6 +517,49 @@ async def test_generate_image_prompts_selects_clothing_roles_by_requested_count(
 
 
 @pytest.mark.asyncio
+async def test_generate_image_prompts_routes_rashguard_text_to_clothing_when_profile_missing():
+    result = await generate_image_prompts(
+        product_description="Рашгард therapy черный размер M, 100% хлопок, тянущийся облегающий с горловиной",
+        marketplace="wb",
+        photos_count=5,
+        images_count=3,
+        api_key="test-key",
+        model="deepseek/deepseek-v4-flash:free",
+        site_url="https://alterega.ru",
+        category_profile=None,
+    )
+
+    assert [concept.purpose for concept in result.concepts] == [
+        "инфографика преимуществ",
+        "детали товара",
+        "на модели",
+    ]
+    assert "Категория товара: Одежда" in result.concepts[0].prompt
+
+
+@pytest.mark.asyncio
+async def test_generate_image_prompts_overrides_wrong_non_clothing_profile_for_rashguard():
+    result = await generate_image_prompts(
+        product_description="Рашгард therapy черный размер M, 100% хлопок, принт Therapy на спине",
+        marketplace="wb",
+        photos_count=5,
+        images_count=3,
+        api_key="test-key",
+        model="deepseek/deepseek-v4-flash:free",
+        site_url="https://alterega.ru",
+        category_profile={"category": "Дом"},
+    )
+
+    assert [concept.purpose for concept in result.concepts] == [
+        "инфографика преимуществ",
+        "детали товара",
+        "на модели",
+    ]
+    assert "Категория товара: Дом" not in result.concepts[0].prompt
+    assert "Категория товара: Одежда" in result.concepts[0].prompt
+
+
+@pytest.mark.asyncio
 async def test_generate_image_prompts_uses_universal_full_template_sequence(monkeypatch):
     async def fake_request_chat_completion_with_fallback(client, **kwargs):
         raise RuntimeError("secondary LLM unavailable")

@@ -122,6 +122,15 @@ WB_GENERIC_MATCH_TOKENS = {
 WB_CLOTHING_PRODUCT_TOKENS = {
     "футболка",
     "футболки",
+    "майка",
+    "майки",
+    "топ",
+    "топы",
+    "лонгслив",
+    "лонгсливы",
+    "рашгард",
+    "рашгарды",
+    "термобелье",
     "платье",
     "платья",
     "брюки",
@@ -214,6 +223,40 @@ WB_PARENT_ALIASES = {
 }
 
 WB_SYNTHETIC_FALLBACK_PROFILES: dict[str, dict[str, Any]] = {
+    "Одежда": {
+        "marketplace": "wb",
+        "category": "Одежда",
+        "parent_category": "Одежда",
+        "match_keywords": ["одежда", "футболка", "лонгслив", "рашгард", "топ", "майка"],
+        "prompt_characteristics": [
+            "Тип",
+            "Состав",
+            "Цвет",
+            "Пол",
+            "Покрой",
+            "Размер",
+            "Вырез горловины",
+            "Особенности модели",
+            "Декоративные элементы",
+            "Страна производства",
+        ],
+        "required_generation_characteristics": ["Тип", "Состав", "Цвет"],
+        "recommended_generation_characteristics": [
+            "Пол",
+            "Покрой",
+            "Размер",
+            "Вырез горловины",
+            "Особенности модели",
+            "Декоративные элементы",
+            "Страна производства",
+        ],
+        "characteristics_target_min": 5,
+        "characteristics_target_max": 8,
+        "title_target_min": 28,
+        "title_target_max": 60,
+        "description_target_min": 900,
+        "description_target_max": 1500,
+    },
     "Товары для животных": {
         "marketplace": "wb",
         "category": "Товары для животных",
@@ -709,6 +752,23 @@ def _direct_wb_profile_override(
 ) -> dict[str, Any] | None:
     text = product_description.casefold()
     text_tokens = _tokens(product_description)
+    if bool(text_tokens & WB_CLOTHING_PRODUCT_TOKENS):
+        if bool(text_tokens & {"мужская", "мужские", "мужской", "мужское"}):
+            for category in ("Мужчинам / Одежда", "Мужчинам", "Одежда"):
+                profile = profiles.get(category) or _synthetic_profile(category)
+                if profile:
+                    return dict(profile)
+        if bool(text_tokens & {"женская", "женские", "женский", "женское"}):
+            for category in ("Женщинам / Одежда", "Женщинам", "Одежда"):
+                profile = profiles.get(category) or _synthetic_profile(category)
+                if profile:
+                    return dict(profile)
+        if bool(text_tokens & {"детская", "детские", "детский", "детское", "ребенок", "малыш"}):
+            for category in ("Детям / Одежда", "Детям", "Одежда"):
+                profile = profiles.get(category) or _synthetic_profile(category)
+                if profile:
+                    return dict(profile)
+        return _synthetic_profile("Одежда")
     if bool(text_tokens & WB_PET_PRODUCT_TOKENS):
         return _synthetic_profile("Товары для животных")
     if "коврик" in text and any(marker in text for marker in ("йог", "фитнес", "трениров")):

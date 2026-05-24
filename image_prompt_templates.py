@@ -19,6 +19,24 @@ CLOTHING_CATEGORY_MARKERS = (
     "пальто",
 )
 
+CLOTHING_PRODUCT_MARKERS = (
+    "рашгард",
+    "футболк",
+    "лонгслив",
+    "майк",
+    "топ",
+    "худи",
+    "толстовк",
+    "свитшот",
+    "плать",
+    "брюк",
+    "куртк",
+    "ветровк",
+    "жилет",
+    "пальто",
+    "термобель",
+)
+
 COMMON_FACT_GUARD = (
     "Используй только факты, явно указанные в данных товара или надежно видимые на референсе. "
     "Не добавляй неподтвержденные характеристики, размеры, состав, комплектность, функции, "
@@ -145,6 +163,11 @@ def is_clothing_image_category(category_profile: dict[str, Any] | None) -> bool:
     return any(marker in category for marker in CLOTHING_CATEGORY_MARKERS)
 
 
+def is_clothing_product_text(product_description: str) -> bool:
+    text = product_description.casefold()
+    return any(marker in text for marker in CLOTHING_PRODUCT_MARKERS)
+
+
 def build_image_template_prompts(
     *,
     product_description: str,
@@ -153,8 +176,11 @@ def build_image_template_prompts(
     image_guidance: str = "",
 ) -> list[tuple[str, str]]:
     category = str((category_profile or {}).get("category") or "").strip()
-    if is_clothing_image_category(category_profile):
+    use_clothing_templates = is_clothing_image_category(category_profile) or is_clothing_product_text(product_description)
+    if use_clothing_templates:
         slides = CLOTHING_SLIDES_BY_COUNT.get(images_count, CLOTHING_SLIDES[:images_count])
+        if not is_clothing_image_category(category_profile):
+            category = "Одежда"
     else:
         slides = UNIVERSAL_SLIDES_BY_COUNT.get(images_count, UNIVERSAL_SLIDES[:images_count])
     product_text = product_description.strip()
