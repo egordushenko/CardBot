@@ -5,7 +5,7 @@ from typing import Any
 
 from llm import CardGeneration
 from marketplace_rules import sanitize_description, sanitize_title
-from wb_generation_quality import parse_characteristics_text
+from wb_generation_quality import _remove_clothing_title_noise, parse_characteristics_text
 
 
 OZON_DEFAULT_COUNTRY = "Китай"
@@ -284,7 +284,18 @@ def _user_mentions_field(user_input: str, field: str) -> bool:
     if "цвет" in field_lower:
         return _mentions_any(user_input, (r"\bцвет\w*\b", r"\bбел\w*\b", r"\bчерн\w*\b", r"\bсер\w*\b", r"\bкрасн\w*\b", r"\bсин\w*\b", r"\bзелен\w*\b", r"\bбеж\w*\b", r"\bпрозрачн\w*\b"))
     if any(marker in field_lower for marker in ("размер", "длина", "ширина", "высота", "глубина")):
-        return _mentions_any(user_input, (r"\b\d+\s*[xх×]\s*\d+", r"\b\d+\s*(см|мм|м)\b", r"\bразмер\w*\b", r"\bдлин\w*\b", r"\bширин\w*\b", r"\bвысот\w*\b"))
+        return _mentions_any(
+            user_input,
+            (
+                r"\b\d+\s*[xх×]\s*\d+",
+                r"\b\d+\s*(см|мм|м)\b",
+                r"\b(?:XXXS|XXS|XS|S|M|L|XL|XXL|XXXL|XXXXL)\b",
+                r"\bразмер\w*\b",
+                r"\bдлин\w*\b",
+                r"\bширин\w*\b",
+                r"\bвысот\w*\b",
+            ),
+        )
     if "вес" in field_lower:
         return _mentions_any(user_input, (r"\b\d+\s*(г|кг)\b", r"\bвес\w*\b"))
     if "объем" in field_lower or "объём" in field_lower:
@@ -317,6 +328,8 @@ def _value_is_grounded(user_input: str, field: str, value: str) -> bool:
     value_numbers = _number_tokens(value_lower)
     if value_numbers:
         return value_numbers <= _number_tokens(user_lower)
+    if "размер" in field_lower and re.fullmatch(r"(?:xxxs|xxs|xs|s|m|l|xl|xxl|xxxl|xxxxl)", value_lower):
+        return re.search(rf"\b{re.escape(value_lower)}\b", user_lower, flags=re.IGNORECASE) is not None
     if value_lower in {"да", "есть"}:
         return _user_mentions_field(user_input, field)
     if value_lower == "нет":
@@ -481,7 +494,11 @@ def apply_ozon_generation_quality(
         normalized.setdefault(key, value)
 
     return CardGeneration(
-        title=_sanitize_ozon_generated_text(card.title, user_input, is_title=True),
+        title=_sanitize_ozon_generated_text(
+            _remove_clothing_title_noise(card.title, user_input, category_profile),
+            user_input,
+            is_title=True,
+        ),
         description=_sanitize_ozon_generated_text(card.description, user_input, is_title=False),
         keywords=_trim_ozon_hashtags(card.keywords),
         characteristics=_format_characteristics(normalized),

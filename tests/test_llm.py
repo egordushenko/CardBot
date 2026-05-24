@@ -270,6 +270,23 @@ def test_wb_prompt_keeps_clothing_size_and_composition_out_of_title():
     assert "Для одежды не выноси состав в название" in prompt
 
 
+def test_ozon_prompt_keeps_clothing_size_and_composition_out_of_title():
+    prompt = select_system_prompt(
+        "ozon",
+        {
+            "category": "Одежда / Мужская одежда / Рашгарды",
+            "title_target_min": 40,
+            "title_target_max": 70,
+            "description_target_min": 900,
+            "description_target_max": 1400,
+            "prompt_characteristics": ["Тип", "Цвет", "Размер", "Состав"],
+        },
+    )
+
+    assert "Для одежды не выноси размер в название" in prompt
+    assert "Для одежды не выноси состав в название" in prompt
+
+
 def test_marketplace_prompts_require_selling_description_pattern():
     wb_prompt = select_system_prompt("wb")
     ozon_prompt = select_system_prompt("ozon")

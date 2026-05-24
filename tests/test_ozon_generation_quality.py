@@ -442,6 +442,35 @@ def test_apply_ozon_generation_quality_remaps_clothing_gender_from_height_field(
     assert "Страна-изготовитель: Китай" in result.characteristics
 
 
+def test_apply_ozon_generation_quality_removes_clothing_size_and_composition_from_title():
+    card = CardGeneration(
+        title="Рашгард Therapy черный M 100% хлопок облегающий",
+        description="Рашгард Therapy для тренировок и повседневной носки.",
+        keywords="#рашгард #одежда #тренировки",
+        characteristics=(
+            "Тип: Рашгард\n"
+            "Цвет: Черный\n"
+            "Размер: M\n"
+            "Состав: Хлопок 100%\n"
+            "Страна-изготовитель: Китай"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "category": "Одежда / Мужская одежда / Рашгарды",
+            "prompt_characteristics": ["Тип", "Цвет", "Размер", "Состав", "Страна-изготовитель"],
+        },
+        user_input="Рашгард Therapy черный размер M, состав 100% хлопок",
+    )
+
+    assert result.title == "Рашгард Therapy черный облегающий"
+    assert "Размер: M" in result.characteristics
+    assert "Состав: Хлопок 100%" in result.characteristics
+
+
 def test_apply_ozon_generation_quality_drops_cleaning_fields_from_car_mats():
     card = CardGeneration(
         title="Коврики автомобильные EVA черные",

@@ -67,6 +67,32 @@ def _format_profile_value(value: Any) -> str:
     return str(value or "").strip()
 
 
+OZON_CLOTHING_CATEGORY_MARKERS = (
+    "одежда",
+    "мужская одежда",
+    "женская одежда",
+    "футболка",
+    "лонгслив",
+    "рашгард",
+    "худи",
+    "толстовка",
+    "свитшот",
+    "платье",
+    "брюки",
+    "куртка",
+)
+
+
+def _ozon_clothing_title_instruction(category_profile: dict[str, Any] | None) -> str:
+    category = str((category_profile or {}).get("category") or "").casefold()
+    if not any(marker in category for marker in OZON_CLOTHING_CATEGORY_MARKERS):
+        return ""
+    return (
+        " Для одежды не выноси размер в название: S/M/L/XL, 42-56, рост и размер модели выводи только в характеристиках."
+        " Для одежды не выноси состав в название: хлопок, полиэстер, эластан и проценты состава выводи только в характеристиках."
+    )
+
+
 def build_openrouter_model_fallbacks(model: str) -> list[str]:
     primary = model.strip()
     if not primary:
@@ -152,6 +178,7 @@ def build_category_profile_prompt_block(
             "Для одежды игнорируй размер и состав в формуле названия: S/M/L/XL, 42-56, рост модели и состав ткани выводи только в характеристиках."
         )
 
+    ozon_clothing_instruction = _ozon_clothing_title_instruction(category_profile)
     prompt_characteristics = category_profile.get("prompt_characteristics") or category_profile.get("top_characteristics")
     if category_profile.get("title_target_min") and category_profile.get("title_target_max"):
         characteristics_target = ""
@@ -170,6 +197,7 @@ def build_category_profile_prompt_block(
             f"Типичные SEO-слова для названий в этой категории: {_format_profile_value(category_profile.get('top_title_words'))}\n"
             "Используй только разрешенные характеристики из профиля и очевидные универсальные поля. "
             "Поля упаковки, веса, габаритов предмета и габаритов упаковки выводи только если пользователь явно дал эти данные."
+            f"{ozon_clothing_instruction}"
         )
 
     return (
@@ -180,6 +208,7 @@ def build_category_profile_prompt_block(
         f"Разрешенные характеристики для генерации: {_format_profile_value(category_profile.get('prompt_characteristics') or category_profile.get('top_characteristics'))}\n"
         f"Примеры релевантных хэштегов для категории: {_format_profile_value(category_profile.get('top_hashtags'))}\n"
         f"Типичные SEO-слова для названий в этой категории: {_format_profile_value(category_profile.get('top_title_words'))}"
+        f"{ozon_clothing_instruction}"
     )
 
 
