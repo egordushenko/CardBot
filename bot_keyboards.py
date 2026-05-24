@@ -387,15 +387,21 @@ def should_generate_text_with_images(mode: str | None) -> bool:
     return mode == "text_and_images"
 
 
-def build_after_generation_keyboard() -> Any:
+def build_after_generation_keyboard(generation_id: int | None = None) -> Any:
+    save_callback = (
+        f"generation_save:{generation_id}" if generation_id is not None else "action:save_template"
+    )
+    repeat_callback = (
+        f"generation_repeat:{generation_id}" if generation_id is not None else "action:repeat_edit"
+    )
     return _keyboard(
         [
             [
                 _button("⚡ Сгенерировать ещё", "action:generate"),
-                _button("💾 Сохранить как шаблон", "action:save_template"),
+                _button("💾 Сохранить как шаблон", save_callback),
             ],
             [
-                _button("🔄 Изменить и повторить", "action:repeat_edit"),
+                _button("🔄 Изменить и повторить", repeat_callback),
                 _button("💳 Пополнить баланс", "action:buy"),
             ],
             [_button("💬 Не понравился результат?", "action:feedback")],
@@ -403,20 +409,32 @@ def build_after_generation_keyboard() -> Any:
         ]
     )
 
-def build_after_image_generation_keyboard() -> Any:
+def build_after_image_generation_keyboard(generation_id: int | None = None) -> Any:
+    save_callback = (
+        f"generation_save:{generation_id}" if generation_id is not None else "action:save_template"
+    )
+    repeat_callback = (
+        f"generation_repeat:{generation_id}" if generation_id is not None else "action:repeat_edit"
+    )
     return _keyboard(
         [
             [
                 _button("⚡ Сгенерировать ещё", "action:generate"),
-                _button("💾 Сохранить как шаблон", "action:save_template"),
+                _button("💾 Сохранить как шаблон", save_callback),
             ],
             [
-                _button("🔄 Изменить и повторить", "action:repeat_edit"),
+                _button("🔄 Изменить и повторить", repeat_callback),
                 _button("💳 Пополнить баланс", "action:buy_images"),
             ],
             [_button("💬 Не понравился результат?", "action:feedback")],
             [_home_button()],
         ]
+    )
+
+
+def build_history_generation_keyboard(generation_id: int) -> Any:
+    return _keyboard(
+        [[_button("💾 Сохранить как шаблон", f"generation_save:{generation_id}")]]
     )
 
 def truncate_template_name(name: str) -> str:

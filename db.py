@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS generations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE generations ADD COLUMN IF NOT EXISTS marketplace TEXT;
+ALTER TABLE generations ADD COLUMN IF NOT EXISTS mode TEXT;
+ALTER TABLE generations ADD COLUMN IF NOT EXISTS photo_file_ids TEXT;
+ALTER TABLE generations ADD COLUMN IF NOT EXISTS images_count INT;
+ALTER TABLE generations ADD COLUMN IF NOT EXISTS image_guidance TEXT;
+
 CREATE TABLE IF NOT EXISTS packages (
     code TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -306,7 +312,15 @@ class Database:
         card: Any,
         usage_mode: UsageMode,
         trial_generations: int = TRIAL_GENERATIONS,
-    ) -> None:
+        *,
+        marketplace: str,
+        mode: str,
+        photo_file_ids: list[str] | str | None = None,
+        images_count: int | None = None,
+        image_guidance: str | None = None,
+    ) -> int:
+        if isinstance(photo_file_ids, list):
+            photo_file_ids = json.dumps(photo_file_ids, ensure_ascii=False)
         pool = self._require_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
@@ -334,7 +348,8 @@ class Database:
                 if status != "UPDATE 1":
                     raise RuntimeError("Generation balance was already consumed")
 
-                await conn.execute(
+                return int(
+                    await conn.fetchval(
                     """
                     INSERT INTO generations(
                         user_id,
@@ -344,9 +359,15 @@ class Database:
                         output_keywords,
                         output_characteristics,
                         is_trial,
-                        tokens_used
+                        tokens_used,
+                        marketplace,
+                        mode,
+                        photo_file_ids,
+                        images_count,
+                        image_guidance
                     )
-                    VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+                    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    RETURNING id
                     """,
                     user_id,
                     input_text,
@@ -356,7 +377,52 @@ class Database:
                     card.characteristics,
                     usage_mode is UsageMode.TRIAL,
                     card.tokens_used,
+                    marketplace,
+                    mode,
+                    photo_file_ids,
+                    images_count,
+                    image_guidance,
+                    )
                 )
+
+    async def save_image_only_generation(
+        self,
+        *,
+        user_id: int,
+        input_text: str,
+        marketplace: str,
+        photo_file_ids: list[str] | str | None,
+        images_count: int | None,
+        image_guidance: str | None = None,
+    ) -> int:
+        if isinstance(photo_file_ids, list):
+            photo_file_ids = json.dumps(photo_file_ids, ensure_ascii=False)
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            return int(
+                await conn.fetchval(
+                    """
+                    INSERT INTO generations(
+                        user_id,
+                        input_text,
+                        marketplace,
+                        mode,
+                        photo_file_ids,
+                        images_count,
+                        image_guidance
+                    )
+                    VALUES($1, $2, $3, $4, $5, $6, $7)
+                    RETURNING id
+                    """,
+                    user_id,
+                    input_text,
+                    marketplace,
+                    "images_only",
+                    photo_file_ids,
+                    images_count,
+                    image_guidance,
+                )
+            )
 
     async def get_recent_generations(self, user_id: int, limit: int = 5) -> list[dict[str, Any]]:
         pool = self._require_pool()
@@ -364,12 +430,18 @@ class Database:
             rows = await conn.fetch(
                 """
                 SELECT
+                    id,
                     input_text,
                     output_title,
                     output_description,
                     output_keywords,
                     output_characteristics,
                     is_trial,
+                    marketplace,
+                    mode,
+                    photo_file_ids,
+                    images_count,
+                    image_guidance,
                     created_at
                 FROM generations
                 WHERE user_id = $1
@@ -380,6 +452,33 @@ class Database:
                 limit,
             )
         return [dict(row) for row in rows]
+
+    async def get_generation_for_action(
+        self,
+        generation_id: int,
+        user_id: int,
+    ) -> dict[str, Any] | None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    id,
+                    user_id,
+                    input_text,
+                    marketplace,
+                    mode,
+                    photo_file_ids,
+                    images_count,
+                    image_guidance,
+                    created_at
+                FROM generations
+                WHERE id = $1 AND user_id = $2
+                """,
+                generation_id,
+                user_id,
+            )
+        return dict(row) if row else None
 
     async def create_pending_payment(
         self,

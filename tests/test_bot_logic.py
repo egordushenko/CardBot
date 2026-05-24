@@ -29,6 +29,7 @@ from bot import (
     build_generation_mode_keyboard,
     build_help_keyboard,
     build_help_message,
+    build_history_generation_keyboard,
     build_image_count_keyboard,
     build_image_count_prompt,
     build_image_guidance_keyboard,
@@ -53,8 +54,12 @@ from bot import (
     format_template_description_preview,
     format_template_mode,
     handle_callback,
+    history_command,
     _build_image_guidance_with_style,
     _generate_and_send_image_concepts,
+    _generate_and_send_text_card,
+    _generate_images_for_user,
+    _generate_text_and_images_for_user,
     _generate_image_prompts_for_batch,
     _handle_image_guidance,
     _handle_image_style_custom,
@@ -62,18 +67,20 @@ from bot import (
     should_generate_text_with_images,
     _handle_new_template_text,
     _handle_new_template_name,
+    _handle_template_name,
     is_allowed_image_count,
     is_supported_image_document,
     truncate_template_name,
 )
 from db import TRIAL_GENERATIONS
+from db import UsageMode
 from image_generator import (
     GeneratedImage,
     GeneratedImageResult,
     ImageBatchConcept,
     ImageGenerationUsage,
 )
-from llm import CardGeneration
+from llm import CardGeneration, ImageConcept
 
 
 def test_build_generation_messages_returns_four_copyable_blocks():
@@ -141,6 +148,22 @@ def test_after_generation_keyboard_offers_template_and_repeat_actions():
     assert "Не понравился результат" in text_keyboard.inline_keyboard[-2][0].text
     assert "@alterega" in FEEDBACK_MESSAGE
     assert "Контакт: @alterega" in FEEDBACK_MESSAGE
+
+
+def test_after_generation_keyboards_address_persisted_generation_actions():
+    text_keyboard = build_after_generation_keyboard(generation_id=41)
+    image_keyboard = build_after_image_generation_keyboard(generation_id=42)
+    history_keyboard = build_history_generation_keyboard(43)
+
+    text_callbacks = [button.callback_data for row in text_keyboard.inline_keyboard for button in row]
+    image_callbacks = [button.callback_data for row in image_keyboard.inline_keyboard for button in row]
+    history_callbacks = [button.callback_data for row in history_keyboard.inline_keyboard for button in row]
+
+    assert "generation_save:41" in text_callbacks
+    assert "generation_repeat:41" in text_callbacks
+    assert "generation_save:42" in image_callbacks
+    assert "generation_repeat:42" in image_callbacks
+    assert history_callbacks == ["generation_save:43"]
 
 
 def test_classify_generation_error_returns_safe_reasons():
@@ -236,6 +259,11 @@ class _FakeTemplateDb:
     def __init__(self, count=0):
         self.count = count
         self.saved = []
+        self.generation = None
+        self.recent_generations = []
+
+    async def upsert_user(self, *args, **kwargs):
+        return None
 
     async def get_templates_count(self, user_id):
         return self.count
@@ -246,6 +274,12 @@ class _FakeTemplateDb:
 
     async def get_image_balance(self, user_id):
         return 5
+
+    async def get_generation_for_action(self, generation_id, user_id):
+        return self.generation
+
+    async def get_recent_generations(self, user_id, limit=5):
+        return self.recent_generations[:limit]
 
 
 class _FakeTemplateApplication:
@@ -296,6 +330,104 @@ def test_new_template_flow_collects_name_then_saves_text_without_generation():
         assert "Найдёте его в «Мои шаблоны»" in text_update.effective_message.replies[0][0]
         assert "awaiting_new_template_text" not in context.user_data
         assert "new_template_name" not in context.user_data
+
+    asyncio.run(run_flow())
+
+
+def test_generation_save_uses_persisted_input_when_template_name_is_submitted():
+    async def run_flow():
+        db = _FakeTemplateDb()
+        db.generation = {
+            "id": 41,
+            "input_text": "Рашгард Therapy исходный запрос",
+            "marketplace": "ozon",
+            "mode": "text_and_images",
+            "photo_file_ids": '["photo-1"]',
+            "images_count": 3,
+            "image_guidance": "светлый фон",
+            "output_title": "Не сохранять это в шаблон",
+        }
+        context = _FakeTemplateContext(db)
+        callback_update = _FakeCallbackUpdate("generation_save:41")
+
+        await handle_callback(callback_update, context)
+
+        assert context.user_data["pending_template_generation_id"] == 41
+        assert context.user_data["awaiting_template_name"] is True
+
+        name_update = _FakeUpdate("Мой рашгард")
+        handled = await _handle_template_name(name_update, context, user_id=123, user_input="Мой рашгард")
+
+        assert handled is True
+        assert db.saved[0]["description"] == "Рашгард Therapy исходный запрос"
+        assert db.saved[0]["photo_file_ids"] == ["photo-1"]
+        assert db.saved[0]["image_guidance"] == "светлый фон"
+        assert "output_title" not in db.saved[0]
+
+    asyncio.run(run_flow())
+
+
+def test_generation_repeat_loads_persisted_input_for_edit_flow():
+    async def run_flow():
+        db = _FakeTemplateDb()
+        db.generation = {
+            "id": 41,
+            "input_text": "Часы песочные",
+            "marketplace": "ozon",
+            "mode": "images_only",
+            "photo_file_ids": '["photo-1"]',
+            "images_count": 3,
+            "image_guidance": "фон",
+        }
+        context = _FakeTemplateContext(db)
+
+        await handle_callback(_FakeCallbackUpdate("generation_repeat:41"), context)
+
+        assert context.user_data["last_generation"]["description"] == "Часы песочные"
+        assert context.user_data["last_generation"]["photo_file_ids"] == ["photo-1"]
+        assert context.user_data["awaiting_repeat_changes"] is True
+
+    asyncio.run(run_flow())
+
+
+def test_history_shows_save_button_only_for_repeatable_new_records():
+    async def run_flow():
+        db = _FakeTemplateDb()
+        db.recent_generations = [
+            {
+                "id": 41,
+                "input_text": "Часы песочные",
+                "output_title": None,
+                "output_description": None,
+                "output_keywords": None,
+                "output_characteristics": None,
+                "marketplace": "ozon",
+                "mode": "images_only",
+                "images_count": 3,
+                "created_at": type("Date", (), {"strftime": lambda self, value: "24.05.2026 10:00"})(),
+            },
+            {
+                "id": 9,
+                "input_text": "Старая карточка",
+                "output_title": "Заголовок",
+                "output_description": "Описание",
+                "output_keywords": "Ключи",
+                "output_characteristics": "Цвет: Черный",
+                "marketplace": None,
+                "mode": None,
+                "images_count": None,
+                "created_at": type("Date", (), {"strftime": lambda self, value: "23.05.2026 10:00"})(),
+            },
+        ]
+        context = _FakeTemplateContext(db)
+        update = _FakeCallbackUpdate("action:history")
+
+        await history_command(update, context)
+
+        first_markup = update.effective_message.replies[0][1]["reply_markup"]
+        assert first_markup.inline_keyboard[0][0].callback_data == "generation_save:41"
+        assert "Только изображения" in update.effective_message.replies[0][0]
+        assert "reply_markup" not in update.effective_message.replies[1][1]
 
     asyncio.run(run_flow())
 
@@ -650,6 +782,298 @@ def test_generate_image_prompts_for_batch_forwards_category_profile(monkeypatch)
 
         assert result == "plan"
         assert captured["category_profile"] == profile
+
+    asyncio.run(run_flow())
+
+
+def test_text_generation_uses_persisted_id_for_result_actions(monkeypatch):
+    async def run_flow():
+        captured = {}
+
+        class Db(_FakeTemplateDb):
+            async def get_usage_mode(self, user_id, trial_generations):
+                return UsageMode.TRIAL
+
+            async def save_successful_generation(self, *args, **kwargs):
+                captured.update(kwargs)
+                return 41
+
+        async def fake_resolve(*args, **kwargs):
+            return None, {}
+
+        async def fake_generate_card(*args, **kwargs):
+            return CardGeneration("Title", "Description", "Keywords", "Props", 10)
+
+        monkeypatch.setattr("bot._resolve_generation_enrichment", fake_resolve)
+        monkeypatch.setattr("bot.generate_card", fake_generate_card)
+        db = Db()
+        context = _FakeTemplateContext(db)
+        context.application.bot_data["settings"] = type(
+            "Settings",
+            (),
+            {
+                "trial_generations": 5,
+                "openrouter_api_key": "key",
+                "openrouter_model": "model",
+                "site_url": "url",
+            },
+        )()
+        message = _FakeMessage()
+
+        await _generate_and_send_text_card(
+            message,
+            context,
+            123,
+            "Рашгард Therapy",
+            "ozon",
+            final_markup=build_after_generation_keyboard(),
+        )
+
+        markup = message.replies[-1][1]["reply_markup"]
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        assert "generation_save:41" in callbacks
+        assert "generation_repeat:41" in callbacks
+        assert captured["marketplace"] == "ozon"
+        assert captured["mode"] == "text_only"
+
+    asyncio.run(run_flow())
+
+
+def test_images_only_generation_persists_history_after_images_are_saved(monkeypatch):
+    async def run_flow():
+        captured = {}
+
+        class Db(_FakeTemplateDb):
+            async def get_image_balance(self, user_id):
+                return 5
+
+            async def create_image_session(self, **kwargs):
+                return 7
+
+            async def update_image_session_prompts(self, *args, **kwargs):
+                return None
+
+            async def update_image_session_report(self, *args, **kwargs):
+                return None
+
+            async def save_generated_images_and_consume_balance(self, **kwargs):
+                return 4
+
+            async def save_image_generation_cost(self, **kwargs):
+                return None
+
+            async def save_image_only_generation(self, **kwargs):
+                captured.update(kwargs)
+                return 42
+
+        async def fake_resolve(*args, **kwargs):
+            return None, {}
+
+        async def fake_prompts(**kwargs):
+            return type(
+                "Plan",
+                (),
+                {"concepts": [ImageConcept(1, "hero", 0, "prompt")], "source": "direct"},
+            )()
+
+        async def fake_images(**kwargs):
+            return [{"image_index": 1, "prompt_used": "prompt", "telegram_file_id": "file", "cost_usd": 0}]
+
+        monkeypatch.setattr("bot._resolve_generation_enrichment", fake_resolve)
+        monkeypatch.setattr("bot.generate_image_prompts", fake_prompts)
+        monkeypatch.setattr("bot._generate_and_send_image_concepts", fake_images)
+        db = Db()
+        context = _FakeTemplateContext(db)
+        context.user_data.update(
+            {
+                "marketplace": "ozon",
+                "img_description": "Часы песочные",
+                "img_photos": ["photo-1"],
+                "img_guidance": "светлый фон",
+                "img_style_preset": "",
+                "img_style_custom": "",
+            }
+        )
+        context.application.bot_data["settings"] = type(
+            "Settings",
+            (),
+            {
+                "openrouter_api_key": "key",
+                "openrouter_model": "model",
+                "gpt_image_model": "image-model",
+                "site_url": "url",
+            },
+        )()
+        update = _FakeCallbackUpdate("img_count:1")
+
+        await _generate_images_for_user(update, context, 123, 1)
+
+        markup = update.effective_message.replies[-1][1]["reply_markup"]
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        assert "generation_save:42" in callbacks
+        assert captured["input_text"] == "Часы песочные"
+        assert captured["photo_file_ids"] == ["photo-1"]
+        assert captured["images_count"] == 1
+
+    asyncio.run(run_flow())
+
+
+def test_combined_generation_keeps_persisted_actions_when_image_stage_fails(monkeypatch):
+    async def run_flow():
+        captured = {}
+
+        class Db(_FakeTemplateDb):
+            async def get_usage_mode(self, user_id, trial_generations):
+                return UsageMode.TRIAL
+
+            async def get_image_balance(self, user_id):
+                return 5
+
+            async def create_image_session(self, **kwargs):
+                return 8
+
+            async def save_successful_generation(self, *args, **kwargs):
+                captured.update(kwargs)
+                return 51
+
+            async def set_image_session_status(self, *args, **kwargs):
+                return None
+
+            async def update_image_session_report(self, *args, **kwargs):
+                return None
+
+            async def get_balance(self, user_id):
+                return type("Balance", (), {"trial_used": 1, "balance": 0, "image_balance": 5})()
+
+        async def fake_resolve(*args, **kwargs):
+            return None, {}
+
+        async def fake_generate_card(*args, **kwargs):
+            return CardGeneration("Title", "Description", "Keywords", "Props", 10)
+
+        async def fail_image_prompts(**kwargs):
+            raise RuntimeError("image prompts failed")
+
+        monkeypatch.setattr("bot._resolve_generation_enrichment", fake_resolve)
+        monkeypatch.setattr("bot.generate_card", fake_generate_card)
+        monkeypatch.setattr("bot._generate_image_prompts_for_batch", fail_image_prompts)
+        db = Db()
+        context = _FakeTemplateContext(db)
+        context.user_data.update(
+            {
+                "marketplace": "ozon",
+                "img_description": "Рашгард Therapy",
+                "img_photos": ["photo-1"],
+                "img_guidance": "светлый фон",
+                "img_style_preset": "",
+                "img_style_custom": "",
+            }
+        )
+        context.application.bot_data["settings"] = type(
+            "Settings",
+            (),
+            {
+                "trial_generations": 5,
+                "openrouter_api_key": "key",
+                "openrouter_model": "model",
+                "gpt_image_model": "image-model",
+                "site_url": "url",
+            },
+        )()
+        update = _FakeCallbackUpdate("img_count:3")
+
+        await _generate_text_and_images_for_user(update, context, 123, 3)
+
+        markup = update.effective_message.replies[-1][1]["reply_markup"]
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        assert "generation_save:51" in callbacks
+        assert "generation_repeat:51" in callbacks
+        assert captured["mode"] == "text_and_images"
+        assert captured["photo_file_ids"] == ["photo-1"]
+        assert captured["images_count"] == 3
+        assert captured["image_guidance"] == "светлый фон"
+
+    asyncio.run(run_flow())
+
+
+def test_combined_generation_keeps_persisted_actions_when_image_save_fails(monkeypatch):
+    async def run_flow():
+        class Db(_FakeTemplateDb):
+            async def get_usage_mode(self, user_id, trial_generations):
+                return UsageMode.TRIAL
+
+            async def get_image_balance(self, user_id):
+                return 5
+
+            async def create_image_session(self, **kwargs):
+                return 8
+
+            async def save_successful_generation(self, *args, **kwargs):
+                return 52
+
+            async def update_image_session_prompts(self, *args, **kwargs):
+                return None
+
+            async def update_image_session_report(self, *args, **kwargs):
+                return None
+
+            async def save_generated_images_and_consume_balance(self, **kwargs):
+                raise RuntimeError("image persistence failed")
+
+            async def set_image_session_status(self, *args, **kwargs):
+                return None
+
+        async def fake_resolve(*args, **kwargs):
+            return None, {}
+
+        async def fake_generate_card(*args, **kwargs):
+            return CardGeneration("Title", "Description", "Keywords", "Props", 10)
+
+        async def fake_image_prompts(**kwargs):
+            return type(
+                "Plan",
+                (),
+                {"concepts": [ImageConcept(1, "hero", 0, "prompt")], "source": "direct"},
+            )()
+
+        async def fake_images(**kwargs):
+            return [{"image_index": 1, "prompt_used": "prompt", "telegram_file_id": "file", "cost_usd": 0}]
+
+        monkeypatch.setattr("bot._resolve_generation_enrichment", fake_resolve)
+        monkeypatch.setattr("bot.generate_card", fake_generate_card)
+        monkeypatch.setattr("bot._generate_image_prompts_for_batch", fake_image_prompts)
+        monkeypatch.setattr("bot._generate_and_send_image_concepts", fake_images)
+        db = Db()
+        context = _FakeTemplateContext(db)
+        context.user_data.update(
+            {
+                "marketplace": "ozon",
+                "img_description": "Рашгард Therapy",
+                "img_photos": ["photo-1"],
+                "img_guidance": "",
+                "img_style_preset": "",
+                "img_style_custom": "",
+            }
+        )
+        context.application.bot_data["settings"] = type(
+            "Settings",
+            (),
+            {
+                "trial_generations": 5,
+                "openrouter_api_key": "key",
+                "openrouter_model": "model",
+                "gpt_image_model": "image-model",
+                "site_url": "url",
+            },
+        )()
+        update = _FakeCallbackUpdate("img_count:1")
+
+        await _generate_text_and_images_for_user(update, context, 123, 1)
+
+        markup = update.effective_message.replies[-1][1]["reply_markup"]
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        assert "generation_save:52" in callbacks
+        assert "generation_repeat:52" in callbacks
 
     asyncio.run(run_flow())
 

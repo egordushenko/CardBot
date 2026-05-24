@@ -56,6 +56,7 @@ from bot_keyboards import (
     build_empty_templates_keyboard,
     build_generation_mode_keyboard,
     build_help_keyboard,
+    build_history_generation_keyboard,
     build_image_count_keyboard,
     build_image_count_prompt,
     build_image_guidance_keyboard,
@@ -370,6 +371,7 @@ def _reset_navigation_state(context: Any) -> None:
         "awaiting_new_template_name",
         "awaiting_new_template_text",
         "new_template_name",
+        "pending_template_generation_id",
     ):
         context.user_data.pop(key, None)
 
@@ -411,6 +413,21 @@ def _template_to_last_generation(template: dict[str, Any]) -> dict[str, Any]:
         "photo_file_ids": _parse_photo_file_ids(template.get("photo_file_ids")),
         "images_count": template.get("images_count"),
         "image_guidance": template.get("image_guidance") or "",
+    }
+
+
+def _generation_to_last_generation(generation: dict[str, Any]) -> dict[str, Any] | None:
+    marketplace = generation.get("marketplace")
+    mode = generation.get("mode")
+    if not marketplace or not mode:
+        return None
+    return {
+        "marketplace": marketplace,
+        "mode": mode,
+        "description": generation.get("input_text") or "",
+        "photo_file_ids": _parse_photo_file_ids(generation.get("photo_file_ids")),
+        "images_count": generation.get("images_count"),
+        "image_guidance": generation.get("image_guidance") or "",
     }
 
 
@@ -584,15 +601,32 @@ async def history_command(update: Any, context: Any) -> None:
 
     for index, generation in enumerate(generations, start=1):
         created_at = generation["created_at"].strftime("%d.%m.%Y %H:%M")
-        text = (
-            f"📋 История #{index} — {created_at}\n\n"
-            f"Запрос: {generation['input_text']}\n\n"
-            f"📌 {generation['output_title']}\n\n"
-            f"📝 {generation['output_description']}\n\n"
-            f"🔑 {generation['output_keywords']}\n\n"
-            f"📋 {generation['output_characteristics']}"
-        )
-        await update.effective_message.reply_text(text)
+        if generation.get("mode") == "images_only":
+            text = (
+                f"📋 История #{index} — {created_at}\n\n"
+                f"Запрос: {generation['input_text']}\n\n"
+                f"🖼 Только изображения: запрошено {generation.get('images_count') or 0}"
+            )
+        else:
+            mode_note = (
+                "\n\n🖼 Режим: текст + изображения"
+                if generation.get("mode") == "text_and_images"
+                else ""
+            )
+            text = (
+                f"📋 История #{index} — {created_at}\n\n"
+                f"Запрос: {generation['input_text']}\n\n"
+                f"📌 {generation.get('output_title') or ''}\n\n"
+                f"📝 {generation.get('output_description') or ''}\n\n"
+                f"🔑 {generation.get('output_keywords') or ''}\n\n"
+                f"📋 {generation.get('output_characteristics') or ''}"
+                f"{mode_note}"
+            )
+        generation_id = generation.get("id")
+        reply_kwargs: dict[str, Any] = {}
+        if generation_id is not None and _generation_to_last_generation(generation):
+            reply_kwargs["reply_markup"] = build_history_generation_keyboard(int(generation_id))
+        await update.effective_message.reply_text(text, **reply_kwargs)
 
 
 async def _show_templates(message: Any, context: Any, user_id: int, page: int = 0) -> None:
@@ -1116,6 +1150,14 @@ async def _generate_images_for_user(
             fallback_model=settings.gpt_image_model,
         )
         await _save_image_report(db, session_id=session_id, report=report)
+        generation_id = await db.save_image_only_generation(
+            user_id=user_id,
+            input_text=product_description,
+            marketplace=marketplace,
+            photo_file_ids=photo_file_ids,
+            images_count=images_count,
+            image_guidance=image_guidance,
+        )
     except Exception:
         logging.exception("Failed to save generated images")
         await db.set_image_session_status(session_id, "failed")
@@ -1130,7 +1172,7 @@ async def _generate_images_for_user(
     await message.reply_text(
         f"✅ Готово: {len(generated)} изображений для карточки.\n"
         f"Остаток: {image_balance} изображений.",
-        reply_markup=build_after_image_generation_keyboard(),
+        reply_markup=build_after_image_generation_keyboard(generation_id=generation_id),
     )
     _store_last_generation(
         context,
@@ -1248,12 +1290,17 @@ async def _generate_text_and_images_for_user(
         return
 
     try:
-        await db.save_successful_generation(
+        generation_id = await db.save_successful_generation(
             user_id,
             product_description,
             card,
             usage_mode,
             trial_generations=settings.trial_generations,
+            marketplace=marketplace,
+            mode="text_and_images",
+            photo_file_ids=photo_file_ids,
+            images_count=images_count,
+            image_guidance=image_guidance,
         )
     except Exception as exc:
         await _cancel_task(concepts_task)
@@ -1300,14 +1347,14 @@ async def _generate_text_and_images_for_user(
                 f"{generation_error_message(reason)}\n"
                 f"\nСписана только текстовая генерация.\n"
                 f"Остаток: {text_left} текстовых / {balance.image_balance} изображений.",
-                reply_markup=build_after_image_generation_keyboard(),
+                reply_markup=build_after_image_generation_keyboard(generation_id=generation_id),
             )
         else:
             await message.reply_text(
                 "⚠️ Не удалось разработать концепцию изображений.\n"
                 "Списана только текстовая генерация.\n"
                 f"Остаток: {text_left} текстовых / {balance.image_balance} изображений.",
-                reply_markup=build_after_image_generation_keyboard(),
+                reply_markup=build_after_image_generation_keyboard(generation_id=generation_id),
             )
         _clear_image_session(context)
         return
@@ -1348,7 +1395,8 @@ async def _generate_text_and_images_for_user(
         report["error_reason"] = "save_error"
         await _save_image_report(db, session_id=session_id, report=report)
         await message.reply_text(
-            "⚠️ Изображения отправлены, но историю сохранить не удалось.\nБаланс изображений не списан."
+            "⚠️ Изображения отправлены, но историю сохранить не удалось.\nБаланс изображений не списан.",
+            reply_markup=build_after_image_generation_keyboard(generation_id=generation_id),
         )
         return
 
@@ -1358,7 +1406,7 @@ async def _generate_text_and_images_for_user(
         f"✅ Готово: текст и {len(generated)} изображений.\n\n"
         f"Потрачено: 1 текстовая генерация + {len(generated)} изображений.\n"
         f"Остаток: {text_left} текстовых / {image_balance} изображений.",
-        reply_markup=build_after_image_generation_keyboard(),
+        reply_markup=build_after_image_generation_keyboard(generation_id=generation_id),
     )
     _store_last_generation(
         context,
@@ -1672,12 +1720,16 @@ async def _generate_and_send_text_card(
         return None
 
     try:
-        await db.save_successful_generation(
+        generation_id = await db.save_successful_generation(
             user_id,
             user_input,
             card,
             usage_mode,
             trial_generations=settings.trial_generations,
+            marketplace=marketplace,
+            mode=mode,
+            photo_file_ids=photo_file_ids,
+            images_count=images_count,
         )
     except Exception as exc:
         log_generation_error(
@@ -1694,10 +1746,12 @@ async def _generate_and_send_text_card(
     messages = build_generation_messages(card)
     for text in messages[:-1]:
         await message.reply_text(text)
-    await message.reply_text(
-        messages[-1],
-        reply_markup=final_markup,
+    result_markup = (
+        build_after_generation_keyboard(generation_id=generation_id)
+        if final_markup is not None
+        else None
     )
+    await message.reply_text(messages[-1], reply_markup=result_markup)
     _store_last_generation(
         context,
         marketplace=marketplace,
@@ -1714,7 +1768,15 @@ async def _handle_template_name(update: Any, context: Any, user_id: int, user_in
         return False
 
     context.user_data.pop("awaiting_template_name", None)
-    last_generation = context.user_data.get("last_generation")
+    pending_generation_id = context.user_data.pop("pending_template_generation_id", None)
+    if pending_generation_id is not None:
+        generation = await _get_db(context).get_generation_for_action(
+            int(pending_generation_id),
+            user_id,
+        )
+        last_generation = _generation_to_last_generation(generation or {})
+    else:
+        last_generation = context.user_data.get("last_generation")
     if not last_generation:
         await update.effective_message.reply_text("⚠️ Нет данных последней генерации для сохранения.")
         return True
@@ -2157,10 +2219,47 @@ async def handle_callback(update: Any, context: Any) -> None:
         await query.answer()
         context.user_data["awaiting_template_name"] = True
         await query.message.reply_text(TEMPLATE_NAME_PROMPT)
+    elif data.startswith("generation_save:"):
+        if user_id is None:
+            return
+        try:
+            generation_id = int(data.split(":", 1)[1])
+        except ValueError:
+            await query.message.reply_text("⚠️ Генерация не найдена.")
+            return
+        generation = await _get_db(context).get_generation_for_action(generation_id, user_id)
+        if not generation or not _generation_to_last_generation(generation):
+            await query.message.reply_text("⚠️ Генерация не найдена.")
+            return
+        count = await _get_db(context).get_templates_count(user_id)
+        if count >= TEMPLATES_LIMIT:
+            await query.message.reply_text(
+                "⚠️ У вас уже 10 шаблонов — это максимум.\nУдалите старый шаблон, чтобы сохранить новый."
+            )
+            return
+        context.user_data["pending_template_generation_id"] = generation_id
+        context.user_data["awaiting_template_name"] = True
+        await query.message.reply_text(TEMPLATE_NAME_PROMPT)
     elif data == "action:repeat_edit":
         if not context.user_data.get("last_generation"):
             await query.message.reply_text("⚠️ Нет предыдущей генерации для повтора.")
             return
+        context.user_data["awaiting_repeat_changes"] = True
+        await query.message.reply_text(REPEAT_CHANGES_PROMPT)
+    elif data.startswith("generation_repeat:"):
+        if user_id is None:
+            return
+        try:
+            generation_id = int(data.split(":", 1)[1])
+        except ValueError:
+            await query.message.reply_text("⚠️ Генерация не найдена.")
+            return
+        generation = await _get_db(context).get_generation_for_action(generation_id, user_id)
+        last_generation = _generation_to_last_generation(generation or {})
+        if not last_generation:
+            await query.message.reply_text("⚠️ Генерация не найдена.")
+            return
+        context.user_data["last_generation"] = last_generation
         context.user_data["awaiting_repeat_changes"] = True
         await query.message.reply_text(REPEAT_CHANGES_PROMPT)
     elif data.startswith("repeat:"):
