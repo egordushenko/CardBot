@@ -1047,6 +1047,12 @@ async def _generate_images_for_user(
 
     await message.reply_text("⏳ Разрабатываю концепцию изображений...")
     try:
+        category_profile, _ = await _resolve_generation_enrichment(
+            context,
+            product_description,
+            marketplace,
+            has_photo=True,
+        )
         prompt_plan = await generate_image_prompts(
             product_description=product_description,
             marketplace=marketplace,
@@ -1056,6 +1062,7 @@ async def _generate_images_for_user(
             model=settings.openrouter_model,
             site_url=settings.site_url,
             image_guidance=image_guidance,
+            category_profile=category_profile,
         )
         concepts = prompt_plan.concepts
         _apply_prompt_plan_to_report(report, prompt_plan)
@@ -1223,6 +1230,7 @@ async def _generate_text_and_images_for_user(
             photo_file_ids=photo_file_ids,
             images_count=images_count,
             image_guidance=image_guidance,
+            category_profile=category_profile,
         )
     )
 
@@ -1382,6 +1390,7 @@ async def _generate_image_prompts_for_batch(
     photo_file_ids: list[str],
     images_count: int,
     image_guidance: str | None = None,
+    category_profile: dict[str, Any] | None = None,
 ) -> ImagePromptPlan:
     return await generate_image_prompts(
         product_description=product_description,
@@ -1392,6 +1401,7 @@ async def _generate_image_prompts_for_batch(
         model=settings.openrouter_model,
         site_url=settings.site_url,
         image_guidance=image_guidance,
+        category_profile=category_profile,
     )
 
 

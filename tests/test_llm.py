@@ -433,7 +433,7 @@ def test_build_user_prompt_includes_resolved_fields_and_instructions():
 
 
 @pytest.mark.asyncio
-async def test_generate_image_prompts_uses_direct_product_prompt(monkeypatch):
+async def test_generate_image_prompts_uses_clothing_template_sequence(monkeypatch):
     async def fail_request_chat_completion_with_fallback(client, **kwargs):
         raise AssertionError("image prompts must not call a secondary LLM")
 
@@ -443,37 +443,35 @@ async def test_generate_image_prompts_uses_direct_product_prompt(monkeypatch):
     )
 
     result = await generate_image_prompts(
-        product_description="black Therapy rashguard cotton fitted",
+        product_description="Рашгард Therapy черный, прилегающий крой, принт на спине",
         marketplace="ozon",
         photos_count=2,
-        images_count=2,
+        images_count=5,
         api_key="test-key",
         model="deepseek/deepseek-v4-flash:free",
         site_url="https://alterega.ru",
-        image_guidance="make the hero image luxury and show one back-view concept",
+        image_guidance="дорогой светлый фон",
+        category_profile={"category": "Одежда / Мужская одежда / Рашгарды"},
     )
 
-    assert result.concepts == [
-        ImageConcept(
-            1,
-            "marketplace",
-            0,
-            "black Therapy rashguard cotton fitted\n"
-            "Пожелания к изображениям: make the hero image luxury and show one back-view concept",
-        ),
-        ImageConcept(
-            2,
-            "marketplace",
-            0,
-            "black Therapy rashguard cotton fitted\n"
-            "Пожелания к изображениям: make the hero image luxury and show one back-view concept",
-        ),
+    assert [concept.purpose for concept in result.concepts] == [
+        "главная карточка",
+        "инфографика преимуществ",
+        "на модели спереди",
+        "на модели сзади",
+        "детали товара",
     ]
+    assert "вид спереди" in result.concepts[2].prompt.casefold()
+    assert "вид сзади" in result.concepts[3].prompt.casefold()
+    assert "Одежда / Мужская одежда / Рашгарды" in result.concepts[0].prompt
+    assert all("Рашгард Therapy" in concept.prompt for concept in result.concepts)
+    assert all("дорогой светлый фон" in concept.prompt for concept in result.concepts)
+    assert all("не добавляй неподтвержденные" in concept.prompt.casefold() for concept in result.concepts)
     assert result.source == "direct"
 
 
 @pytest.mark.asyncio
-async def test_generate_image_prompts_ignores_photo_analysis_for_direct_prompt(monkeypatch):
+async def test_generate_image_prompts_uses_universal_template_sequence(monkeypatch):
     async def fake_request_chat_completion_with_fallback(client, **kwargs):
         raise RuntimeError("secondary LLM unavailable")
 
@@ -483,25 +481,31 @@ async def test_generate_image_prompts_ignores_photo_analysis_for_direct_prompt(m
     )
 
     result = await generate_image_prompts(
-        product_description="black Therapy rashguard cotton fitted",
+        product_description="Часы песочные, черное основание, белый песок, цикл 5 минут",
         marketplace="ozon",
         photos_count=4,
-        images_count=3,
+        images_count=7,
         api_key="test-key",
         model="deepseek/deepseek-v4-flash:free",
         site_url="https://alterega.ru",
-        image_guidance="premium gym background and one closeup of material quality",
+        image_guidance="премиальная современная подача",
+        category_profile={"category": "Дом и интерьер / Декор / Песочные часы"},
     )
 
     assert result.source == "direct"
     assert [concept.purpose for concept in result.concepts] == [
-        "marketplace",
-        "marketplace",
-        "marketplace",
+        "главная карточка",
+        "инфографика преимуществ",
+        "детали товара",
+        "товар в применении",
+        "характеристики и параметры",
+        "комплектация",
+        "ключевая особенность",
     ]
-    assert [concept.photo_index for concept in result.concepts] == [0, 0, 0]
-    assert "Slide role: hero" not in result.concepts[0].prompt
-    assert "premium gym background" in result.concepts[0].prompt
+    assert [concept.photo_index for concept in result.concepts] == [0] * 7
+    assert "КРУПНЫЙ ПЛАН" in result.concepts[2].prompt
+    assert "КОМПЛЕКТАЦИЯ" in result.concepts[5].prompt
+    assert "премиальная современная подача" in result.concepts[0].prompt
 
 
 @pytest.mark.asyncio

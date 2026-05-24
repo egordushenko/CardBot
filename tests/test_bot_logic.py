@@ -55,6 +55,7 @@ from bot import (
     handle_callback,
     _build_image_guidance_with_style,
     _generate_and_send_image_concepts,
+    _generate_image_prompts_for_batch,
     _handle_image_guidance,
     _handle_image_style_custom,
     _handle_image_description,
@@ -615,6 +616,42 @@ def test_image_guidance_with_style_combines_free_text_and_preset():
         style_preset="luxury",
         style_custom="монохромная студия",
     ) == "Стиль изображений: монохромная студия"
+
+
+def test_generate_image_prompts_for_batch_forwards_category_profile(monkeypatch):
+    async def run_flow():
+        captured = {}
+
+        async def fake_generate_image_prompts(**kwargs):
+            captured.update(kwargs)
+            return "plan"
+
+        monkeypatch.setattr("bot.generate_image_prompts", fake_generate_image_prompts)
+        settings = type(
+            "Settings",
+            (),
+            {
+                "openrouter_api_key": "key",
+                "openrouter_model": "model",
+                "site_url": "https://alterega.ru",
+            },
+        )()
+        profile = {"category": "Одежда / Мужская одежда / Рашгарды"}
+
+        result = await _generate_image_prompts_for_batch(
+            settings=settings,
+            product_description="Рашгард Therapy",
+            marketplace="ozon",
+            photo_file_ids=["photo-1"],
+            images_count=3,
+            image_guidance="светлый фон",
+            category_profile=profile,
+        )
+
+        assert result == "plan"
+        assert captured["category_profile"] == profile
+
+    asyncio.run(run_flow())
 
 
 def test_image_count_prompt_shows_current_balance():

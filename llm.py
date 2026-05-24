@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from marketplace_rules import sanitize_description, sanitize_ozon_hashtags, sanitize_title
+from image_prompt_templates import build_image_template_prompts
 from prompts import OZON_SYSTEM_PROMPT, WB_SYSTEM_PROMPT
 
 
@@ -409,26 +410,30 @@ async def generate_image_prompts(
     model: str = "deepseek/deepseek-v4-flash",
     site_url: str = "https://alterega.ru",
     image_guidance: str | None = None,
+    category_profile: dict[str, Any] | None = None,
 ) -> ImagePromptPlan:
     if photos_count < 1 or photos_count > 7:
         raise LLMResponseError("photos_count must be between 1 and 7")
     if images_count < 1 or images_count > 7:
         raise LLMResponseError("images_count must be between 1 and 7")
 
-    direct_prompt = product_description.strip()
     guidance = _normalize_image_guidance(image_guidance)
-    if guidance:
-        direct_prompt = f"{direct_prompt}\nПожелания к изображениям: {guidance}"
+    template_prompts = build_image_template_prompts(
+        product_description=product_description,
+        images_count=images_count,
+        category_profile=category_profile,
+        image_guidance=guidance,
+    )
 
     return ImagePromptPlan(
         concepts=[
             ImageConcept(
                 image_index=index,
-                purpose="marketplace",
+                purpose=purpose,
                 photo_index=0,
-                prompt=direct_prompt,
+                prompt=prompt,
             )
-            for index in range(1, images_count + 1)
+            for index, (purpose, prompt) in enumerate(template_prompts, start=1)
         ],
         source="direct",
     )
