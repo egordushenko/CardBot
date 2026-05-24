@@ -6,6 +6,8 @@ from bot import (
     IMAGE_DESCRIPTION_PROMPT,
     IMAGE_GUIDANCE_PROMPT,
     IMAGE_PHOTO_PROMPT,
+    IMAGE_STYLE_CUSTOM_PROMPT,
+    IMAGE_STYLE_PROMPT,
     MARKETPLACE_PROMPT,
     MODE_PROMPT,
     NEW_TEMPLATE_TEXT_PROMPT,
@@ -30,6 +32,7 @@ from bot import (
     build_image_count_keyboard,
     build_image_count_prompt,
     build_image_guidance_keyboard,
+    build_image_style_keyboard,
     build_image_progress_message,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
@@ -50,7 +53,9 @@ from bot import (
     format_template_description_preview,
     format_template_mode,
     handle_callback,
+    _build_image_guidance_with_style,
     _handle_image_guidance,
+    _handle_image_style_custom,
     _handle_image_description,
     should_generate_text_with_images,
     _handle_new_template_text,
@@ -343,6 +348,8 @@ def test_primary_prompts_use_clear_visual_blocks():
     )
     assert "пожелания" in IMAGE_GUIDANCE_PROMPT.casefold()
     assert "Пропустить" in IMAGE_GUIDANCE_PROMPT
+    assert "стиль" in IMAGE_STYLE_PROMPT.casefold()
+    assert "luxury studio" in IMAGE_STYLE_CUSTOM_PROMPT
     assert TEMPLATE_NAME_PROMPT.startswith("📋 Введите название шаблона")
     assert NEW_TEMPLATE_TEXT_PROMPT.startswith("✍️ Введите текст шаблона")
     assert REPEAT_CHANGES_PROMPT.startswith("🔄 Что изменить?")
@@ -371,6 +378,7 @@ def test_start_help_and_balance_messages_are_scannable():
 def test_image_keyboards_follow_spec_callbacks():
     photo_keyboard = build_image_photo_keyboard(photos_count=2)
     guidance_keyboard = build_image_guidance_keyboard()
+    style_keyboard = build_image_style_keyboard()
     count_keyboard = build_image_count_keyboard(image_balance=5)
     full_count_keyboard = build_image_count_keyboard(image_balance=20)
     packages_keyboard = build_image_packages_keyboard()
@@ -384,6 +392,19 @@ def test_image_keyboards_follow_spec_callbacks():
         button.callback_data for row in guidance_keyboard.inline_keyboard for button in row
     ]
     assert guidance_callbacks == ["img_guidance_write", "img_guidance_skip", "action:home"]
+    style_callbacks = [button.callback_data for row in style_keyboard.inline_keyboard for button in row]
+    assert style_callbacks == [
+        "img_style:minimalism",
+        "img_style:luxury",
+        "img_style:sport",
+        "img_style:dark_premium",
+        "img_style:light_marketplace",
+        "img_style:kids",
+        "img_style:eco",
+        "img_style:custom",
+        "img_style:skip",
+        "action:home",
+    ]
     count_callbacks = [button.callback_data for row in count_keyboard.inline_keyboard for button in row]
     assert [callback for callback in count_callbacks if callback.startswith("img_count:")] == [
         "img_count:1",
@@ -485,7 +506,7 @@ def test_images_only_description_step_moves_to_photo_upload():
     asyncio.run(run_flow())
 
 
-def test_image_guidance_step_saves_text_and_starts_generation():
+def test_image_guidance_step_saves_text_and_moves_to_style_selection():
     async def run_flow():
         context = _FakeTemplateContext(_FakeTemplateDb())
         context.user_data.update(
@@ -493,6 +514,7 @@ def test_image_guidance_step_saves_text_and_starts_generation():
                 "generation_step": "image_guidance",
                 "mode": "images_only",
                 "img_photos": ["photo-1"],
+                "img_count": 3,
             }
         )
         update = _FakeUpdate("1 спереди на модели, 1 со спины, фон luxury")
@@ -506,10 +528,86 @@ def test_image_guidance_step_saves_text_and_starts_generation():
 
         assert handled is True
         assert context.user_data["img_guidance"] == "1 спереди на модели, 1 со спины, фон luxury"
-        assert context.user_data["generation_step"] == "count"
-        assert "Сколько изображений" in update.effective_message.replies[-1][0]
+        assert context.user_data["generation_step"] == "image_style"
+        assert update.effective_message.replies[-1][0] == IMAGE_STYLE_PROMPT
 
     asyncio.run(run_flow())
+
+
+def test_image_guidance_step_without_count_still_asks_count():
+    async def run_flow():
+        context = _FakeTemplateContext(_FakeTemplateDb())
+        context.user_data.update(
+            {
+                "generation_step": "image_guidance",
+                "mode": "images_only",
+                "img_photos": ["photo-1"],
+            }
+        )
+        update = _FakeUpdate("фон luxury")
+
+        handled = await _handle_image_guidance(
+            update,
+            context,
+            user_id=123,
+            user_input="фон luxury",
+        )
+
+        assert handled is True
+        assert context.user_data["generation_step"] == "count"
+        assert "изображений" in update.effective_message.replies[-1][0]
+
+    asyncio.run(run_flow())
+
+
+def test_image_style_custom_saves_text_and_reuses_generation_count(monkeypatch):
+    async def run_flow():
+        calls = []
+
+        async def fake_generate(update, context, user_id, images_count):
+            calls.append((user_id, images_count))
+
+        monkeypatch.setattr("bot._generate_images_for_user", fake_generate)
+        context = _FakeTemplateContext(_FakeTemplateDb())
+        context.user_data.update(
+            {
+                "awaiting_image_style_custom": True,
+                "mode": "images_only",
+                "img_count": 3,
+            }
+        )
+        update = _FakeUpdate("натуральный дневной свет, чистый WB фон")
+
+        handled = await _handle_image_style_custom(
+            update,
+            context,
+            user_id=123,
+            user_input="натуральный дневной свет, чистый WB фон",
+        )
+
+        assert handled is True
+        assert context.user_data["img_style_custom"] == "натуральный дневной свет, чистый WB фон"
+        assert context.user_data["img_style_preset"] == ""
+        assert calls == [(123, 3)]
+
+    asyncio.run(run_flow())
+
+
+def test_image_guidance_with_style_combines_free_text_and_preset():
+    combined = _build_image_guidance_with_style(
+        "вид спереди",
+        style_preset="luxury",
+        style_custom="",
+    )
+
+    assert "вид спереди" in combined
+    assert "premium marketplace" in combined
+    assert _build_image_guidance_with_style("", style_preset="", style_custom="") == ""
+    assert _build_image_guidance_with_style(
+        "",
+        style_preset="luxury",
+        style_custom="монохромная студия",
+    ) == "Стиль изображений: монохромная студия"
 
 
 def test_image_count_prompt_shows_current_balance():

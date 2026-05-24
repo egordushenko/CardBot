@@ -292,6 +292,31 @@ def build_image_guidance_keyboard() -> Any:
     )
 
 
+def build_image_style_keyboard() -> Any:
+    return _keyboard(
+        [
+            [
+                _button("Минимализм", "img_style:minimalism"),
+                _button("Luxury", "img_style:luxury"),
+            ],
+            [
+                _button("Спорт", "img_style:sport"),
+                _button("Темный премиум", "img_style:dark_premium"),
+            ],
+            [
+                _button("Светлый WB/Ozon", "img_style:light_marketplace"),
+                _button("Детский", "img_style:kids"),
+            ],
+            [
+                _button("Эко", "img_style:eco"),
+                _button("Свой стиль", "img_style:custom"),
+            ],
+            [_button("Пропустить", "img_style:skip")],
+            [_home_button()],
+        ]
+    )
+
+
 def is_supported_image_document(document: Any) -> bool:
     mime_type = str(getattr(document, "mime_type", "") or "").lower()
     return mime_type.startswith("image/")

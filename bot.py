@@ -59,6 +59,7 @@ from bot_keyboards import (
     build_image_count_keyboard,
     build_image_count_prompt,
     build_image_guidance_keyboard,
+    build_image_style_keyboard,
     build_image_marketplace_keyboard,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
@@ -131,6 +132,25 @@ IMAGE_GUIDANCE_PROMPT = (
     "Можно написать стиль, фон, ракурсы, роли для каждого кадра, текст на картинках или общую концепцию.\n"
     "Это необязательно: если пожеланий нет, нажмите «Пропустить»."
 )
+IMAGE_STYLE_PROMPT = (
+    "🎨 Выберите стиль изображения\n\n"
+    "Пресет задает визуальное направление для карточки. Его можно пропустить."
+)
+IMAGE_STYLE_CUSTOM_PROMPT = (
+    "✍️ Опишите свой стиль изображения\n\n"
+    "Например: luxury studio, dark premium, sporty dynamic, warm eco."
+)
+IMAGE_STYLE_PRESETS = {
+    "minimalism": "Minimalism: clean premium composition, restrained palette, tidy spacing, light commercial styling.",
+    "luxury": "Luxury / premium marketplace: elevated premium look, rich materials, refined highlights, expensive commercial mood.",
+    "sport": "Sport: dynamic athletic energy, active commercial framing, crisp contrast, training context.",
+    "dark_premium": "Dark premium: dark controlled background, glossy premium contrast, dramatic but clean lighting.",
+    "light_marketplace": "Light WB/Ozon: bright marketplace look, airy background, clean readable composition, light retail styling.",
+    "light_wb": "Light WB/Ozon: bright marketplace look, airy background, clean readable composition, light retail styling.",
+    "kids": "Kids: friendly bright tone, softer palette, playful but commercial composition, safe family-oriented look.",
+    "eco": "Natural eco: natural materials, warm daylight, organic textures, calm earthy commercial styling.",
+}
+
 TEMPLATE_NAME_PROMPT = (
     "📋 Введите название шаблона\n\n"
     "Например: \"Лампа спиральная\" или \"Коврик ЭВА\""
@@ -331,6 +351,9 @@ def _clear_image_session(context: Any) -> None:
         "img_photos",
         "img_guidance",
         "img_count",
+        "img_style_preset",
+        "img_style_custom",
+        "awaiting_image_style_custom",
         "img_media_groups",
         "repeat_pending_generation",
         "repeat_mode",
@@ -669,6 +692,40 @@ def _normalize_image_guidance_text(value: str | None) -> str:
     return " ".join(str(value).split())[:1200]
 
 
+def _normalize_image_style_preset(value: Any | None) -> str:
+    preset = str(value or "").strip().lower()
+    if preset in IMAGE_STYLE_PRESETS:
+        return preset
+    return ""
+
+
+def _normalize_image_style_custom(value: Any | None) -> str:
+    if not value:
+        return ""
+    return " ".join(str(value).split())[:400]
+
+
+def _build_image_guidance_with_style(
+    image_guidance: str | None,
+    *,
+    style_preset: str | None,
+    style_custom: str | None,
+) -> str:
+    parts: list[str] = []
+    guidance = _normalize_image_guidance_text(image_guidance)
+    if guidance:
+        parts.append(guidance)
+
+    custom = _normalize_image_style_custom(style_custom)
+    if custom:
+        parts.append(f"Стиль изображений: {custom}")
+    else:
+        preset = _normalize_image_style_preset(style_preset)
+        if preset:
+            parts.append(f"Стиль изображений: {IMAGE_STYLE_PRESETS[preset]}")
+    return "\n".join(parts)
+
+
 def _serialize_image_report(report: dict[str, Any]) -> str:
     return json.dumps(report, ensure_ascii=False)
 
@@ -768,6 +825,22 @@ async def _show_image_guidance_step(message: Any, context: Any) -> None:
 
 
 async def _continue_after_image_guidance(update: Any, context: Any, user_id: int) -> None:
+    images_count = int(context.user_data.get("img_count") or 0)
+    if not is_allowed_image_count(images_count) and not context.user_data.get("repeat_images_count"):
+        await _show_image_count_step(update.effective_message, context, user_id)
+        return
+    await _show_image_style_step(update.effective_message, context)
+
+
+async def _show_image_style_step(message: Any, context: Any) -> None:
+    context.user_data["generation_step"] = "image_style"
+    await message.reply_text(
+        IMAGE_STYLE_PROMPT,
+        reply_markup=build_image_style_keyboard(),
+    )
+
+
+async def _continue_after_image_style(update: Any, context: Any, user_id: int) -> None:
     query = getattr(update, "callback_query", None)
     if context.user_data.get("repeat_images_count"):
         images_count = int(context.user_data.pop("repeat_images_count"))
@@ -812,6 +885,24 @@ async def _handle_image_guidance(update: Any, context: Any, user_id: int, user_i
 
     context.user_data["img_guidance"] = guidance
     await _continue_after_image_guidance(update, context, user_id)
+    return True
+
+
+async def _handle_image_style_custom(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if not context.user_data.get("awaiting_image_style_custom"):
+        return False
+    if context.user_data.get("mode") not in {"text_and_images", "images_only"}:
+        return False
+
+    style = _normalize_image_style_custom(user_input)
+    if len(style) < 3:
+        await update.effective_message.reply_text(IMAGE_STYLE_CUSTOM_PROMPT)
+        return True
+
+    context.user_data.pop("awaiting_image_style_custom", None)
+    context.user_data["img_style_preset"] = ""
+    context.user_data["img_style_custom"] = style
+    await _continue_after_image_style(update, context, user_id)
     return True
 
 
@@ -913,7 +1004,11 @@ async def _generate_images_for_user(
     marketplace = context.user_data.get("marketplace") or context.user_data.get("img_marketplace")
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
-    image_guidance = str(context.user_data.get("img_guidance") or "")
+    image_guidance = _build_image_guidance_with_style(
+        str(context.user_data.get("img_guidance") or ""),
+        style_preset=str(context.user_data.get("img_style_preset") or ""),
+        style_custom=str(context.user_data.get("img_style_custom") or ""),
+    )
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1054,7 +1149,11 @@ async def _generate_text_and_images_for_user(
     marketplace = context.user_data.get("marketplace")
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
-    image_guidance = str(context.user_data.get("img_guidance") or "")
+    image_guidance = _build_image_guidance_with_style(
+        str(context.user_data.get("img_guidance") or ""),
+        style_preset=str(context.user_data.get("img_style_preset") or ""),
+        style_custom=str(context.user_data.get("img_style_custom") or ""),
+    )
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1820,6 +1919,8 @@ async def handle_text(update: Any, context: Any) -> None:
         return
     if await _handle_repeat_changes(update, context, user_id, user_input):
         return
+    if await _handle_image_style_custom(update, context, user_id, user_input):
+        return
     if await _handle_image_guidance(update, context, user_id, user_input):
         return
     if await _handle_image_description(update, context, user_input):
@@ -1952,6 +2053,24 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         context.user_data["img_guidance"] = ""
         await _continue_after_image_guidance(update, context, user.id)
+    elif data.startswith("img_style:"):
+        user = update.effective_user
+        if user is None:
+            return
+        style_value = data.split(":", 1)[1]
+        if style_value == "custom":
+            context.user_data["generation_step"] = "image_style"
+            context.user_data["awaiting_image_style_custom"] = True
+            await query.message.reply_text(IMAGE_STYLE_CUSTOM_PROMPT)
+            return
+        if style_value == "skip":
+            context.user_data["img_style_preset"] = ""
+            context.user_data["img_style_custom"] = ""
+            await _continue_after_image_style(update, context, user.id)
+            return
+        context.user_data["img_style_preset"] = _normalize_image_style_preset(style_value)
+        context.user_data["img_style_custom"] = ""
+        await _continue_after_image_style(update, context, user.id)
     elif data.startswith("img_count:"):
         user = update.effective_user
         if user is None:
