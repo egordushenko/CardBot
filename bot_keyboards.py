@@ -261,14 +261,6 @@ def build_no_image_balance_keyboard() -> Any:
     )
 
 
-def build_payment_stub_keyboard(data: str) -> Any:
-    if data == "action:buy_images" or data.startswith("img_buy:"):
-        return build_image_packages_keyboard()
-    if data == "action:buy_text" or data.startswith("buy:"):
-        return build_buy_keyboard()
-    return build_combined_buy_keyboard()
-
-
 def build_image_marketplace_keyboard() -> Any:
     return _keyboard(
         [

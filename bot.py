@@ -42,18 +42,10 @@ from payments import (
 )
 from webhook_server import start_webhook_server
 from bot_keyboards import (
-    BACK_BUTTON_TEXT,
-    COMBO_PACKAGE_BUTTON_TEXT,
-    HOME_BUTTON_TEXT,
     HOME_CALLBACK,
-    IMAGE_COUNT_OPTIONS,
     MAX_REFERENCE_PHOTOS,
-    REPLY_ACTIONS,
     TEMPLATES_LIMIT,
     TEMPLATES_PAGE_SIZE,
-    KeyboardButton,
-    KeyboardMarkup,
-    ReplyKeyboardMarkupFallback,
     build_after_generation_keyboard,
     build_after_image_generation_keyboard,
     build_balance_keyboard,
@@ -75,7 +67,6 @@ from bot_keyboards import (
     build_marketplace_keyboard,
     build_no_image_balance_keyboard,
     build_payment_link_keyboard,
-    build_payment_stub_keyboard,
     build_persistent_main_keyboard,
     build_photo_received_message,
     build_repeat_photos_keyboard,
