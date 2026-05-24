@@ -285,6 +285,10 @@ def test_ozon_prompt_keeps_clothing_size_and_composition_out_of_title():
 
     assert "Для одежды не выноси размер в название" in prompt
     assert "Для одежды не выноси состав в название" in prompt
+    assert "название должно быть содержательным" in prompt
+    assert "тип товара + бренд/надпись/модель" in prompt
+    assert "с воротником-стойкой" in prompt
+    assert "с принтом на спине" in prompt
 
 
 def test_marketplace_prompts_require_selling_description_pattern():

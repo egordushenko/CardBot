@@ -471,6 +471,24 @@ def test_apply_ozon_generation_quality_removes_clothing_size_and_composition_fro
     assert "Состав: Хлопок 100%" in result.characteristics
 
 
+def test_apply_ozon_generation_quality_preserves_confirmed_clothing_title_features():
+    card = CardGeneration(
+        title="Рашгард Therapy облегающий черный с воротником-стойкой и принтом на спине",
+        description="Рашгард Therapy.",
+        keywords="#рашгард",
+        characteristics="Тип: Рашгард\nЦвет: Черный",
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={"category": "Одежда / Мужская одежда / Рашгарды"},
+        user_input="Рашгард Therapy черный облегающий с горловиной, печать Therapy на спине",
+    )
+
+    assert result.title == "Рашгард Therapy облегающий черный с воротником-стойкой и принтом на спине"
+
+
 def test_apply_ozon_generation_quality_drops_cleaning_fields_from_car_mats():
     card = CardGeneration(
         title="Коврики автомобильные EVA черные",
