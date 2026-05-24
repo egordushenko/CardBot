@@ -472,6 +472,7 @@ async def test_generate_image_prompts_uses_clothing_template_sequence(monkeypatc
     assert all("Рашгард Therapy" in concept.prompt for concept in result.concepts)
     assert all("дорогой светлый фон" in concept.prompt for concept in result.concepts)
     assert all("не добавляй неподтвержденные" in concept.prompt.casefold() for concept in result.concepts)
+    assert all("не указывай размер товара на изображении" in concept.prompt.casefold() for concept in result.concepts)
     assert result.source == "direct"
 
 
@@ -595,6 +596,7 @@ async def test_generate_image_prompts_uses_universal_full_template_sequence(monk
     assert "КРУПНЫЙ ПЛАН" in result.concepts[2].prompt
     assert "КОМПЛЕКТАЦИЯ" in result.concepts[5].prompt
     assert "премиальная современная подача" in result.concepts[0].prompt
+    assert all("не указывай размер товара на изображении" in concept.prompt.casefold() for concept in result.concepts)
 
 
 @pytest.mark.asyncio
