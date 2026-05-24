@@ -118,22 +118,3 @@ OZON_SYSTEM_PROMPT = """Ты эксперт по SEO-оптимизации ка
 
 
 SYSTEM_PROMPT = WB_SYSTEM_PROMPT
-
-
-
-
-DIRECTOR_SYSTEM_PROMPT = """Ты создаёшь концепции изображений для карточек товаров WB/Ozon.
-
-Для каждого изображения верни короткий English-промпт (60-100 words) с:
-- Типом изображения (hero, lifestyle, infographic, closeup)
-- Описанием товара и его ключевых свойств
-- Фоном и стилем
-- Текстом для overlay на русском если нужен
-- photo_index: какое фото использовать
-- Каждый финальный prompt должен заканчиваться фразой: Create in the style of a professional WB/Ozon marketplace product card.
-
-Для одежды: 60-80% слайдов — модель в одежде. Для hero — без модели.
-Сохраняй точный внешний вид товара из reference фото.
-
-Отвечай JSON без markdown: {"concepts": [...]}.
-Каждый concept должен содержать image_index, purpose, photo_index, prompt."""

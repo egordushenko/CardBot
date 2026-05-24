@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 from dataclasses import dataclass
 from typing import Any
 
 from marketplace_rules import sanitize_description, sanitize_ozon_hashtags, sanitize_title
-from prompts import DIRECTOR_SYSTEM_PROMPT, OZON_SYSTEM_PROMPT, WB_SYSTEM_PROMPT
+from prompts import OZON_SYSTEM_PROMPT, WB_SYSTEM_PROMPT
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -44,7 +43,6 @@ class ImageConcept:
 class ImagePromptPlan:
     concepts: list[ImageConcept]
     source: str
-    director_model: str
 
 
 MARKETPLACE_NAMES = {
@@ -235,55 +233,6 @@ def build_user_prompt(
     )
 
 
-def build_image_director_user_prompt(
-    product_description: str,
-    marketplace: str,
-    photos_count: int,
-    images_count: int,
-    photo_analyses: list[Any] | None = None,
-    image_guidance: str | None = None,
-    image_text_mode: str | None = None,
-    image_style_preset: str | None = None,
-    image_style_custom: str | None = None,
-) -> str:
-    normalized = normalize_marketplace(marketplace)
-    name = MARKETPLACE_NAMES[normalized]
-    last_index = max(photos_count - 1, 0)
-    prompt = (
-        f"Товар: {product_description.strip()}\n"
-        f"Маркетплейс: {name}\n"
-        f"Загружено фото: {photos_count} (индексы от 0 до {last_index})\n"
-        f"Нужно сгенерировать изображений: {images_count}\n\n"
-        f"Создай ровно {images_count} уникальных концепций изображений для карточки товара. "
-        f"Каждая концепция должна иметь роль, композицию, текст и один конкретный photo_index. "
-        f"Распредели {photos_count} фото по изображениям адаптивно."
-    )
-    analysis_lines: list[str] = []
-    for analysis in photo_analyses or []:
-        photo_index = getattr(analysis, "photo_index", None)
-        tags = ", ".join(getattr(analysis, "tags", ()) or ())
-        usable_for = ", ".join(getattr(analysis, "usable_for", ()) or ())
-        details = ", ".join(item for item in (f"tags={tags}" if tags else "", f"usable_for={usable_for}" if usable_for else "") if item)
-        if photo_index is not None and details:
-            analysis_lines.append(f"- photo {photo_index}: {details}")
-    if analysis_lines:
-        prompt += "\n\nФото-анализ без распознавания текста:\n" + "\n".join(analysis_lines)
-    guidance = _normalize_image_guidance(image_guidance)
-    if guidance:
-        prompt += (
-            "\n\nПожелания пользователя к изображениям:\n"
-            f"{guidance}\n"
-            "Учитывай эти пожелания при распределении концепций. "
-            "Если формулировка слишком буквальная, спорная или не подходит для маркетплейса, "
-            "переведи её в безопасный коммерческий язык карточки товара."
-        )
-    prompt += "\n\nText policy:\n" + _image_text_mode_instruction(image_text_mode)
-    style_instruction = _image_style_instruction(image_style_preset, image_style_custom)
-    if style_instruction:
-        prompt += "\n\nStyle preset:\n" + style_instruction
-    return prompt
-
-
 def _normalize_image_guidance(image_guidance: str | None) -> str:
     if not image_guidance:
         return ""
@@ -419,45 +368,6 @@ def parse_generation_payload(
     )
 
 
-def parse_image_concepts_payload(
-    payload: str,
-    photos_count: int,
-    images_count: int,
-) -> list[ImageConcept]:
-    try:
-        data = json.loads(_strip_markdown_fence(payload))
-    except json.JSONDecodeError as exc:
-        raise LLMResponseError("LLM returned invalid image concepts JSON") from exc
-
-    raw_concepts = data.get("concepts")
-    if not isinstance(raw_concepts, list) or not raw_concepts:
-        raise LLMResponseError("LLM response is missing required field: concepts")
-    if len(raw_concepts) != images_count:
-        raise LLMResponseError(f"LLM image concepts response must contain exactly {images_count} concepts")
-
-    concepts: list[ImageConcept] = []
-    max_photo_index = max(photos_count - 1, 0)
-    for index, item in enumerate(raw_concepts[:images_count], start=1):
-        if not isinstance(item, dict):
-            raise LLMResponseError("LLM image concept must be an object")
-        prompt = str(item.get("prompt", "")).strip()
-        if not prompt:
-            raise LLMResponseError("LLM image concept is missing prompt")
-        image_index = index
-        photo_index = int(item.get("photo_index") or 0)
-        photo_index = min(max(photo_index, 0), max_photo_index)
-        concepts.append(
-            ImageConcept(
-                image_index=image_index,
-                purpose=str(item.get("purpose", "")).strip() or f"image {image_index}",
-                photo_index=photo_index,
-                prompt=prompt,
-            )
-        )
-
-    return concepts
-
-
 async def generate_card(
     user_input: str,
     api_key: str,
@@ -551,5 +461,4 @@ async def generate_image_prompts(
             for index in range(1, images_count + 1)
         ],
         source="direct",
-        director_model="none",
     )

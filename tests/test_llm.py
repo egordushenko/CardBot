@@ -9,14 +9,11 @@ from llm import (
     build_openrouter_model_fallbacks,
     build_category_profile_prompt_block,
     build_user_prompt,
-    build_image_director_user_prompt,
     generate_image_prompts,
-    parse_image_concepts_payload,
     parse_generation_payload,
     request_chat_completion_with_fallback,
     select_system_prompt,
 )
-from prompts import DIRECTOR_SYSTEM_PROMPT
 
 
 def test_parse_generation_payload_accepts_valid_json():
@@ -418,120 +415,10 @@ def test_build_user_prompt_includes_resolved_fields_and_instructions():
     assert "Извлеки цвет из изображения товара." in prompt
 
 
-def test_parse_image_concepts_payload_validates_and_clamps_photo_index():
-    result = parse_image_concepts_payload(
-        (
-            '{"concepts":['
-            '{"image_index":1,"purpose":"main","photo_index":0,"prompt":"Prompt one"},'
-            '{"image_index":2,"purpose":"details","photo_index":99,"prompt":"Prompt two"}'
-            ']}'
-        ),
-        photos_count=2,
-        images_count=2,
-    )
-
-    assert result == [
-        ImageConcept(image_index=1, purpose="main", photo_index=0, prompt="Prompt one"),
-        ImageConcept(image_index=2, purpose="details", photo_index=1, prompt="Prompt two"),
-    ]
-
-
-def test_parse_image_concepts_payload_normalizes_duplicate_image_indexes():
-    result = parse_image_concepts_payload(
-        (
-            '{"concepts":['
-            '{"image_index":1,"purpose":"first","photo_index":0,"prompt":"Prompt one"},'
-            '{"image_index":1,"purpose":"second","photo_index":0,"prompt":"Prompt two"},'
-            '{"image_index":2,"purpose":"third","photo_index":0,"prompt":"Prompt three"}'
-            ']}'
-        ),
-        photos_count=1,
-        images_count=3,
-    )
-
-    assert [concept.image_index for concept in result] == [1, 2, 3]
-
-
-def test_parse_image_concepts_payload_rejects_missing_concepts():
-    with pytest.raises(LLMResponseError, match="concepts"):
-        parse_image_concepts_payload("{}", photos_count=1, images_count=1)
-
-
-def test_parse_image_concepts_payload_rejects_fewer_concepts_than_requested():
-    with pytest.raises(LLMResponseError, match="exactly 5"):
-        parse_image_concepts_payload(
-        (
-            '{"concepts":['
-            '{"image_index":1,"purpose":"main","photo_index":0,"prompt":"Prompt one"},'
-            '{"image_index":2,"purpose":"lifestyle","photo_index":1,"prompt":"Prompt two"}'
-            ']}'
-        ),
-        photos_count=2,
-        images_count=5,
-        )
-
-
-def test_build_image_director_user_prompt_includes_counts_and_marketplace():
-    prompt = build_image_director_user_prompt(
-        product_description="коврик EVA",
-        marketplace="wb",
-        photos_count=3,
-        images_count=5,
-    )
-
-    assert "Маркетплейс: Wildberries" in prompt
-    assert "Загружено фото: 3" in prompt
-    assert "Нужно сгенерировать изображений: 5" in prompt
-
-
-def test_build_image_director_user_prompt_includes_optional_image_guidance():
-    prompt = build_image_director_user_prompt(
-        product_description="black Therapy rashguard",
-        marketplace="wb",
-        photos_count=5,
-        images_count=5,
-        image_guidance="1 фото спереди на модели, 1 со спины, микроплан материала",
-    )
-
-    assert "Пожелания пользователя к изображениям" in prompt
-    assert "1 фото спереди на модели" in prompt
-    assert "микроплан материала" in prompt
-    assert "безопасный коммерческий язык" in prompt
-
-
-def test_build_image_director_user_prompt_uses_photo_roles_without_text_or_defects():
-    from visual_pipeline import PhotoAnalysis
-
-    prompt = build_image_director_user_prompt(
-        product_description="black Therapy rashguard",
-        marketplace="wb",
-        photos_count=1,
-        images_count=1,
-        photo_analyses=[
-            PhotoAnalysis(
-                0,
-                ("front", "on_model"),
-                ("M SIZE", "100% COTTON"),
-                ("home lighting", "wrinkles"),
-                ("hero", "front_on_model"),
-                "Back print says M SIZE",
-            )
-        ],
-    )
-
-    assert "tags=front, on_model" in prompt
-    assert "usable_for=hero, front_on_model" in prompt
-    assert "M SIZE" not in prompt
-    assert "100% COTTON" not in prompt
-    assert "home lighting" not in prompt
-    assert "wrinkles" not in prompt
-    assert "Back print says" not in prompt
-
-
 @pytest.mark.asyncio
 async def test_generate_image_prompts_uses_direct_product_prompt(monkeypatch):
     async def fail_request_chat_completion_with_fallback(client, **kwargs):
-        raise AssertionError("image prompts must not call an LLM director")
+        raise AssertionError("image prompts must not call a secondary LLM")
 
     monkeypatch.setattr(
         "llm.request_chat_completion_with_fallback",
@@ -566,7 +453,6 @@ async def test_generate_image_prompts_uses_direct_product_prompt(monkeypatch):
         ),
     ]
     assert result.source == "direct"
-    assert result.director_model == "none"
 
 
 @pytest.mark.asyncio
@@ -574,7 +460,7 @@ async def test_generate_image_prompts_ignores_photo_analysis_for_direct_prompt(m
     from visual_pipeline import PhotoAnalysis
 
     async def fake_request_chat_completion_with_fallback(client, **kwargs):
-        raise RuntimeError("director unavailable")
+        raise RuntimeError("secondary LLM unavailable")
 
     monkeypatch.setattr(
         "llm.request_chat_completion_with_fallback",
@@ -599,7 +485,6 @@ async def test_generate_image_prompts_ignores_photo_analysis_for_direct_prompt(m
     )
 
     assert result.source == "direct"
-    assert result.director_model == "none"
     assert [concept.purpose for concept in result.concepts] == [
         "marketplace",
         "marketplace",
@@ -620,17 +505,3 @@ async def test_generate_image_prompts_rejects_more_than_seven_images():
             images_count=8,
             api_key="test-key",
         )
-
-
-def test_director_system_prompt_is_short_and_single_source():
-    assert "Ты создаёшь концепции изображений для карточек товаров WB/Ozon" in DIRECTOR_SYSTEM_PROMPT
-    assert "60-100 words" in DIRECTOR_SYSTEM_PROMPT
-    assert "hero, lifestyle, infographic, closeup" in DIRECTOR_SYSTEM_PROMPT
-    assert "photo_index" in DIRECTOR_SYSTEM_PROMPT
-    assert '{"concepts": [...]}' in DIRECTOR_SYSTEM_PROMPT
-
-    assert "STRICT PRODUCT PRESERVATION RULES" not in DIRECTOR_SYSTEM_PROMPT
-    assert "Do NOT add any buttons" not in DIRECTOR_SYSTEM_PROMPT
-    assert "Model gender rules" not in DIRECTOR_SYSTEM_PROMPT
-    assert "Remove home-photo defects" not in DIRECTOR_SYSTEM_PROMPT
-    assert "не ближе 6% от края кадра" not in DIRECTOR_SYSTEM_PROMPT

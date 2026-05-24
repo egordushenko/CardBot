@@ -1223,16 +1223,14 @@ def _build_image_report_base(
         "image_text_mode": normalize_image_text_mode(image_text_mode),
         "image_style_preset": normalize_image_style_preset(image_style_preset),
         "image_style_custom": normalize_image_style_custom(image_style_custom),
-        "director_source": "pending",
-        "director_model": "",
+        "prompt_source": "pending",
         "concepts": [],
         "status": "pending",
     }
 
 
 def _apply_prompt_plan_to_report(report: dict[str, Any], plan: ImagePromptPlan) -> None:
-    report["director_source"] = plan.source
-    report["director_model"] = plan.director_model
+    report["prompt_source"] = plan.source
     report["concepts"] = [
         {
             "image_index": concept.image_index,
