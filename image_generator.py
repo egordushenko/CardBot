@@ -4,14 +4,19 @@ import base64
 import logging
 import re
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Any
 
 import httpx
+from PIL import Image, ImageOps
 
 
 OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 MIN_BATCH_IMAGE_TIMEOUT_SECONDS = 420.0
 BATCH_IMAGE_TIMEOUT_SECONDS_PER_IMAGE = 180.0
+REFERENCE_COLLAGE_SIZE = (1536, 1536)
+REFERENCE_COLLAGE_BACKGROUND = (246, 246, 244)
+REFERENCE_COLLAGE_GAP = 24
 
 
 class ImageGenerationError(RuntimeError):
@@ -133,16 +138,71 @@ def _image_content_item(image_bytes: bytes, mime_type: str = "image/jpeg") -> di
     }
 
 
-def _build_batch_image_prompt(concepts: list[ImageBatchConcept]) -> str:
-    for concept in concepts:
-        validate_prompt_text(str(concept.prompt))
-    product_description = str(concepts[0].prompt).strip()
+def _resample_filter() -> Any:
+    return getattr(Image, "Resampling", Image).LANCZOS
+
+
+def build_reference_photo_collage(
+    reference_photo_bytes: list[bytes],
+    *,
+    canvas_size: tuple[int, int] = REFERENCE_COLLAGE_SIZE,
+    gap: int = REFERENCE_COLLAGE_GAP,
+) -> bytes:
+    if not reference_photo_bytes:
+        raise ImageGenerationError("Reference collage requires at least one photo")
+    if len(reference_photo_bytes) > 7:
+        raise ImageGenerationError("Reference collage supports up to 7 photos")
+
+    decoded_images: list[Image.Image] = []
+    for photo_bytes in reference_photo_bytes:
+        try:
+            image = Image.open(BytesIO(photo_bytes))
+            image = ImageOps.exif_transpose(image).convert("RGB")
+        except Exception as exc:
+            raise ImageGenerationError("Reference photo could not be decoded") from exc
+        decoded_images.append(image)
+
+    count = len(decoded_images)
+    if count == 1:
+        columns, rows = 1, 1
+    elif count <= 4:
+        columns, rows = 2, 2
+    else:
+        columns, rows = 3, 3
+
+    canvas_width, canvas_height = canvas_size
+    cell_width = (canvas_width - gap * (columns + 1)) // columns
+    cell_height = (canvas_height - gap * (rows + 1)) // rows
+    canvas = Image.new("RGB", canvas_size, REFERENCE_COLLAGE_BACKGROUND)
+
+    for index, image in enumerate(decoded_images):
+        row = index // columns
+        column = index % columns
+        fitted = ImageOps.contain(image, (cell_width, cell_height), _resample_filter())
+        x = gap + column * (cell_width + gap) + (cell_width - fitted.width) // 2
+        y = gap + row * (cell_height + gap) + (cell_height - fitted.height) // 2
+        canvas.paste(fitted, (x, y))
+
+    output = BytesIO()
+    canvas.save(output, format="JPEG", quality=92, optimize=True)
+    return output.getvalue()
+
+
+def _build_single_image_prompt(
+    concept: ImageBatchConcept,
+    *,
+    total_count: int,
+) -> str:
+    validate_prompt_text(str(concept.prompt))
     return (
-        f"Сгенерируй {len(concepts)} отдельных изображения данного товара. "
-        "Изображения необходимы для карточек товара маркетплейсов Ozon/WB, "
-        "нужно сделать в лучшем продающем виде для карточки товара.\n"
-        f"Немного информации о товаре: {product_description}\n\n"
-        "Установить соотношение сторон 3:4."
+        "Generate exactly one image for a marketplace product card. "
+        "The input reference is a collage with the same product from several angles; "
+        "use all views to preserve the product identity, shape, materials, and colors. "
+        f"Image {int(concept.image_index)} of {int(total_count)}. "
+        f"Purpose: {str(concept.purpose).strip() or 'marketplace'}.\n"
+        f"Product and visual direction: {str(concept.prompt).strip()}\n\n"
+        "Return one polished 3:4 product-card image only. "
+        "Do not create a collage, grid, contact sheet, split-screen, labels, or multiple images."
     )
 
 
@@ -159,64 +219,73 @@ async def generate_batch_image_results(
     if not reference_photo_bytes:
         raise ImageGenerationError("Batch image generation requires at least one reference photo")
 
-    content: list[dict[str, Any]] = []
-    for index, photo_bytes in enumerate(reference_photo_bytes, start=1):
-        content.append(_image_content_item(photo_bytes))
-        content.append({"type": "text", "text": f"Input reference photo {index}"})
-    content.append({"type": "text", "text": _build_batch_image_prompt(concepts)})
+    for concept in concepts:
+        validate_prompt_text(str(concept.prompt))
 
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": content,
-            }
-        ],
-        "modalities": ["image", "text"],
-        "image_config": {
-            "aspect_ratio": "3:4",
-            "image_size": "1K",
-        },
-        "max_tokens": 4096,
-    }
+    collage_bytes = build_reference_photo_collage(reference_photo_bytes)
+    generated_images: list[GeneratedImage] = []
 
     async with httpx.AsyncClient(timeout=batch_image_timeout_seconds(len(concepts))) as client:
-        response = await client.post(
-            OPENROUTER_CHAT_COMPLETIONS_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": site_url,
-                "X-Title": "CardBot",
-            },
-            json=payload,
-        )
-        response.raise_for_status()
-        result = response.json()
+        for concept in concepts:
+            content: list[dict[str, Any]] = [
+                _image_content_item(collage_bytes),
+                {"type": "text", "text": "Input reference collage"},
+                {
+                    "type": "text",
+                    "text": _build_single_image_prompt(concept, total_count=len(concepts)),
+                },
+            ]
+            payload = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": content,
+                    }
+                ],
+                "modalities": ["image", "text"],
+                "image_config": {
+                    "aspect_ratio": "3:4",
+                    "image_size": "1K",
+                },
+                "max_tokens": 4096,
+            }
 
-    image_bytes_list = extract_openrouter_image_bytes_list(result)
-    if not image_bytes_list:
+            response = await client.post(
+                OPENROUTER_CHAT_COMPLETIONS_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": site_url,
+                    "X-Title": "CardBot",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            image_bytes_list = extract_openrouter_image_bytes_list(result)
+            if not image_bytes_list:
+                raise ImageGenerationError("OpenRouter returned no images")
+            if len(image_bytes_list) > 1:
+                logging.warning(
+                    "OpenRouter returned multiple images for single-image request: got=%s",
+                    len(image_bytes_list),
+                )
+
+            usage = extract_openrouter_image_usage(result, fallback_model=model)
+            generated_images.append(
+                GeneratedImage(
+                    image_bytes=image_bytes_list[0],
+                    usage=ImageGenerationUsage(model=usage.model, cost_usd=usage.cost_usd),
+                )
+            )
+
+    if len(generated_images) != len(concepts):
         raise ImageGenerationError(
-            f"OpenRouter returned no images: expected {len(concepts)} images"
+            f"OpenRouter returned {len(generated_images)} images: expected {len(concepts)} images"
         )
-    if len(image_bytes_list) != len(concepts):
-        logging.warning(
-            "OpenRouter returned unexpected image count: expected=%s got=%s",
-            len(concepts),
-            len(image_bytes_list),
-        )
-    image_bytes_list = image_bytes_list[: len(concepts)]
-
-    usage = extract_openrouter_image_usage(result, fallback_model=model)
-    cost_per_image = usage.cost_usd / len(image_bytes_list) if image_bytes_list else 0.0
-    return [
-        GeneratedImage(
-            image_bytes=image_bytes,
-            usage=ImageGenerationUsage(model=usage.model, cost_usd=cost_per_image),
-        )
-        for image_bytes in image_bytes_list
-    ]
+    return generated_images
 
 
 async def generate_marketplace_batch_image_results(

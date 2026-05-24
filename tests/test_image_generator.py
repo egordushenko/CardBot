@@ -1,13 +1,23 @@
-import base64
 import asyncio
+import base64
+from io import BytesIO
 
 import pytest
+from PIL import Image
 
 import image_generator
 from image_generator import (
     ImageGenerationError,
+    build_reference_photo_collage,
     extract_openrouter_image_usage,
 )
+
+
+def _png_bytes(color: str, size: tuple[int, int] = (64, 48)) -> bytes:
+    image = Image.new("RGB", size, color)
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 def test_extract_openrouter_image_bytes_list_reads_all_message_images():
@@ -51,17 +61,37 @@ def test_extract_openrouter_image_usage_reads_model_and_cost():
     assert usage.cost_usd == 0.200231
 
 
-def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypatch):
-    captured = {}
+def test_build_reference_photo_collage_combines_input_angles_into_one_image():
+    collage_bytes = build_reference_photo_collage(
+        [
+            _png_bytes("red", size=(80, 40)),
+            _png_bytes("green", size=(40, 80)),
+            _png_bytes("blue", size=(60, 60)),
+        ],
+        canvas_size=(512, 512),
+    )
+
+    collage = Image.open(BytesIO(collage_bytes))
+
+    assert collage.size == (512, 512)
+    assert collage.mode == "RGB"
+
+
+def test_generate_batch_images_sends_collage_once_per_concept(monkeypatch):
+    captured = {"payloads": []}
 
     class FakeResponse:
+        def __init__(self, image_bytes, cost):
+            self.image_bytes = image_bytes
+            self.cost = cost
+
         def raise_for_status(self):
             return None
 
         def json(self):
             return {
                 "model": "model-version",
-                "usage": {"cost": 0.4},
+                "usage": {"cost": self.cost},
                 "choices": [
                     {
                         "message": {
@@ -69,13 +99,7 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
                                 {
                                     "image_url": {
                                         "url": "data:image/png;base64,"
-                                        + base64.b64encode(b"one").decode("ascii")
-                                    }
-                                },
-                                {
-                                    "image_url": {
-                                        "url": "data:image/png;base64,"
-                                        + base64.b64encode(b"two").decode("ascii")
+                                        + base64.b64encode(self.image_bytes).decode("ascii")
                                     }
                                 },
                             ]
@@ -86,7 +110,6 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
 
     class FakeClient:
         def __init__(self, timeout):
-            self.timeout = timeout
             captured["timeout"] = timeout
 
         async def __aenter__(self):
@@ -96,8 +119,9 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
             return None
 
         async def post(self, url, headers, json):
-            captured["payload"] = json
-            return FakeResponse()
+            captured["payloads"].append(json)
+            response_index = len(captured["payloads"])
+            return FakeResponse(f"image-{response_index}".encode("ascii"), 0.2)
 
     monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
 
@@ -105,39 +129,44 @@ def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypat
         image_generator.ImageBatchConcept(
             image_index=1,
             purpose="marketplace",
-            prompt="black Therapy rashguard cotton fitted",
+            prompt="black hourglass white sand wooden base",
         ),
         image_generator.ImageBatchConcept(
             image_index=2,
             purpose="marketplace",
-            prompt="black Therapy rashguard cotton fitted",
+            prompt="black hourglass white sand wooden base",
         ),
     ]
 
     result = asyncio.run(
         image_generator.generate_batch_image_results(
             concepts=concepts,
-            reference_photo_bytes=[b"photo-a", b"photo-b"],
+            reference_photo_bytes=[
+                _png_bytes("red"),
+                _png_bytes("green"),
+                _png_bytes("blue"),
+            ],
             api_key="key",
             model="model",
         )
     )
 
-    content = captured["payload"]["messages"][0]["content"]
-    image_items = [item for item in content if item["type"] == "image_url"]
-    prompt_text = content[-1]["text"]
+    assert len(captured["payloads"]) == 2
+    for payload in captured["payloads"]:
+        content = payload["messages"][0]["content"]
+        image_items = [item for item in content if item["type"] == "image_url"]
+        assert len(image_items) == 1
+        assert content[1]["text"] == "Input reference collage"
+        assert payload["image_config"]["aspect_ratio"] == "3:4"
 
-    assert len(image_items) == 2
-    assert "Сгенерируй 2 отдельных изображения данного товара." in prompt_text
-    assert "black Therapy rashguard cotton fitted" in prompt_text
-    assert "Установить соотношение сторон 3:4." in prompt_text
-    assert "message.images" not in prompt_text
-    assert "коллаж" not in prompt_text
-    assert "сетк" not in prompt_text
-    assert "Required outputs" not in prompt_text
-    assert "Image 1" not in prompt_text
+    prompt_texts = [payload["messages"][0]["content"][-1]["text"] for payload in captured["payloads"]]
+    assert all("black hourglass white sand wooden base" in text for text in prompt_texts)
+    assert all("collage" in text for text in prompt_texts)
+    assert all("one image" in text for text in prompt_texts)
+    assert "Image 1 of 2" in prompt_texts[0]
+    assert "Image 2 of 2" in prompt_texts[1]
     assert captured["timeout"] >= 420
-    assert [item.image_bytes for item in result] == [b"one", b"two"]
+    assert [item.image_bytes for item in result] == [b"image-1", b"image-2"]
     assert [item.usage.model for item in result] == ["model-version", "model-version"]
     assert [item.usage.cost_usd for item in result] == [0.2, 0.2]
 
@@ -164,19 +193,13 @@ def test_generate_batch_images_uses_available_outputs_when_count_differs(monkeyp
                                 {
                                     "image_url": {
                                         "url": "data:image/png;base64,"
-                                        + base64.b64encode(b"two").decode("ascii")
-                                    }
-                                },
-                                {
-                                    "image_url": {
-                                        "url": "data:image/png;base64,"
                                         + base64.b64encode(b"extra").decode("ascii")
                                     }
                                 },
                             ]
                         }
                     }
-                ]
+                ],
             }
 
     class FakeClient:
@@ -194,22 +217,17 @@ def test_generate_batch_images_uses_available_outputs_when_count_differs(monkeyp
 
     monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
 
-    concepts = [
-        image_generator.ImageBatchConcept(1, "hero", "Hero prompt"),
-        image_generator.ImageBatchConcept(2, "back", "Back prompt"),
-    ]
-
     result = asyncio.run(
         image_generator.generate_batch_image_results(
-            concepts=concepts,
-            reference_photo_bytes=[b"photo"],
+            concepts=[image_generator.ImageBatchConcept(1, "hero", "Hero prompt")],
+            reference_photo_bytes=[_png_bytes("red")],
             api_key="key",
             model="model",
         )
     )
 
-    assert [item.image_bytes for item in result] == [b"one", b"two"]
-    assert [item.usage.cost_usd for item in result] == [0.3, 0.3]
+    assert [item.image_bytes for item in result] == [b"one"]
+    assert [item.usage.cost_usd for item in result] == [0.6]
 
 
 def test_generate_batch_images_rejects_corrupted_prompt_before_paid_request(monkeypatch):
@@ -238,7 +256,7 @@ def test_generate_batch_images_rejects_corrupted_prompt_before_paid_request(monk
                         "?????????? 3 ????????? ???????????",
                     )
                 ],
-                reference_photo_bytes=[b"photo"],
+                reference_photo_bytes=[_png_bytes("red")],
                 api_key="key",
                 model="model",
             )
