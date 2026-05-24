@@ -16,7 +16,16 @@ MIN_BATCH_IMAGE_TIMEOUT_SECONDS = 420.0
 BATCH_IMAGE_TIMEOUT_SECONDS_PER_IMAGE = 180.0
 REFERENCE_COLLAGE_SIZE = (1536, 1536)
 REFERENCE_COLLAGE_BACKGROUND = (246, 246, 244)
-REFERENCE_COLLAGE_GAP = 24
+REFERENCE_COLLAGE_GAP = 16
+REFERENCE_COLLAGE_LAYOUTS = {
+    1: (1,),
+    2: (2,),
+    3: (1, 2),
+    4: (2, 2),
+    5: (2, 3),
+    6: (3, 3),
+    7: (3, 4),
+}
 
 
 class ImageGenerationError(RuntimeError):
@@ -162,26 +171,24 @@ def build_reference_photo_collage(
             raise ImageGenerationError("Reference photo could not be decoded") from exc
         decoded_images.append(image)
 
-    count = len(decoded_images)
-    if count == 1:
-        columns, rows = 1, 1
-    elif count <= 4:
-        columns, rows = 2, 2
-    else:
-        columns, rows = 3, 3
-
+    row_layout = REFERENCE_COLLAGE_LAYOUTS[len(decoded_images)]
     canvas_width, canvas_height = canvas_size
-    cell_width = (canvas_width - gap * (columns + 1)) // columns
-    cell_height = (canvas_height - gap * (rows + 1)) // rows
     canvas = Image.new("RGB", canvas_size, REFERENCE_COLLAGE_BACKGROUND)
+    row_height = (canvas_height - gap * (len(row_layout) + 1)) // len(row_layout)
 
-    for index, image in enumerate(decoded_images):
-        row = index // columns
-        column = index % columns
-        fitted = ImageOps.contain(image, (cell_width, cell_height), _resample_filter())
-        x = gap + column * (cell_width + gap) + (cell_width - fitted.width) // 2
-        y = gap + row * (cell_height + gap) + (cell_height - fitted.height) // 2
-        canvas.paste(fitted, (x, y))
+    index = 0
+    for row, columns in enumerate(row_layout):
+        cell_width = (canvas_width - gap * (columns + 1)) // columns
+        row_y = gap + row * (row_height + gap)
+        for column in range(columns):
+            image = decoded_images[index]
+            fitted = ImageOps.contain(image, (cell_width, row_height), _resample_filter())
+            x = gap + column * (cell_width + gap) + (cell_width - fitted.width) // 2
+            y = row_y + (row_height - fitted.height) // 2
+            canvas.paste(fitted, (x, y))
+            index += 1
+            if index >= len(decoded_images):
+                break
 
     output = BytesIO()
     canvas.save(output, format="JPEG", quality=92, optimize=True)

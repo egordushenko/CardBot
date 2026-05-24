@@ -77,6 +77,25 @@ def test_build_reference_photo_collage_combines_input_angles_into_one_image():
     assert collage.mode == "RGB"
 
 
+def test_build_reference_photo_collage_packs_five_images_as_two_plus_three_rows():
+    collage_bytes = build_reference_photo_collage(
+        [
+            _png_bytes("red"),
+            _png_bytes("green"),
+            _png_bytes("blue"),
+            _png_bytes("yellow"),
+            _png_bytes("purple"),
+        ],
+        canvas_size=(512, 512),
+    )
+
+    collage = Image.open(BytesIO(collage_bytes)).convert("RGB")
+
+    assert collage.getpixel((80, 380)) != (246, 246, 244)
+    assert collage.getpixel((256, 380)) != (246, 246, 244)
+    assert collage.getpixel((430, 380)) != (246, 246, 244)
+
+
 def test_generate_batch_images_sends_collage_once_per_concept(monkeypatch):
     captured = {"payloads": []}
 
