@@ -143,16 +143,10 @@ CREATE TABLE IF NOT EXISTS templates (
     photo_file_ids TEXT,
     images_count INT,
     image_guidance TEXT,
-    image_text_mode TEXT,
-    image_style_preset TEXT,
-    image_style_custom TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_guidance TEXT;
-ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_text_mode TEXT;
-ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_style_preset TEXT;
-ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_style_custom TEXT;
 ALTER TABLE image_sessions ADD COLUMN IF NOT EXISTS report_json TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_generations_user_created
@@ -510,9 +504,6 @@ class Database:
         photo_file_ids: list[str] | str | None,
         images_count: int | None,
         image_guidance: str | None = None,
-        image_text_mode: str | None = None,
-        image_style_preset: str | None = None,
-        image_style_custom: str | None = None,
     ) -> int:
         if isinstance(photo_file_ids, list):
             photo_file_ids = json.dumps(photo_file_ids, ensure_ascii=False)
@@ -530,12 +521,9 @@ class Database:
                         description,
                         photo_file_ids,
                         images_count,
-                        image_guidance,
-                        image_text_mode,
-                        image_style_preset,
-                        image_style_custom
+                        image_guidance
                     )
-                    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    VALUES($1, $2, $3, $4, $5, $6, $7, $8)
                     RETURNING id
                     """,
                     user_id,
@@ -546,9 +534,6 @@ class Database:
                     photo_file_ids,
                     images_count,
                     image_guidance,
-                    image_text_mode,
-                    image_style_preset,
-                    image_style_custom,
                 )
             )
 
@@ -582,9 +567,6 @@ class Database:
                     photo_file_ids,
                     images_count,
                     image_guidance,
-                    image_text_mode,
-                    image_style_preset,
-                    image_style_custom,
                     created_at
                 FROM templates
                 WHERE user_id = $1
@@ -613,9 +595,6 @@ class Database:
                     photo_file_ids,
                     images_count,
                     image_guidance,
-                    image_text_mode,
-                    image_style_preset,
-                    image_style_custom,
                     created_at
                 FROM templates
                 WHERE id = $1 AND user_id = $2

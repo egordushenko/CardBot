@@ -457,8 +457,6 @@ async def test_generate_image_prompts_uses_direct_product_prompt(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_generate_image_prompts_ignores_photo_analysis_for_direct_prompt(monkeypatch):
-    from visual_pipeline import PhotoAnalysis
-
     async def fake_request_chat_completion_with_fallback(client, **kwargs):
         raise RuntimeError("secondary LLM unavailable")
 
@@ -475,12 +473,6 @@ async def test_generate_image_prompts_ignores_photo_analysis_for_direct_prompt(m
         api_key="test-key",
         model="deepseek/deepseek-v4-flash:free",
         site_url="https://alterega.ru",
-        photo_analyses=[
-            PhotoAnalysis(0, ("back", "on_model"), ("THERAPY FOR YOU",), (), ("back_on_model",)),
-            PhotoAnalysis(1, ("closeup", "label"), ("100% COTTON",), (), ("closeup",)),
-            PhotoAnalysis(2, ("front", "on_model"), (), (), ("front_on_model",)),
-            PhotoAnalysis(3, ("flatlay", "front"), (), (), ("hero", "flatlay")),
-        ],
         image_guidance="premium gym background and one closeup of material quality",
     )
 

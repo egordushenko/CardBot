@@ -33,13 +33,7 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     assert "photo_file_ids text" in schema
     assert "images_count int" in schema
     assert "image_guidance text" in schema
-    assert "image_text_mode text" in schema
-    assert "image_style_preset text" in schema
-    assert "image_style_custom text" in schema
     assert "add column if not exists image_guidance" in schema
-    assert "add column if not exists image_text_mode" in schema
-    assert "add column if not exists image_style_preset" in schema
-    assert "add column if not exists image_style_custom" in schema
     assert "report_json text" in schema
     assert "add column if not exists report_json" in schema
     assert "inv_id text unique not null" in schema

@@ -6,51 +6,8 @@ import pytest
 import image_generator
 from image_generator import (
     ImageGenerationError,
-    extract_openrouter_image_bytes,
     extract_openrouter_image_usage,
 )
-
-
-def test_extract_openrouter_image_bytes_reads_data_url():
-    expected = b"png-bytes"
-    payload = {
-        "choices": [
-            {
-                "message": {
-                    "images": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": "data:image/png;base64,"
-                                + base64.b64encode(expected).decode("ascii")
-                            },
-                        }
-                    ]
-                }
-            }
-        ]
-    }
-
-    assert extract_openrouter_image_bytes(payload) == expected
-
-
-def test_extract_openrouter_image_bytes_reads_legacy_data_shape():
-    expected = b"png-bytes"
-    payload = {
-        "data": [
-            {
-                "url": "data:image/png;base64,"
-                + base64.b64encode(expected).decode("ascii")
-            }
-        ]
-    }
-
-    assert extract_openrouter_image_bytes(payload) == expected
-
-
-def test_extract_openrouter_image_bytes_rejects_missing_images():
-    with pytest.raises(ImageGenerationError, match="images"):
-        extract_openrouter_image_bytes({"choices": [{"message": {}}]})
 
 
 def test_extract_openrouter_image_bytes_list_reads_all_message_images():
@@ -92,62 +49,6 @@ def test_extract_openrouter_image_usage_reads_model_and_cost():
 
     assert usage.model == "openai/gpt-5.4-image-2-20260421"
     assert usage.cost_usd == 0.200231
-
-
-def test_generate_single_image_sends_safe_prompt_to_api(monkeypatch):
-    captured = {}
-
-    class FakeResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {
-                "choices": [
-                    {
-                        "message": {
-                            "images": [
-                                {
-                                    "image_url": {
-                                        "url": "data:image/png;base64,"
-                                        + base64.b64encode(b"png").decode("ascii")
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                ]
-            }
-
-    class FakeClient:
-        def __init__(self, timeout):
-            self.timeout = timeout
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return None
-
-        async def post(self, url, headers, json):
-            captured["payload"] = json
-            return FakeResponse()
-
-    monkeypatch.setattr(image_generator.httpx, "AsyncClient", FakeClient)
-
-    result = asyncio.run(
-        image_generator.generate_single_image(
-            prompt="Original prompt",
-            reference_photo_bytes=b"photo",
-            api_key="key",
-            model="model",
-        )
-    )
-
-    sent_text = captured["payload"]["messages"][0]["content"][1]["text"]
-    assert result == b"png"
-    assert sent_text == "Original prompt"
-    assert "STRICT PRODUCT PRESERVATION RULES" not in sent_text
 
 
 def test_generate_batch_images_sends_all_reference_photos_and_concepts(monkeypatch):

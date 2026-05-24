@@ -71,11 +71,6 @@ def validate_prompt_text(prompt: str) -> None:
         raise ImageGenerationError("Prompt text looks mojibake-corrupted")
 
 
-def extract_openrouter_image_bytes(payload: dict[str, Any]) -> bytes:
-    image_url = _extract_image_url(payload)
-    return _decode_openrouter_image_url(image_url)
-
-
 def extract_openrouter_image_bytes_list(payload: dict[str, Any]) -> list[bytes]:
     image_urls = _extract_image_urls(payload)
     return [_decode_openrouter_image_url(image_url) for image_url in image_urls]
@@ -109,10 +104,6 @@ def extract_openrouter_image_usage(
     return ImageGenerationUsage(model=model, cost_usd=cost_usd)
 
 
-def _extract_image_url(payload: dict[str, Any]) -> str:
-    return _extract_image_urls(payload)[0]
-
-
 def _extract_image_urls(payload: dict[str, Any]) -> list[str]:
     try:
         images = payload["choices"][0]["message"]["images"]
@@ -130,21 +121,6 @@ def _extract_image_urls(payload: dict[str, Any]) -> list[str]:
         raise ImageGenerationError("OpenRouter response does not contain images") from exc
 
     raise ImageGenerationError("OpenRouter response does not contain images")
-
-
-def _extract_openrouter_text(payload: dict[str, Any]) -> str:
-    try:
-        content = payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise ImageGenerationError("OpenRouter response does not contain text") from exc
-    if isinstance(content, list):
-        text_parts = [
-            str(item.get("text") or "")
-            for item in content
-            if isinstance(item, dict) and item.get("type") == "text"
-        ]
-        return "\n".join(part for part in text_parts if part).strip()
-    return str(content or "").strip()
 
 
 def _image_content_item(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict[str, Any]:
@@ -167,91 +143,6 @@ def _build_batch_image_prompt(concepts: list[ImageBatchConcept]) -> str:
         "нужно сделать в лучшем продающем виде для карточки товара.\n"
         f"Немного информации о товаре: {product_description}\n\n"
         "Установить соотношение сторон 3:4."
-    )
-
-
-async def _request_openrouter_text(
-    *,
-    content: list[dict[str, Any]],
-    api_key: str,
-    model: str,
-    site_url: str,
-    timeout: float = 45.0,
-) -> str:
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": content,
-            }
-        ],
-        "response_format": {"type": "json_object"},
-        "max_tokens": 900,
-        "temperature": 0.1,
-    }
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(
-            OPENROUTER_CHAT_COMPLETIONS_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": site_url,
-                "X-Title": "CardBot",
-            },
-            json=payload,
-        )
-        response.raise_for_status()
-        result = response.json()
-    return _extract_openrouter_text(result)
-
-
-async def generate_single_image_result(
-    prompt: str,
-    reference_photo_bytes: bytes,
-    api_key: str,
-    model: str,
-    site_url: str = "https://alterega.ru",
-) -> GeneratedImage:
-    validate_prompt_text(prompt)
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    _image_content_item(reference_photo_bytes),
-                    {
-                        "type": "text",
-                        "text": prompt,
-                    },
-                ],
-            }
-        ],
-        "modalities": ["image", "text"],
-        "image_config": {
-            "aspect_ratio": "3:4",
-            "image_size": "1K",
-        },
-    }
-
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            OPENROUTER_CHAT_COMPLETIONS_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": site_url,
-                "X-Title": "CardBot",
-            },
-            json=payload,
-        )
-        response.raise_for_status()
-        result = response.json()
-
-    return GeneratedImage(
-        image_bytes=extract_openrouter_image_bytes(result),
-        usage=extract_openrouter_image_usage(result, fallback_model=model),
     )
 
 
@@ -328,42 +219,6 @@ async def generate_batch_image_results(
     ]
 
 
-async def generate_single_image(
-    prompt: str,
-    reference_photo_bytes: bytes,
-    api_key: str,
-    model: str,
-    site_url: str = "https://alterega.ru",
-) -> bytes:
-    result = await generate_single_image_result(
-        prompt=prompt,
-        reference_photo_bytes=reference_photo_bytes,
-        api_key=api_key,
-        model=model,
-        site_url=site_url,
-    )
-    return result.image_bytes
-
-
-async def generate_marketplace_image_result(
-    prompt: str,
-    reference_photo_file_id: str,
-    bot: Any,
-    api_key: str,
-    model: str,
-    site_url: str = "https://alterega.ru",
-) -> GeneratedImage:
-    telegram_file = await bot.get_file(reference_photo_file_id)
-    photo_bytes = await telegram_file.download_as_bytearray()
-    return await generate_single_image_result(
-        prompt=prompt,
-        reference_photo_bytes=bytes(photo_bytes),
-        api_key=api_key,
-        model=model,
-        site_url=site_url,
-    )
-
-
 async def generate_marketplace_batch_image_results(
     *,
     concepts: list[ImageBatchConcept],
@@ -386,51 +241,3 @@ async def generate_marketplace_batch_image_results(
         model=model,
         site_url=site_url,
     )
-
-
-async def generate_marketplace_image(
-    prompt: str,
-    reference_photo_file_id: str,
-    bot: Any,
-    api_key: str,
-    model: str,
-    site_url: str = "https://alterega.ru",
-) -> bytes:
-    result = await generate_marketplace_image_result(
-        prompt=prompt,
-        reference_photo_file_id=reference_photo_file_id,
-        bot=bot,
-        api_key=api_key,
-        model=model,
-        site_url=site_url,
-    )
-    return result.image_bytes
-
-
-async def generate_all_images(
-    concepts: list[Any],
-    photo_file_ids: list[str],
-    bot: Any,
-    api_key: str,
-    model: str,
-    site_url: str = "https://alterega.ru",
-) -> list[tuple[int, bytes]]:
-    import asyncio
-
-    async def process_one(concept: Any) -> tuple[int, bytes]:
-        photo_index = min(int(concept.photo_index), len(photo_file_ids) - 1)
-        image_bytes = await generate_marketplace_image(
-            prompt=concept.prompt,
-            reference_photo_file_id=photo_file_ids[photo_index],
-            bot=bot,
-            api_key=api_key,
-            model=model,
-            site_url=site_url,
-        )
-        return int(concept.image_index), image_bytes
-
-    results = await asyncio.gather(
-        *(process_one(concept) for concept in concepts),
-        return_exceptions=True,
-    )
-    return [result for result in results if not isinstance(result, Exception)]

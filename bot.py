@@ -5,7 +5,6 @@ import asyncio
 import json
 from contextlib import suppress
 from io import BytesIO
-from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
@@ -32,22 +31,70 @@ from llm import (
     ImagePromptPlan,
     generate_card,
     generate_image_prompts,
-    normalize_image_style_custom,
-    normalize_image_style_preset,
-    normalize_image_text_mode,
     normalize_marketplace,
 )
 from payments import (
-    IMAGE_ADDON_CODES,
-    MAIN_PACKAGE_CODES,
     PACKAGES as PAYMENT_PACKAGES,
     PROMO_PACKAGE_CODE,
-    TEXT_ADDON_CODES,
     build_payment_url,
     calculate_package_counts,
     generate_inv_id,
 )
 from webhook_server import start_webhook_server
+from bot_keyboards import (
+    BACK_BUTTON_TEXT,
+    COMBO_PACKAGE_BUTTON_TEXT,
+    HOME_BUTTON_TEXT,
+    HOME_CALLBACK,
+    IMAGE_COUNT_OPTIONS,
+    MAX_REFERENCE_PHOTOS,
+    REPLY_ACTIONS,
+    TEMPLATES_LIMIT,
+    TEMPLATES_PAGE_SIZE,
+    KeyboardButton,
+    KeyboardMarkup,
+    ReplyKeyboardMarkupFallback,
+    build_after_generation_keyboard,
+    build_after_image_generation_keyboard,
+    build_balance_keyboard,
+    build_buy_keyboard,
+    build_combined_buy_keyboard,
+    build_combo_card_count_keyboard,
+    build_combo_photo_count_keyboard,
+    build_empty_templates_keyboard,
+    build_generation_mode_keyboard,
+    build_help_keyboard,
+    build_image_count_keyboard,
+    build_image_count_prompt,
+    build_image_guidance_keyboard,
+    build_image_marketplace_keyboard,
+    build_image_packages_keyboard,
+    build_image_photo_keyboard,
+    build_image_progress_message,
+    build_main_menu,
+    build_marketplace_keyboard,
+    build_no_image_balance_keyboard,
+    build_payment_link_keyboard,
+    build_payment_stub_keyboard,
+    build_persistent_main_keyboard,
+    build_photo_received_message,
+    build_repeat_photos_keyboard,
+    build_template_delete_confirm_keyboard,
+    build_template_details_keyboard,
+    build_templates_delete_keyboard,
+    build_templates_keyboard,
+    build_text_packages_keyboard,
+    classify_reply_action,
+    combine_repeat_description,
+    format_marketplace,
+    format_template_description_preview,
+    format_template_mode,
+    extract_image_file_id,
+    is_supported_image_document,
+    is_allowed_image_count,
+    should_generate_text_with_images,
+    truncate_template_name,
+)
 
 
 PAYMENT_UNAVAILABLE_MESSAGE = "💳 Оплата временно недоступна.\nПопробуйте немного позже."
@@ -93,18 +140,6 @@ IMAGE_GUIDANCE_PROMPT = (
     "Можно написать стиль, фон, ракурсы, роли для каждого кадра, текст на картинках или общую концепцию.\n"
     "Это необязательно: если пожеланий нет, нажмите «Пропустить»."
 )
-IMAGE_TEXT_MODE_PROMPT = (
-    "Текст на изображениях\n\n"
-    "Выберите режим: без текста, минимум текста или инфографика."
-)
-IMAGE_STYLE_PROMPT = (
-    "Стиль изображений\n\n"
-    "Выберите пресет или задайте свой стиль. Этот шаг необязательный."
-)
-IMAGE_STYLE_CUSTOM_PROMPT = (
-    "Напишите свой стиль\n\n"
-    "Например: luxury studio, dark premium, sporty dynamic, warm eco."
-)
 TEMPLATE_NAME_PROMPT = (
     "📋 Введите название шаблона\n\n"
     "Например: \"Лампа спиральная\" или \"Коврик ЭВА\""
@@ -120,533 +155,6 @@ REPEAT_CHANGES_PROMPT = (
     "Остальное останется как в предыдущей карточке."
 )
 REPEAT_PHOTOS_PROMPT = "📸 Какие фото использовать?"
-TEMPLATES_PAGE_SIZE = 5
-TEMPLATES_LIMIT = 10
-MAX_REFERENCE_PHOTOS = 7
-IMAGE_COUNT_OPTIONS = (1, 3, 5, 7)
-HOME_CALLBACK = "action:home"
-HOME_BUTTON_TEXT = "🏠 Главная"
-BACK_BUTTON_TEXT = "⬅️ Назад"
-COMBO_PACKAGE_BUTTON_TEXT = "💳 Комбо: карточки + изображения"
-REPLY_ACTIONS = {
-    "⚡ Сгенерировать карточку": "generate",
-    "💳 Купить генерации": "buy",
-    "📊 Мой баланс": "balance",
-    "📋 Мои шаблоны": "templates",
-    "🕐 История": "history",
-    "❓ Помощь": "help",
-    HOME_BUTTON_TEXT: "home",
-    "Главная": "home",
-}
-
-
-@dataclass(frozen=True)
-class KeyboardButton:
-    text: str
-    callback_data: str
-    url: str | None = None
-
-
-@dataclass(frozen=True)
-class KeyboardMarkup:
-    inline_keyboard: list[list[KeyboardButton]]
-
-
-@dataclass(frozen=True)
-class ReplyKeyboardMarkupFallback:
-    keyboard: list[list[str]]
-    resize_keyboard: bool = True
-
-
-def _button(text: str, callback_data: str) -> Any:
-    try:
-        from telegram import InlineKeyboardButton
-
-        return InlineKeyboardButton(text, callback_data=callback_data)
-    except ImportError:
-        return KeyboardButton(text=text, callback_data=callback_data)
-
-
-def _url_button(text: str, url: str) -> Any:
-    try:
-        from telegram import InlineKeyboardButton
-
-        return InlineKeyboardButton(text, url=url)
-    except ImportError:
-        return KeyboardButton(text=text, callback_data="", url=url)
-
-
-def _keyboard(rows: list[list[Any]]) -> Any:
-    try:
-        from telegram import InlineKeyboardMarkup
-
-        return InlineKeyboardMarkup(rows)
-    except ImportError:
-        return KeyboardMarkup(rows)
-
-
-def _home_button() -> Any:
-    return _button(HOME_BUTTON_TEXT, HOME_CALLBACK)
-
-
-def _nav_row(back_callback: str | None = None) -> list[Any]:
-    row: list[Any] = []
-    if back_callback:
-        row.append(_button(BACK_BUTTON_TEXT, back_callback))
-    row.append(_home_button())
-    return row
-
-
-def classify_reply_action(text: Any | None) -> str | None:
-    value = getattr(text, "text", text)
-    return REPLY_ACTIONS.get(str(value or "").strip())
-
-
-def build_persistent_main_keyboard() -> Any:
-    rows = [
-        ["⚡ Сгенерировать карточку"],
-        ["💳 Купить генерации", "📊 Мой баланс"],
-        ["📋 Мои шаблоны", "🕐 История"],
-        ["❓ Помощь"],
-    ]
-    try:
-        from telegram import ReplyKeyboardMarkup
-
-        return ReplyKeyboardMarkup(rows, resize_keyboard=True)
-    except ImportError:
-        return ReplyKeyboardMarkupFallback(rows)
-
-
-def build_main_menu() -> Any:
-    return _keyboard(
-        [
-            [_button("⚡ Сгенерировать карточку", "action:generate")],
-            [
-                _button("💳 Купить генерации", "action:buy"),
-                _button("📊 Мой баланс", "action:balance"),
-            ],
-            [
-                _button("📋 Мои шаблоны", "action:templates"),
-                _button("🕐 История", "action:history"),
-            ],
-            [
-                _button("❓ Помощь", "action:help"),
-            ],
-        ]
-    )
-
-
-def _payment_button(package_code: str) -> Any:
-    package = PAYMENT_PACKAGES[package_code]
-    if package_code.startswith("addon_text_"):
-        label = f"{package.text_count} карточек за {package.price_rub:,} ₽"
-    elif package_code.startswith("addon_img_") or package_code == "promo_img_10":
-        label = f"{package.images_count} изображений за {package.price_rub:,} ₽"
-    else:
-        label = f"{package.title} — {package.description} за {package.price_rub:,} ₽"
-    return _button(
-        label.replace(",", " "),
-        f"buy:{package_code}",
-    )
-
-
-def _combo_package_code(text_count: int, images_per_card: int) -> str:
-    for code in MAIN_PACKAGE_CODES:
-        package = PAYMENT_PACKAGES[code]
-        if package.text_count == text_count and package.images_per_card == images_per_card:
-            return code
-    raise ValueError(f"Unknown combo package: {text_count=} {images_per_card=}")
-
-
-def _combo_payment_button(text_count: int, images_per_card: int) -> Any:
-    code = _combo_package_code(text_count, images_per_card)
-    package = PAYMENT_PACKAGES[code]
-    if images_per_card == 0:
-        label = f"Без фото — {package.price_rub:,} ₽"
-    else:
-        label = f"{images_per_card} фото на карточку — {package.price_rub:,} ₽"
-    return _button(label.replace(",", " "), f"buy:{code}")
-
-
-def build_buy_keyboard(show_first_image_promo: bool = False) -> Any:
-    return _keyboard(
-        [
-            [_button(COMBO_PACKAGE_BUTTON_TEXT, "action:buy_combo")],
-            [_button("Только карточки", "action:buy_text")],
-            [_button("Только изображения", "action:buy_images")],
-            [_home_button()],
-        ]
-    )
-
-
-def build_combined_buy_keyboard(show_first_image_promo: bool = False) -> Any:
-    return build_buy_keyboard(show_first_image_promo=show_first_image_promo)
-
-
-def build_combo_card_count_keyboard() -> Any:
-    counts = sorted({PAYMENT_PACKAGES[code].text_count for code in MAIN_PACKAGE_CODES})
-    rows = [[_button(f"{count} карточек", f"combo_cards:{count}")] for count in counts]
-    rows.append(_nav_row("buy_back:root"))
-    return _keyboard(rows)
-
-
-def build_combo_photo_count_keyboard(text_count: int) -> Any:
-    photo_counts = sorted(
-        PAYMENT_PACKAGES[code].images_per_card
-        for code in MAIN_PACKAGE_CODES
-        if PAYMENT_PACKAGES[code].text_count == text_count
-    )
-    rows = [[_combo_payment_button(text_count, photo_count)] for photo_count in photo_counts]
-    rows.append(_nav_row("buy_back:combo"))
-    return _keyboard(rows)
-
-
-def build_balance_keyboard() -> Any:
-    return _keyboard(
-        [
-            [_button(COMBO_PACKAGE_BUTTON_TEXT, "action:buy_combo")],
-            [
-                _button("💳 Купить текстовые", "action:buy_text"),
-                _button("💳 Купить изображения", "action:buy_images"),
-            ],
-            [_home_button()],
-        ]
-    )
-
-
-def build_image_packages_keyboard(show_first_image_promo: bool = False) -> Any:
-    rows = [[_payment_button(code)] for code in IMAGE_ADDON_CODES]
-    if show_first_image_promo:
-        rows.insert(0, [_payment_button(PROMO_PACKAGE_CODE)])
-    rows.append(_nav_row("buy_back:root"))
-    return _keyboard(rows)
-
-
-def build_text_packages_keyboard() -> Any:
-    rows = [[_payment_button(code)] for code in TEXT_ADDON_CODES]
-    rows.append(_nav_row("buy_back:root"))
-    return _keyboard(rows)
-
-
-def build_payment_link_keyboard(payment_url: str) -> Any:
-    return _keyboard([[_url_button("Перейти к оплате", payment_url)], [_home_button()]])
-
-
-def build_marketplace_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("Wildberries", "marketplace:wb"),
-                _button("Ozon", "marketplace:ozon"),
-            ],
-            [_home_button()],
-        ]
-    )
-
-
-def build_generation_mode_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("📝 Только текст", "mode:text_only"),
-                _button("📝🖼 Текст + изображения", "mode:text_and_images"),
-            ],
-            [_button("🖼 Только изображения", "mode:images_only")],
-            _nav_row("action:generate"),
-        ]
-    )
-
-
-def build_no_image_balance_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("💳 Купить изображения", "action:buy_images"),
-                _button("📝 Только текст", "mode:text_only"),
-            ],
-            [_home_button()],
-        ]
-    )
-
-
-def build_payment_stub_keyboard(data: str) -> Any:
-    if data == "action:buy_images" or data.startswith("img_buy:"):
-        return build_image_packages_keyboard()
-    if data == "action:buy_text" or data.startswith("buy:"):
-        return build_buy_keyboard()
-    return build_combined_buy_keyboard()
-
-
-def build_image_marketplace_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("Wildberries", "img_marketplace:wb"),
-                _button("Ozon", "img_marketplace:ozon"),
-            ],
-            [_home_button()],
-        ]
-    )
-
-
-def build_image_photo_keyboard(photos_count: int) -> Any:
-    row = [_button("✅ Готово", "img_photos_done")]
-    if photos_count < MAX_REFERENCE_PHOTOS:
-        row.append(_button(f"📎 Ещё ({photos_count}/{MAX_REFERENCE_PHOTOS})", "img_add_more"))
-    return _keyboard([row, [_home_button()]])
-
-
-def build_image_guidance_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("✍️ Написать пожелания", "img_guidance_write"),
-                _button("Пропустить", "img_guidance_skip"),
-            ],
-            [_home_button()],
-        ]
-    )
-
-
-def build_image_text_mode_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("Без текста", "img_text_mode:no_text"),
-                _button("Минимум текста", "img_text_mode:minimal"),
-            ],
-            [_button("Инфографика", "img_text_mode:infographic")],
-            [_button("Пропустить", "img_text_mode:skip")],
-            [_home_button()],
-        ]
-    )
-
-
-def build_image_style_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("Минимализм", "img_style:minimalism"),
-                _button("Luxury", "img_style:luxury"),
-            ],
-            [
-                _button("Спорт", "img_style:sport"),
-                _button("Темный премиум", "img_style:dark_premium"),
-            ],
-            [
-                _button("Светлый", "img_style:light_wb"),
-                _button("Детский", "img_style:kids"),
-            ],
-            [
-                _button("Натуральный", "img_style:eco"),
-                _button("Свой стиль", "img_style:custom"),
-            ],
-            [_button("Пропустить", "img_style:skip")],
-            [_home_button()],
-        ]
-    )
-
-
-def is_supported_image_document(document: Any) -> bool:
-    mime_type = str(getattr(document, "mime_type", "") or "").lower()
-    return mime_type.startswith("image/")
-
-
-def extract_image_file_id(message: Any) -> str | None:
-    photos = list(getattr(message, "photo", None) or [])
-    if photos:
-        return photos[-1].file_id
-
-    document = getattr(message, "document", None)
-    if is_supported_image_document(document):
-        return document.file_id
-
-    return None
-
-
-def build_photo_received_message(added_count: int, total_count: int) -> str:
-    return f"Фото {added_count} получено ✓\nВсего: {total_count}/{MAX_REFERENCE_PHOTOS}"
-
-
-def build_image_progress_message(
-    total_count: int,
-    generated_count: int,
-    sent_count: int,
-    *,
-    still_working: bool = False,
-) -> str:
-    if sent_count <= 0:
-        estimated_minutes = max(2, total_count * 2)
-        suffix = "\nЗапрос еще выполняется." if still_working else ""
-        return (
-            f"🎨 Генерирую {total_count} изображений.\n"
-            f"Ориентир: около {estimated_minutes} минут.\n"
-            f"Изображения придут вместе после завершения генерации."
-            f"{suffix}"
-        )
-    return (
-        "🎨 Отправляю изображения...\n"
-        f"Отправлено: {sent_count} из {total_count}"
-    )
-
-
-def build_image_count_keyboard(image_balance: int | None = None) -> Any:
-    counts = list(IMAGE_COUNT_OPTIONS)
-    if image_balance is not None:
-        counts = [count for count in counts if count <= image_balance]
-    if not counts:
-        return _keyboard([[_button("💳 Купить изображения", "action:buy_images")], [_home_button()]])
-    rows = [[_button(str(count), f"img_count:{count}") for count in counts[:3]]]
-    if len(counts) > 3:
-        rows.append([_button(str(count), f"img_count:{count}") for count in counts[3:]])
-    rows.append([_home_button()])
-    return _keyboard(rows)
-
-def build_image_count_prompt(image_balance: int) -> str:
-    return (
-        "Сколько изображений сгенерировать?\n\n"
-        f"На вашем балансе: {image_balance} изображений"
-    )
-
-
-def is_allowed_image_count(images_count: int) -> bool:
-    return images_count in IMAGE_COUNT_OPTIONS
-
-
-def should_generate_text_with_images(mode: str | None) -> bool:
-    return mode == "text_and_images"
-
-
-def build_after_generation_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("⚡ Сгенерировать ещё", "action:generate"),
-                _button("💾 Сохранить как шаблон", "action:save_template"),
-            ],
-            [
-                _button("🔄 Изменить и повторить", "action:repeat_edit"),
-                _button("💳 Пополнить баланс", "action:buy"),
-            ],
-            [_button("💬 Не понравился результат?", "action:feedback")],
-            [_home_button()],
-        ]
-    )
-
-def build_after_image_generation_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("⚡ Сгенерировать ещё", "action:generate"),
-                _button("💾 Сохранить как шаблон", "action:save_template"),
-            ],
-            [
-                _button("🔄 Изменить и повторить", "action:repeat_edit"),
-                _button("💳 Пополнить баланс", "action:buy_images"),
-            ],
-            [_button("💬 Не понравился результат?", "action:feedback")],
-            [_home_button()],
-        ]
-    )
-
-def truncate_template_name(name: str) -> str:
-    return (name or "").strip()[:50] or "Шаблон"
-
-
-def combine_repeat_description(previous_description: str, user_changes: str) -> str:
-    return f"{previous_description.strip()}\n\nИзменения: {user_changes.strip()}"
-
-
-def format_marketplace(marketplace: str) -> str:
-    return "Wildberries" if marketplace == "wb" else "Ozon"
-
-
-def format_template_mode(mode: str) -> str:
-    if mode == "text_and_images":
-        return "Текст + изображения"
-    if mode == "images_only":
-        return "Только изображения"
-    return "Только текст"
-
-
-def format_template_description_preview(description: str, limit: int = 100) -> str:
-    normalized = " ".join((description or "").split())
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[:limit] + "..."
-
-
-def build_repeat_photos_keyboard() -> Any:
-    return _keyboard(
-        [
-            [
-                _button("📎 Те же фото", "repeat:same_photos"),
-                _button("🖼 Загрузить новые", "repeat:new_photos"),
-            ],
-            [_home_button()],
-        ]
-    )
-
-def build_templates_keyboard(
-    templates: list[dict[str, Any]],
-    page: int,
-    total: int,
-) -> Any:
-    rows = [[_button("➕ Создать новый шаблон", "template_new")]]
-    rows.extend([[_button(template["name"], f"template_use:{template['id']}")] for template in templates])
-    nav_row: list[Any] = []
-    if page > 0:
-        nav_row.append(_button("← Назад", f"templates_page:{page - 1}"))
-    if (page + 1) * TEMPLATES_PAGE_SIZE < total:
-        nav_row.append(_button("Вперёд →", f"templates_page:{page + 1}"))
-    if nav_row:
-        rows.append(nav_row)
-    rows.append([_button("🗑 Удалить шаблон", f"templates_delete:{page}")])
-    rows.append([_home_button()])
-    return _keyboard(rows)
-
-
-def build_empty_templates_keyboard() -> Any:
-    return _keyboard([[_button("➕ Создать новый шаблон", "template_new")], [_home_button()]])
-
-def build_templates_delete_keyboard(
-    templates: list[dict[str, Any]],
-    page: int,
-    total: int,
-) -> Any:
-    rows = [[_button(template["name"], f"template_delete:{template['id']}")] for template in templates]
-    nav_row: list[Any] = []
-    if page > 0:
-        nav_row.append(_button("← Назад", f"templates_delete:{page - 1}"))
-    if (page + 1) * TEMPLATES_PAGE_SIZE < total:
-        nav_row.append(_button("Вперёд →", f"templates_delete:{page + 1}"))
-    if nav_row:
-        rows.append(nav_row)
-    rows.append([_button("❌ Отмена", f"templates_page:{page}")])
-    rows.append([_home_button()])
-    return _keyboard(rows)
-
-def build_template_details_keyboard(template_id: int) -> Any:
-    return _keyboard(
-        [
-            [_button("⚡ Использовать как есть", f"template_run:{template_id}")],
-            [_button("✏️ Изменить и использовать", f"template_edit:{template_id}")],
-            [_button("🗑 Удалить шаблон", f"template_delete:{template_id}")],
-            [_home_button()],
-        ]
-    )
-
-def build_template_delete_confirm_keyboard(template_id: int) -> Any:
-    return _keyboard(
-        [
-            [
-                _button("✅ Да, удалить", f"template_delete_confirm:{template_id}"),
-                _button("❌ Отмена", f"template_delete_cancel:{template_id}"),
-            ],
-            [_home_button()],
-        ]
-    )
-
 def build_generation_messages(card: CardGeneration) -> list[str]:
     messages = [
         f"📌 НАЗВАНИЕ:\n{card.title}",
@@ -741,9 +249,6 @@ def build_help_message() -> str:
     )
 
 
-def build_help_keyboard(offer_url: str) -> Any:
-    return _keyboard([[_url_button("Публичная оферта", offer_url)], [_home_button()]])
-
 def build_start_message(first_name: str | None, trial_generations: int = 5) -> str:
     name = f", {first_name}" if first_name else ""
     return (
@@ -835,14 +340,10 @@ def _clear_image_session(context: Any) -> None:
         "img_photos",
         "img_guidance",
         "img_count",
-        "img_text_mode",
-        "img_style_preset",
-        "img_style_custom",
         "img_media_groups",
         "repeat_pending_generation",
         "repeat_mode",
         "repeat_images_count",
-        "awaiting_image_style_custom",
     ):
         context.user_data.pop(key, None)
 
@@ -877,9 +378,6 @@ def _store_last_generation(
     photo_file_ids: list[str] | None = None,
     images_count: int | None = None,
     image_guidance: str | None = None,
-    image_text_mode: str | None = None,
-    image_style_preset: str | None = None,
-    image_style_custom: str | None = None,
 ) -> None:
     context.user_data["last_generation"] = {
         "marketplace": marketplace,
@@ -888,9 +386,6 @@ def _store_last_generation(
         "photo_file_ids": list(photo_file_ids or []),
         "images_count": images_count,
         "image_guidance": image_guidance or "",
-        "image_text_mode": normalize_image_text_mode(image_text_mode),
-        "image_style_preset": normalize_image_style_preset(image_style_preset),
-        "image_style_custom": normalize_image_style_custom(image_style_custom),
     }
 
 
@@ -902,9 +397,6 @@ def _template_to_last_generation(template: dict[str, Any]) -> dict[str, Any]:
         "photo_file_ids": _parse_photo_file_ids(template.get("photo_file_ids")),
         "images_count": template.get("images_count"),
         "image_guidance": template.get("image_guidance") or "",
-        "image_text_mode": normalize_image_text_mode(template.get("image_text_mode")),
-        "image_style_preset": normalize_image_style_preset(template.get("image_style_preset")),
-        "image_style_custom": normalize_image_style_custom(template.get("image_style_custom")),
     }
 
 
@@ -1186,15 +678,6 @@ def _normalize_image_guidance_text(value: str | None) -> str:
     return " ".join(str(value).split())[:1200]
 
 
-def _image_text_mode_label(value: str | None) -> str:
-    mapping = {
-        "no_text": "no_text",
-        "minimal": "minimal",
-        "infographic": "infographic",
-    }
-    return mapping.get(normalize_image_text_mode(value), "minimal")
-
-
 def _serialize_image_report(report: dict[str, Any]) -> str:
     return json.dumps(report, ensure_ascii=False)
 
@@ -1207,9 +690,6 @@ def _build_image_report_base(
     photo_file_ids: list[str],
     images_count: int,
     image_guidance: str,
-    image_text_mode: str,
-    image_style_preset: str,
-    image_style_custom: str,
 ) -> dict[str, Any]:
     return {
         "generation_mode": generation_mode,
@@ -1220,9 +700,6 @@ def _build_image_report_base(
         "photos_count": len(photo_file_ids),
         "images_requested": images_count,
         "image_guidance": image_guidance,
-        "image_text_mode": normalize_image_text_mode(image_text_mode),
-        "image_style_preset": normalize_image_style_preset(image_style_preset),
-        "image_style_custom": normalize_image_style_custom(image_style_custom),
         "prompt_source": "pending",
         "concepts": [],
         "status": "pending",
@@ -1299,31 +776,7 @@ async def _show_image_guidance_step(message: Any, context: Any) -> None:
     )
 
 
-async def _show_image_text_mode_step(message: Any, context: Any) -> None:
-    context.user_data["generation_step"] = "image_text_mode"
-    await message.reply_text(
-        IMAGE_TEXT_MODE_PROMPT,
-        reply_markup=build_image_text_mode_keyboard(),
-    )
-
-
-async def _show_image_style_step(message: Any, context: Any) -> None:
-    context.user_data["generation_step"] = "image_style"
-    await message.reply_text(
-        IMAGE_STYLE_PROMPT,
-        reply_markup=build_image_style_keyboard(),
-    )
-
-
 async def _continue_after_image_guidance(update: Any, context: Any, user_id: int) -> None:
-    await _show_image_text_mode_step(update.effective_message, context)
-
-
-async def _continue_after_image_text_mode(update: Any, context: Any, user_id: int) -> None:
-    await _show_image_style_step(update.effective_message, context)
-
-
-async def _continue_after_image_style(update: Any, context: Any, user_id: int) -> None:
     query = getattr(update, "callback_query", None)
     if context.user_data.get("repeat_images_count"):
         images_count = int(context.user_data.pop("repeat_images_count"))
@@ -1368,24 +821,6 @@ async def _handle_image_guidance(update: Any, context: Any, user_id: int, user_i
 
     context.user_data["img_guidance"] = guidance
     await _continue_after_image_guidance(update, context, user_id)
-    return True
-
-
-async def _handle_image_style_custom(update: Any, context: Any, user_id: int, user_input: str) -> bool:
-    if not context.user_data.get("awaiting_image_style_custom"):
-        return False
-    if context.user_data.get("mode") not in {"text_and_images", "images_only"}:
-        return False
-
-    style = normalize_image_style_custom(user_input)
-    if len(style) < 3:
-        await update.effective_message.reply_text(IMAGE_STYLE_CUSTOM_PROMPT)
-        return True
-
-    context.user_data.pop("awaiting_image_style_custom", None)
-    context.user_data["img_style_preset"] = ""
-    context.user_data["img_style_custom"] = style
-    await _continue_after_image_style(update, context, user_id)
     return True
 
 
@@ -1488,9 +923,6 @@ async def _generate_images_for_user(
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
     image_guidance = str(context.user_data.get("img_guidance") or "")
-    image_text_mode = normalize_image_text_mode(context.user_data.get("img_text_mode"))
-    image_style_preset = normalize_image_style_preset(context.user_data.get("img_style_preset"))
-    image_style_custom = normalize_image_style_custom(context.user_data.get("img_style_custom"))
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1516,9 +948,6 @@ async def _generate_images_for_user(
         photo_file_ids=photo_file_ids,
         images_count=images_count,
         image_guidance=image_guidance,
-        image_text_mode=image_text_mode,
-        image_style_preset=image_style_preset,
-        image_style_custom=image_style_custom,
     )
 
     session_id = await db.create_image_session(
@@ -1541,9 +970,6 @@ async def _generate_images_for_user(
             model=settings.openrouter_model,
             site_url=settings.site_url,
             image_guidance=image_guidance,
-            image_text_mode=image_text_mode,
-            image_style_preset=image_style_preset,
-            image_style_custom=image_style_custom,
         )
         concepts = prompt_plan.concepts
         _apply_prompt_plan_to_report(report, prompt_plan)
@@ -1621,9 +1047,6 @@ async def _generate_images_for_user(
         photo_file_ids=photo_file_ids,
         images_count=images_count,
         image_guidance=image_guidance,
-        image_text_mode=image_text_mode,
-        image_style_preset=image_style_preset,
-        image_style_custom=image_style_custom,
     )
     _clear_image_session(context)
 
@@ -1641,9 +1064,6 @@ async def _generate_text_and_images_for_user(
     product_description = context.user_data.get("img_description")
     photo_file_ids = list(context.user_data.get("img_photos") or [])
     image_guidance = str(context.user_data.get("img_guidance") or "")
-    image_text_mode = normalize_image_text_mode(context.user_data.get("img_text_mode"))
-    image_style_preset = normalize_image_style_preset(context.user_data.get("img_style_preset"))
-    image_style_custom = normalize_image_style_custom(context.user_data.get("img_style_custom"))
 
     if not marketplace or not product_description or not photo_file_ids:
         await message.reply_text(
@@ -1676,9 +1096,6 @@ async def _generate_text_and_images_for_user(
         photo_file_ids=photo_file_ids,
         images_count=images_count,
         image_guidance=image_guidance,
-        image_text_mode=image_text_mode,
-        image_style_preset=image_style_preset,
-        image_style_custom=image_style_custom,
     )
 
     session_id = await db.create_image_session(
@@ -1716,9 +1133,6 @@ async def _generate_text_and_images_for_user(
             photo_file_ids=photo_file_ids,
             images_count=images_count,
             image_guidance=image_guidance,
-            image_text_mode=image_text_mode,
-            image_style_preset=image_style_preset,
-            image_style_custom=image_style_custom,
         )
     )
 
@@ -1856,9 +1270,6 @@ async def _generate_text_and_images_for_user(
         photo_file_ids=photo_file_ids,
         images_count=images_count,
         image_guidance=image_guidance,
-        image_text_mode=image_text_mode,
-        image_style_preset=image_style_preset,
-        image_style_custom=image_style_custom,
     )
     _clear_image_session(context)
 
@@ -1881,9 +1292,6 @@ async def _generate_image_prompts_for_batch(
     photo_file_ids: list[str],
     images_count: int,
     image_guidance: str | None = None,
-    image_text_mode: str | None = None,
-    image_style_preset: str | None = None,
-    image_style_custom: str | None = None,
 ) -> ImagePromptPlan:
     return await generate_image_prompts(
         product_description=product_description,
@@ -1894,9 +1302,6 @@ async def _generate_image_prompts_for_batch(
         model=settings.openrouter_model,
         site_url=settings.site_url,
         image_guidance=image_guidance,
-        image_text_mode=image_text_mode,
-        image_style_preset=image_style_preset,
-        image_style_custom=image_style_custom,
     )
 
 
@@ -2229,9 +1634,6 @@ async def _handle_template_name(update: Any, context: Any, user_id: int, user_in
         photo_file_ids=last_generation.get("photo_file_ids") or [],
         images_count=last_generation.get("images_count"),
         image_guidance=last_generation.get("image_guidance") or "",
-        image_text_mode=last_generation.get("image_text_mode") or "",
-        image_style_preset=last_generation.get("image_style_preset") or "",
-        image_style_custom=last_generation.get("image_style_custom") or "",
     )
     await update.effective_message.reply_text(
         f"✅ Шаблон \"{name}\" сохранён.\nНайдёте его в «Мои шаблоны»."
@@ -2298,9 +1700,6 @@ async def _handle_repeat_changes(update: Any, context: Any, user_id: int, user_i
             "photo_file_ids": list(previous.get("photo_file_ids") or []),
             "images_count": previous.get("images_count") or 1,
             "image_guidance": previous.get("image_guidance") or "",
-            "image_text_mode": previous.get("image_text_mode") or "minimal",
-            "image_style_preset": previous.get("image_style_preset") or "",
-            "image_style_custom": previous.get("image_style_custom") or "",
         }
         await update.effective_message.reply_text(
             REPEAT_PHOTOS_PROMPT,
@@ -2337,9 +1736,6 @@ async def _run_last_generation_with_images(
         context.user_data["img_description"] = generation["description"]
         context.user_data["img_photos"] = []
         context.user_data["img_guidance"] = generation.get("image_guidance") or ""
-        context.user_data["img_text_mode"] = generation.get("image_text_mode") or "minimal"
-        context.user_data["img_style_preset"] = generation.get("image_style_preset") or ""
-        context.user_data["img_style_custom"] = generation.get("image_style_custom") or ""
         context.user_data["generation_step"] = "photos"
         context.user_data["repeat_images_count"] = images_count
         await update.callback_query.message.reply_text(IMAGE_PHOTO_PROMPT)
@@ -2350,9 +1746,6 @@ async def _run_last_generation_with_images(
     context.user_data["img_description"] = generation["description"]
     context.user_data["img_photos"] = photo_file_ids
     context.user_data["img_guidance"] = generation.get("image_guidance") or ""
-    context.user_data["img_text_mode"] = generation.get("image_text_mode") or "minimal"
-    context.user_data["img_style_preset"] = generation.get("image_style_preset") or ""
-    context.user_data["img_style_custom"] = generation.get("image_style_custom") or ""
     if not is_allowed_image_count(images_count):
         context.user_data["generation_step"] = "count"
         image_balance = await _get_db(context).get_image_balance(user_id)
@@ -2435,8 +1828,6 @@ async def handle_text(update: Any, context: Any) -> None:
     if await _handle_template_name(update, context, user_id, user_input):
         return
     if await _handle_repeat_changes(update, context, user_id, user_input):
-        return
-    if await _handle_image_style_custom(update, context, user_id, user_input):
         return
     if await _handle_image_guidance(update, context, user_id, user_input):
         return
@@ -2570,34 +1961,6 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         context.user_data["img_guidance"] = ""
         await _continue_after_image_guidance(update, context, user.id)
-    elif data.startswith("img_text_mode:"):
-        user = update.effective_user
-        if user is None:
-            return
-        text_mode_value = data.split(":", 1)[1]
-        if text_mode_value == "skip":
-            context.user_data["img_text_mode"] = ""
-        else:
-            context.user_data["img_text_mode"] = normalize_image_text_mode(text_mode_value)
-        await _continue_after_image_text_mode(update, context, user.id)
-    elif data.startswith("img_style:"):
-        user = update.effective_user
-        if user is None:
-            return
-        style_value = data.split(":", 1)[1]
-        if style_value == "custom":
-            context.user_data["generation_step"] = "image_style"
-            context.user_data["awaiting_image_style_custom"] = True
-            await query.message.reply_text(IMAGE_STYLE_CUSTOM_PROMPT)
-            return
-        if style_value == "skip":
-            context.user_data["img_style_preset"] = ""
-            context.user_data["img_style_custom"] = ""
-            await _continue_after_image_style(update, context, user.id)
-            return
-        context.user_data["img_style_preset"] = normalize_image_style_preset(style_value)
-        context.user_data["img_style_custom"] = ""
-        await _continue_after_image_style(update, context, user.id)
     elif data.startswith("img_count:"):
         user = update.effective_user
         if user is None:
@@ -2696,9 +2059,6 @@ async def handle_callback(update: Any, context: Any) -> None:
             context.user_data["img_description"] = pending["description"]
             context.user_data["img_photos"] = []
             context.user_data["img_guidance"] = pending.get("image_guidance") or ""
-            context.user_data["img_text_mode"] = pending.get("image_text_mode") or "minimal"
-            context.user_data["img_style_preset"] = pending.get("image_style_preset") or ""
-            context.user_data["img_style_custom"] = pending.get("image_style_custom") or ""
             context.user_data["generation_step"] = "photos"
             context.user_data["repeat_images_count"] = int(pending.get("images_count") or 1)
             await query.message.reply_text(IMAGE_PHOTO_PROMPT)

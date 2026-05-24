@@ -30,8 +30,6 @@ from bot import (
     build_image_count_keyboard,
     build_image_count_prompt,
     build_image_guidance_keyboard,
-    build_image_style_keyboard,
-    build_image_text_mode_keyboard,
     build_image_progress_message,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
@@ -487,7 +485,7 @@ def test_images_only_description_step_moves_to_photo_upload():
     asyncio.run(run_flow())
 
 
-def test_image_guidance_step_saves_text_and_moves_to_text_mode():
+def test_image_guidance_step_saves_text_and_starts_generation():
     async def run_flow():
         context = _FakeTemplateContext(_FakeTemplateDb())
         context.user_data.update(
@@ -508,68 +506,14 @@ def test_image_guidance_step_saves_text_and_moves_to_text_mode():
 
         assert handled is True
         assert context.user_data["img_guidance"] == "1 спереди на модели, 1 со спины, фон luxury"
-        assert context.user_data["generation_step"] == "image_text_mode"
-        assert "Текст на изображениях" in update.effective_message.replies[-1][0]
+        assert context.user_data["generation_step"] == "count"
+        assert "Сколько изображений" in update.effective_message.replies[-1][0]
 
     asyncio.run(run_flow())
 
 
 def test_image_count_prompt_shows_current_balance():
     assert "5" in build_image_count_prompt(image_balance=5)
-
-
-def test_image_text_mode_and_style_keyboards_use_expected_callbacks():
-    text_mode_keyboard = build_image_text_mode_keyboard()
-    style_keyboard = build_image_style_keyboard()
-
-    text_mode_callbacks = [
-        button.callback_data for row in text_mode_keyboard.inline_keyboard for button in row
-    ]
-    style_callbacks = [
-        button.callback_data for row in style_keyboard.inline_keyboard for button in row
-    ]
-
-    assert text_mode_callbacks == [
-        "img_text_mode:no_text",
-        "img_text_mode:minimal",
-        "img_text_mode:infographic",
-        "img_text_mode:skip",
-        "action:home",
-    ]
-    assert style_callbacks == [
-        "img_style:minimalism",
-        "img_style:luxury",
-        "img_style:sport",
-        "img_style:dark_premium",
-        "img_style:light_wb",
-        "img_style:kids",
-        "img_style:eco",
-        "img_style:custom",
-        "img_style:skip",
-        "action:home",
-    ]
-    style_pairs = [
-        (button.text, button.callback_data)
-        for row in style_keyboard.inline_keyboard
-        for button in row
-    ]
-    assert ("Светлый", "img_style:light_wb") in style_pairs
-    assert ("Натуральный", "img_style:eco") in style_pairs
-
-
-def test_image_text_mode_skip_moves_to_style_step_with_default_mode():
-    async def run_flow():
-        context = _FakeImageModeContext(_FakeImageModeDb())
-        context.user_data["generation_step"] = "image_text_mode"
-        update = _FakeCallbackUpdate("img_text_mode:skip")
-
-        await handle_callback(update, context)
-
-        assert context.user_data["generation_step"] == "image_style"
-        assert context.user_data["img_text_mode"] == ""
-        assert "Стиль изображений" in update.callback_query.message.replies[-1][0]
-
-    asyncio.run(run_flow())
 
 
 def test_image_progress_message_describes_batch_generation_before_outputs_arrive():
