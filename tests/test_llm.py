@@ -517,7 +517,7 @@ async def test_generate_image_prompts_selects_clothing_roles_by_requested_count(
 
 
 @pytest.mark.asyncio
-async def test_generate_image_prompts_uses_universal_template_sequence(monkeypatch):
+async def test_generate_image_prompts_uses_universal_full_template_sequence(monkeypatch):
     async def fake_request_chat_completion_with_fallback(client, **kwargs):
         raise RuntimeError("secondary LLM unavailable")
 
@@ -552,6 +552,44 @@ async def test_generate_image_prompts_uses_universal_template_sequence(monkeypat
     assert "КРУПНЫЙ ПЛАН" in result.concepts[2].prompt
     assert "КОМПЛЕКТАЦИЯ" in result.concepts[5].prompt
     assert "премиальная современная подача" in result.concepts[0].prompt
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("images_count", "expected_purposes"),
+    [
+        (1, ["инфографика преимуществ"]),
+        (3, ["инфографика преимуществ", "детали товара", "товар в применении"]),
+        (
+            5,
+            [
+                "инфографика преимуществ",
+                "детали товара",
+                "товар в применении",
+                "характеристики и параметры",
+                "главная карточка",
+            ],
+        ),
+    ],
+)
+async def test_generate_image_prompts_selects_universal_roles_by_requested_count(
+    images_count,
+    expected_purposes,
+):
+    result = await generate_image_prompts(
+        product_description="Часы песочные, черное основание, белый песок, цикл 5 минут",
+        marketplace="ozon",
+        photos_count=4,
+        images_count=images_count,
+        api_key="test-key",
+        model="deepseek/deepseek-v4-flash:free",
+        site_url="https://alterega.ru",
+        category_profile={"category": "Дом и интерьер / Декор / Песочные часы"},
+    )
+
+    assert [concept.purpose for concept in result.concepts] == expected_purposes
+    if images_count >= 3:
+        assert "Желательно добавить один небольшой аккуратный блок инфографики" in result.concepts[1].prompt
 
 
 @pytest.mark.asyncio

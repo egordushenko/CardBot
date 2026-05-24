@@ -103,7 +103,11 @@ UNIVERSAL_SLIDES: tuple[tuple[str, str], ...] = (
     (
         "детали товара",
         "КРУПНЫЙ ПЛАН / ДЕТАЛИ ТОВАРА. Покажи важные реальные детали: материал, поверхность, "
-        "механизм, элементы конструкции, разъемы, маркировку или фактуру - только если они видны.",
+        "механизм, элементы конструкции, разъемы, маркировку или фактуру - только если они видны. "
+        "Сделай реальное визуальное приближение к детали, а не общий вид товара целиком. "
+        "Желательно добавить один небольшой аккуратный блок инфографики, который поясняет показанную деталь "
+        "или усиливает ее подачу: например, название материала, акцент на фактуре, конструкции, маркировке "
+        "либо короткую маркетинговую фразу.",
     ),
     (
         "товар в применении",
@@ -128,6 +132,13 @@ UNIVERSAL_SLIDES: tuple[tuple[str, str], ...] = (
     ),
 )
 
+UNIVERSAL_SLIDES_BY_COUNT: dict[int, tuple[tuple[str, str], ...]] = {
+    1: (UNIVERSAL_SLIDES[1],),
+    3: (UNIVERSAL_SLIDES[1], UNIVERSAL_SLIDES[2], UNIVERSAL_SLIDES[3]),
+    5: (UNIVERSAL_SLIDES[1], UNIVERSAL_SLIDES[2], UNIVERSAL_SLIDES[3], UNIVERSAL_SLIDES[4], UNIVERSAL_SLIDES[0]),
+    7: UNIVERSAL_SLIDES,
+}
+
 
 def is_clothing_image_category(category_profile: dict[str, Any] | None) -> bool:
     category = str((category_profile or {}).get("category") or "").casefold()
@@ -145,7 +156,7 @@ def build_image_template_prompts(
     if is_clothing_image_category(category_profile):
         slides = CLOTHING_SLIDES_BY_COUNT.get(images_count, CLOTHING_SLIDES[:images_count])
     else:
-        slides = UNIVERSAL_SLIDES[:images_count]
+        slides = UNIVERSAL_SLIDES_BY_COUNT.get(images_count, UNIVERSAL_SLIDES[:images_count])
     product_text = product_description.strip()
     guidance_text = image_guidance.strip()
     prompts: list[tuple[str, str]] = []
