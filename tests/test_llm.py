@@ -459,19 +459,61 @@ async def test_generate_image_prompts_uses_clothing_template_sequence(monkeypatc
     )
 
     assert [concept.purpose for concept in result.concepts] == [
-        "главная карточка",
         "инфографика преимуществ",
+        "детали товара",
         "на модели спереди",
         "на модели сзади",
-        "детали товара",
+        "главная карточка",
     ]
     assert "вид спереди" in result.concepts[2].prompt.casefold()
     assert "вид сзади" in result.concepts[3].prompt.casefold()
+    assert "Желательно добавить один небольшой аккуратный блок инфографики" in result.concepts[1].prompt
     assert "Одежда / Мужская одежда / Рашгарды" in result.concepts[0].prompt
     assert all("Рашгард Therapy" in concept.prompt for concept in result.concepts)
     assert all("дорогой светлый фон" in concept.prompt for concept in result.concepts)
     assert all("не добавляй неподтвержденные" in concept.prompt.casefold() for concept in result.concepts)
     assert result.source == "direct"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("images_count", "expected_purposes"),
+    [
+        (1, ["инфографика преимуществ"]),
+        (3, ["инфографика преимуществ", "детали товара", "на модели"]),
+        (
+            7,
+            [
+                "главная карточка",
+                "инфографика преимуществ",
+                "на модели спереди",
+                "на модели сзади",
+                "детали товара",
+                "размеры и посадка",
+                "сценарий использования",
+            ],
+        ),
+    ],
+)
+async def test_generate_image_prompts_selects_clothing_roles_by_requested_count(
+    images_count,
+    expected_purposes,
+):
+    result = await generate_image_prompts(
+        product_description="Рашгард Therapy черный, прилегающий крой, принт на спине",
+        marketplace="ozon",
+        photos_count=2,
+        images_count=images_count,
+        api_key="test-key",
+        model="deepseek/deepseek-v4-flash:free",
+        site_url="https://alterega.ru",
+        category_profile={"category": "Одежда / Мужская одежда / Рашгарды"},
+    )
+
+    assert [concept.purpose for concept in result.concepts] == expected_purposes
+    if images_count == 3:
+        assert "вид спереди" not in result.concepts[2].prompt.casefold()
+        assert "вид сзади" not in result.concepts[2].prompt.casefold()
 
 
 @pytest.mark.asyncio

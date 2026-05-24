@@ -54,6 +54,9 @@ CLOTHING_SLIDES: tuple[tuple[str, str], ...] = (
         "детали товара",
         "МИКРО / КРУПНЫЙ ПЛАН ДЕТАЛЕЙ. Сделай коммерческий close-up материала, швов, фактуры, "
         "горловины, принта или других реально видимых деталей изделия. "
+        "Желательно добавить один небольшой аккуратный блок инфографики, который поясняет показанную деталь "
+        "или усиливает ее подачу: например, название материала, акцент на принте/вышивке/фактуре "
+        "либо короткую маркетинговую фразу. "
         "Детали должны совпадать с референсами.",
     ),
     (
@@ -69,6 +72,20 @@ CLOTHING_SLIDES: tuple[tuple[str, str], ...] = (
         "Не придумывай профессиональные свойства или области применения.",
     ),
 )
+
+CLOTHING_LIFESTYLE_SLIDE = (
+    "на модели",
+    "LIFESTYLE НА МОДЕЛИ. Покажи изделие на нейтральной модели в естественном коммерческом кадре, "
+    "чтобы хорошо читались посадка, силуэт и важные видимые особенности изделия. "
+    "Не фиксируй ракурс спереди или сзади: выбери наиболее выигрышную подачу для данного товара.",
+)
+
+CLOTHING_SLIDES_BY_COUNT: dict[int, tuple[tuple[str, str], ...]] = {
+    1: (CLOTHING_SLIDES[1],),
+    3: (CLOTHING_SLIDES[1], CLOTHING_SLIDES[4], CLOTHING_LIFESTYLE_SLIDE),
+    5: (CLOTHING_SLIDES[1], CLOTHING_SLIDES[4], CLOTHING_SLIDES[2], CLOTHING_SLIDES[3], CLOTHING_SLIDES[0]),
+    7: CLOTHING_SLIDES,
+}
 
 UNIVERSAL_SLIDES: tuple[tuple[str, str], ...] = (
     (
@@ -125,12 +142,15 @@ def build_image_template_prompts(
     image_guidance: str = "",
 ) -> list[tuple[str, str]]:
     category = str((category_profile or {}).get("category") or "").strip()
-    slides = CLOTHING_SLIDES if is_clothing_image_category(category_profile) else UNIVERSAL_SLIDES
+    if is_clothing_image_category(category_profile):
+        slides = CLOTHING_SLIDES_BY_COUNT.get(images_count, CLOTHING_SLIDES[:images_count])
+    else:
+        slides = UNIVERSAL_SLIDES[:images_count]
     product_text = product_description.strip()
     guidance_text = image_guidance.strip()
     prompts: list[tuple[str, str]] = []
 
-    for purpose, slide_brief in slides[:images_count]:
+    for purpose, slide_brief in slides:
         prompt_parts = [
             slide_brief,
             "",
