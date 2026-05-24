@@ -346,12 +346,10 @@ def build_image_progress_message(
     still_working: bool = False,
 ) -> str:
     if sent_count <= 0:
-        estimated_minutes = max(2, total_count * 2)
         suffix = "\nЗапрос еще выполняется." if still_working else ""
         return (
             f"🎨 Генерирую {total_count} изображений.\n"
-            f"Ориентир: около {estimated_minutes} минут.\n"
-            f"Изображения придут вместе после завершения генерации."
+            "Обычно это занимает 2-3 минуты"
             f"{suffix}"
         )
     return (

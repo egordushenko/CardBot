@@ -510,6 +510,7 @@ def test_start_help_and_balance_messages_are_scannable():
 
     assert "📝 Как пользоваться" in help_text
     assert "💳 Оплата и поддержка" in help_text
+    assert "@alterega" in help_text
     assert balance_text.startswith("📊 Баланс")
     assert "📝 Текстовые генерации:" in balance_text
     assert "🖼 Изображения:" in balance_text
@@ -1086,8 +1087,8 @@ def test_image_progress_message_describes_batch_generation_before_outputs_arrive
     text = build_image_progress_message(total_count=3, generated_count=0, sent_count=0)
 
     assert "Генерирую 3 изображений" in text
-    assert "Ориентир: около 6 минут" in text
-    assert "Изображения придут вместе" in text
+    assert "Обычно это занимает 2-3 минуты" in text
+    assert "Изображения придут вместе" not in text
     assert "Готово: 0 из 3" not in text
 
 
