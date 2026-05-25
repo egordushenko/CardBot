@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlparse
 from config import Settings
 from payments import (
     PACKAGES,
+    PROMO_PACKAGE_CODES,
     build_receipt,
     build_payment_url,
     calculate_package_counts,
@@ -23,11 +24,23 @@ def test_cardbot_packages_match_price_spec():
     assert PACKAGES["addon_img_50"].price_rub == 2750
     assert PACKAGES["addon_img_150"].price_rub == 7500
     assert PACKAGES["promo_img_10"].images_count == 10
-    assert PACKAGES["promo_img_10"].price_rub == 575
+    assert PACKAGES["promo_img_10"].price_rub == 290
+    assert PACKAGES["promo_text_start_x3"].text_count == 10
+    assert PACKAGES["promo_text_start_x3"].images_per_card == 3
+    assert PACKAGES["promo_text_start_x3"].images_count == 30
+    assert PACKAGES["promo_text_start_x3"].price_rub == 1240
+    assert PACKAGES["promo_text_start_x5"].images_count == 50
+    assert PACKAGES["promo_text_start_x5"].price_rub == 1740
+    assert PROMO_PACKAGE_CODES == (
+        "promo_img_10",
+        "promo_text_start_x3",
+        "promo_text_start_x5",
+    )
 
 
 def test_calculate_package_counts_handles_main_and_addon_packages():
     assert calculate_package_counts("text_start_x7") == (10, 70)
+    assert calculate_package_counts("promo_text_start_x5") == (10, 50)
     assert calculate_package_counts("addon_text_30") == (30, 0)
     assert calculate_package_counts("addon_img_50") == (0, 50)
 

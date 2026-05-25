@@ -35,7 +35,7 @@ from llm import (
 )
 from payments import (
     PACKAGES as PAYMENT_PACKAGES,
-    PROMO_PACKAGE_CODE,
+    PROMO_PACKAGE_CODES,
     build_payment_url,
     calculate_package_counts,
     generate_inv_id,
@@ -548,7 +548,7 @@ async def _send_payment_link(message: Any, context: Any, user_id: int, package_c
         return
 
     db = _get_db(context)
-    if package_code == PROMO_PACKAGE_CODE and not await db.is_first_image_purchase(user_id):
+    if package_code in PROMO_PACKAGE_CODES and not await db.is_first_image_purchase(user_id):
         await message.reply_text("⚠️ Акция первой покупки уже использована.")
         return
 
@@ -2482,13 +2482,16 @@ async def handle_callback(update: Any, context: Any) -> None:
         if user_id is not None:
             await _show_buy_menu(query.message, context, user_id, kind="combo")
     elif data.startswith("combo_cards:"):
+        if user_id is None:
+            return
         try:
             text_count = int(data.split(":", 1)[1])
         except ValueError:
             return
+        first_image_purchase = await _get_db(context).is_first_image_purchase(user_id)
         await query.message.reply_text(
             f"🖼 {text_count} карточек: выберите количество фото",
-            reply_markup=build_combo_photo_count_keyboard(text_count),
+            reply_markup=build_combo_photo_count_keyboard(text_count, show_first_image_promo=first_image_purchase),
         )
     elif data.startswith(("buy:", "img_buy:")):
         if user_id is None:

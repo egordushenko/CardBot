@@ -8,6 +8,7 @@ from payments import (
     MAIN_PACKAGE_CODES,
     PACKAGES as PAYMENT_PACKAGES,
     PROMO_PACKAGE_CODE,
+    PROMO_PACKAGE_CODES,
     TEXT_ADDON_CODES,
 )
 
@@ -132,8 +133,10 @@ def _payment_button(package_code: str) -> Any:
     package = PAYMENT_PACKAGES[package_code]
     if package_code.startswith("addon_text_"):
         label = f"{package.text_count} карточек за {package.price_rub:,} ₽"
-    elif package_code.startswith("addon_img_") or package_code == "promo_img_10":
+    elif package_code.startswith("addon_img_") or package_code == PROMO_PACKAGE_CODE:
         label = f"{package.images_count} изображений за {package.price_rub:,} ₽"
+        if package_code == PROMO_PACKAGE_CODE:
+            label = f"Скидка 50%: {label}"
     else:
         label = f"{package.title} — {package.description} за {package.price_rub:,} ₽"
     return _button(
@@ -142,7 +145,9 @@ def _payment_button(package_code: str) -> Any:
     )
 
 
-def _combo_package_code(text_count: int, images_per_card: int) -> str:
+def _combo_package_code(text_count: int, images_per_card: int, show_first_image_promo: bool = False) -> str:
+    if show_first_image_promo and text_count == 10 and images_per_card in (3, 5):
+        return f"promo_text_start_x{images_per_card}"
     for code in MAIN_PACKAGE_CODES:
         package = PAYMENT_PACKAGES[code]
         if package.text_count == text_count and package.images_per_card == images_per_card:
@@ -150,11 +155,13 @@ def _combo_package_code(text_count: int, images_per_card: int) -> str:
     raise ValueError(f"Unknown combo package: {text_count=} {images_per_card=}")
 
 
-def _combo_payment_button(text_count: int, images_per_card: int) -> Any:
-    code = _combo_package_code(text_count, images_per_card)
+def _combo_payment_button(text_count: int, images_per_card: int, show_first_image_promo: bool = False) -> Any:
+    code = _combo_package_code(text_count, images_per_card, show_first_image_promo=show_first_image_promo)
     package = PAYMENT_PACKAGES[code]
     if images_per_card == 0:
         label = f"Без фото — {package.price_rub:,} ₽"
+    elif code in PROMO_PACKAGE_CODES:
+        label = f"{images_per_card} фото — {package.price_rub:,} ₽ · Скидка 50%"
     else:
         label = f"{images_per_card} фото на карточку — {package.price_rub:,} ₽"
     return _button(label.replace(",", " "), f"buy:{code}")
@@ -182,13 +189,16 @@ def build_combo_card_count_keyboard() -> Any:
     return _keyboard(rows)
 
 
-def build_combo_photo_count_keyboard(text_count: int) -> Any:
+def build_combo_photo_count_keyboard(text_count: int, show_first_image_promo: bool = False) -> Any:
     photo_counts = sorted(
         PAYMENT_PACKAGES[code].images_per_card
         for code in MAIN_PACKAGE_CODES
         if PAYMENT_PACKAGES[code].text_count == text_count
     )
-    rows = [[_combo_payment_button(text_count, photo_count)] for photo_count in photo_counts]
+    rows = [
+        [_combo_payment_button(text_count, photo_count, show_first_image_promo=show_first_image_promo)]
+        for photo_count in photo_counts
+    ]
     rows.append(_nav_row("buy_back:combo"))
     return _keyboard(rows)
 

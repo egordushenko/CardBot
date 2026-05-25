@@ -56,6 +56,7 @@ from bot import (
     format_template_mode,
     handle_callback,
     history_command,
+    _send_payment_link,
     _build_image_guidance_with_style,
     _generate_and_send_image_concepts,
     _generate_and_send_text_card,
@@ -1371,6 +1372,56 @@ def test_combo_photo_count_keyboard_uses_short_final_payment_labels():
     assert all("Старт" not in label for label in labels)
     assert all(len(label) <= 28 for label in labels)
 
+
+
+def test_combo_photo_count_keyboard_marks_first_purchase_promos():
+    keyboard = build_combo_photo_count_keyboard(10, show_first_image_promo=True)
+    labels = [button.text for row in keyboard.inline_keyboard for button in row if button.callback_data.startswith("buy:")]
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert labels == [
+        "Без фото — 490 ₽",
+        "3 фото — 1 240 ₽ · Скидка 50%",
+        "5 фото — 1 740 ₽ · Скидка 50%",
+        "7 фото на карточку — 3 990 ₽",
+    ]
+    assert callbacks == [
+        "buy:text_start_x0",
+        "buy:promo_text_start_x3",
+        "buy:promo_text_start_x5",
+        "buy:text_start_x7",
+        "buy_back:combo",
+        "action:home",
+    ]
+
+
+def test_image_packages_keyboard_marks_first_purchase_promo():
+    keyboard = build_image_packages_keyboard(show_first_image_promo=True)
+    first_button = keyboard.inline_keyboard[0][0]
+
+    assert first_button.text == "Скидка 50%: 10 изображений за 290 ₽"
+    assert first_button.callback_data == "buy:promo_img_10"
+
+
+def test_promo_combo_payment_link_is_guarded_after_first_image_purchase():
+    class _Db:
+        async def is_first_image_purchase(self, user_id):
+            return False
+
+        async def create_pending_payment(self, **kwargs):
+            raise AssertionError("promo payment must not be created")
+
+    class _Application:
+        bot_data = {"db": _Db()}
+
+    class _Context:
+        application = _Application()
+
+    message = _FakeMessage()
+
+    asyncio.run(_send_payment_link(message, _Context(), 123, "promo_text_start_x3"))
+
+    assert message.replies == [("⚠️ Акция первой покупки уже использована.", {})]
 
 
 def test_persistent_reply_keyboard_routes_primary_actions():

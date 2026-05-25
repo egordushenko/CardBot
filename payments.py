@@ -23,7 +23,7 @@ class PaymentPackage:
 
     @property
     def images_count(self) -> int:
-        if self.code.startswith("text_"):
+        if self.text_count and self.images_per_card:
             return self.text_count * self.images_per_card
         return self.images_per_card
 
@@ -55,7 +55,9 @@ PACKAGES: dict[str, PaymentPackage] = {
     "addon_img_20": PaymentPackage("addon_img_20", "Докупить 20 изображений", 0, 20, 1150),
     "addon_img_50": PaymentPackage("addon_img_50", "Докупить 50 изображений", 0, 50, 2750),
     "addon_img_150": PaymentPackage("addon_img_150", "Докупить 150 изображений", 0, 150, 7500),
-    "promo_img_10": PaymentPackage("promo_img_10", "Акция: 10 изображений", 0, 10, 575),
+    "promo_img_10": PaymentPackage("promo_img_10", "Скидка 50%: 10 изображений", 0, 10, 290),
+    "promo_text_start_x3": PaymentPackage("promo_text_start_x3", "Скидка 50%: Старт × 3 фото", 10, 3, 1240),
+    "promo_text_start_x5": PaymentPackage("promo_text_start_x5", "Скидка 50%: Старт × 5 фото", 10, 5, 1740),
 }
 
 MAIN_PACKAGE_CODES = [
@@ -75,6 +77,11 @@ MAIN_PACKAGE_CODES = [
 TEXT_ADDON_CODES = ["addon_text_10", "addon_text_30", "addon_text_100"]
 IMAGE_ADDON_CODES = ["addon_img_20", "addon_img_50", "addon_img_150"]
 PROMO_PACKAGE_CODE = "promo_img_10"
+PROMO_PACKAGE_CODES = (
+    "promo_img_10",
+    "promo_text_start_x3",
+    "promo_text_start_x5",
+)
 
 
 def generate_inv_id() -> str:
