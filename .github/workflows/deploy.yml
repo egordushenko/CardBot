@@ -14,7 +14,7 @@ jobs:
 
       - name: Deploy files
         run: |
-          rsync -a --delete \
+          rsync -a --no-owner --no-group --no-perms --delete \
             --exclude '.git' \
             --exclude '.env' \
             --exclude '.env.example' \
@@ -23,8 +23,8 @@ jobs:
             --exclude '__pycache__/' \
             --exclude '.pytest_cache/' \
             ./ /opt/cardbot/
-          touch /opt/cardbot/cardbot.log
-          chmod 664 /opt/cardbot/cardbot.log
+          sudo touch /opt/cardbot/cardbot.log
+          sudo chmod 664 /opt/cardbot/cardbot.log
 
       - name: Install dependencies
         run: |
