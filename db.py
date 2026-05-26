@@ -171,6 +171,16 @@ CREATE TABLE IF NOT EXISTS templates (
 ALTER TABLE templates ADD COLUMN IF NOT EXISTS image_guidance TEXT;
 ALTER TABLE image_sessions ADD COLUMN IF NOT EXISTS report_json TEXT;
 
+CREATE TABLE IF NOT EXISTS merchant_profiles (
+    user_id BIGINT PRIMARY KEY REFERENCES users(id),
+    visual_style_default TEXT,
+    text_tone TEXT,
+    preferred_card_formats TEXT,
+    banned_words TEXT,
+    typical_product_segment TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS broadcast_messages (
     id SERIAL PRIMARY KEY,
     admin_user_id BIGINT,
@@ -917,6 +927,73 @@ class Database:
             await conn.execute(
                 "DELETE FROM templates WHERE id = $1 AND user_id = $2",
                 template_id,
+                user_id,
+            )
+
+    async def get_merchant_profile(self, user_id: int) -> dict[str, Any] | None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    user_id,
+                    visual_style_default,
+                    text_tone,
+                    preferred_card_formats,
+                    banned_words,
+                    typical_product_segment,
+                    updated_at
+                FROM merchant_profiles
+                WHERE user_id = $1
+                """,
+                user_id,
+            )
+        return dict(row) if row else None
+
+    async def upsert_merchant_profile(
+        self,
+        user_id: int,
+        *,
+        visual_style_default: str | None = None,
+        text_tone: str | None = None,
+        preferred_card_formats: str | None = None,
+        banned_words: str | None = None,
+        typical_product_segment: str | None = None,
+    ) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO merchant_profiles(
+                    user_id,
+                    visual_style_default,
+                    text_tone,
+                    preferred_card_formats,
+                    banned_words,
+                    typical_product_segment
+                )
+                VALUES($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (user_id) DO UPDATE
+                SET visual_style_default = EXCLUDED.visual_style_default,
+                    text_tone = EXCLUDED.text_tone,
+                    preferred_card_formats = EXCLUDED.preferred_card_formats,
+                    banned_words = EXCLUDED.banned_words,
+                    typical_product_segment = EXCLUDED.typical_product_segment,
+                    updated_at = NOW()
+                """,
+                user_id,
+                visual_style_default,
+                text_tone,
+                preferred_card_formats,
+                banned_words,
+                typical_product_segment,
+            )
+
+    async def delete_merchant_profile(self, user_id: int) -> None:
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM merchant_profiles WHERE user_id = $1",
                 user_id,
             )
 

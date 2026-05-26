@@ -25,6 +25,13 @@ from image_generator import (
     batch_image_timeout_seconds,
     iter_marketplace_batch_image_results,
 )
+from merchant_profile import (
+    MERCHANT_PROFILE_FIELDS,
+    format_merchant_profile_message,
+    is_merchant_profile_empty,
+    merge_merchant_profile_image_guidance,
+    normalize_profile_value,
+)
 from llm import (
     CardGeneration,
     ImageConcept,
@@ -61,6 +68,7 @@ from bot_keyboards import (
     build_image_count_prompt,
     build_image_guidance_keyboard,
     build_image_style_keyboard,
+    build_merchant_profile_keyboard,
     build_image_marketplace_keyboard,
     build_image_packages_keyboard,
     build_image_photo_keyboard,
@@ -257,6 +265,7 @@ def build_help_message() -> str:
         "/generate — создать карточку\n"
         "/balance — баланс\n"
         "/templates — мои шаблоны\n"
+        "/profile — профиль магазина\n"
         "/history — последние генерации\n"
         "/buy — пакеты генераций\n"
         "/unsubscribe — отключить рассылки\n"
@@ -375,6 +384,9 @@ def _reset_navigation_state(context: Any) -> None:
         "awaiting_new_template_text",
         "new_template_name",
         "pending_template_generation_id",
+        "awaiting_merchant_profile_field",
+        "merchant_profile_draft",
+        "merchant_profile_field_index",
     ):
         context.user_data.pop(key, None)
 
@@ -514,6 +526,61 @@ async def buy_command(update: Any, context: Any) -> None:
     if user_id is None:
         return
     await _show_buy_menu(update.effective_message, context, user_id, kind="all")
+
+
+async def profile_command(update: Any, context: Any) -> None:
+    user_id = await _ensure_user(update, context)
+    if user_id is None:
+        return
+    await _show_merchant_profile(update.effective_message, context, user_id)
+
+
+async def _show_merchant_profile(message: Any, context: Any, user_id: int) -> None:
+    _reset_navigation_state(context)
+    profile = await _get_db(context).get_merchant_profile(user_id)
+    await message.reply_text(
+        format_merchant_profile_message(profile),
+        reply_markup=build_merchant_profile_keyboard(has_profile=not is_merchant_profile_empty(profile)),
+    )
+
+
+async def _start_merchant_profile_wizard(message: Any, context: Any) -> None:
+    _reset_navigation_state(context)
+    context.user_data["awaiting_merchant_profile_field"] = True
+    context.user_data["merchant_profile_field_index"] = 0
+    context.user_data["merchant_profile_draft"] = {}
+    await message.reply_text(MERCHANT_PROFILE_FIELDS[0]["prompt"])
+
+
+async def _handle_merchant_profile_input(update: Any, context: Any, user_id: int, user_input: str) -> bool:
+    if not context.user_data.get("awaiting_merchant_profile_field"):
+        return False
+
+    field_index = int(context.user_data.get("merchant_profile_field_index") or 0)
+    if field_index < 0 or field_index >= len(MERCHANT_PROFILE_FIELDS):
+        _reset_navigation_state(context)
+        return True
+
+    draft = dict(context.user_data.get("merchant_profile_draft") or {})
+    field = MERCHANT_PROFILE_FIELDS[field_index]
+    draft[field["key"]] = normalize_profile_value(user_input)
+    field_index += 1
+
+    if field_index < len(MERCHANT_PROFILE_FIELDS):
+        context.user_data["merchant_profile_draft"] = draft
+        context.user_data["merchant_profile_field_index"] = field_index
+        await update.effective_message.reply_text(MERCHANT_PROFILE_FIELDS[field_index]["prompt"])
+        return True
+
+    await _get_db(context).upsert_merchant_profile(user_id, **draft)
+    context.user_data.pop("awaiting_merchant_profile_field", None)
+    context.user_data.pop("merchant_profile_draft", None)
+    context.user_data.pop("merchant_profile_field_index", None)
+    await update.effective_message.reply_text(
+        "✅ Профиль сохранён.",
+        reply_markup=build_merchant_profile_keyboard(has_profile=True),
+    )
+    return True
 
 
 async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "all") -> None:
@@ -1166,6 +1233,8 @@ async def _generate_images_for_user(
         )
         return
 
+    merchant_profile = await db.get_merchant_profile(user_id)
+    image_guidance = merge_merchant_profile_image_guidance(image_guidance, merchant_profile)
     report = _build_image_report_base(
         generation_mode="images_only",
         marketplace=marketplace,
@@ -1333,6 +1402,8 @@ async def _generate_text_and_images_for_user(
         )
         return
 
+    merchant_profile = await db.get_merchant_profile(user_id)
+    image_guidance = merge_merchant_profile_image_guidance(image_guidance, merchant_profile)
     report = _build_image_report_base(
         generation_mode="text_and_images",
         marketplace=marketplace,
@@ -1367,6 +1438,7 @@ async def _generate_text_and_images_for_user(
             marketplace=marketplace,
             category_profile=category_profile,
             resolved_fields=resolved_fields,
+            merchant_profile=merchant_profile,
         )
     )
     concepts_task = asyncio.create_task(
@@ -1803,6 +1875,7 @@ async def _generate_and_send_text_card(
         await message.reply_text(intro_text)
 
     try:
+        merchant_profile = await db.get_merchant_profile(user_id)
         category_profile, resolved_fields = await _resolve_generation_enrichment(
             context,
             user_input,
@@ -1817,6 +1890,7 @@ async def _generate_and_send_text_card(
             marketplace=marketplace,
             category_profile=category_profile,
             resolved_fields=resolved_fields,
+            merchant_profile=merchant_profile,
         )
     except Exception as exc:
         reason = classify_generation_error(exc)
@@ -2072,6 +2146,9 @@ async def _handle_reply_action(update: Any, context: Any, user_id: int, action: 
     if action == "templates":
         await _show_templates(update.effective_message, context, user_id, page=0)
         return
+    if action == "profile":
+        await _show_merchant_profile(update.effective_message, context, user_id)
+        return
     if action == "history":
         await history_command(update, context)
         return
@@ -2093,6 +2170,8 @@ async def handle_text(update: Any, context: Any) -> None:
     if await _handle_new_template_name(update, context, user_id, user_input):
         return
     if await _handle_new_template_text(update, context, user_id, user_input):
+        return
+    if await _handle_merchant_profile_input(update, context, user_id, user_input):
         return
     if await _handle_template_name(update, context, user_id, user_input):
         return
@@ -2296,6 +2375,9 @@ async def handle_callback(update: Any, context: Any) -> None:
     elif data == "action:templates":
         if user_id is not None:
             await _show_templates(query.message, context, user_id, page=0)
+    elif data == "action:profile":
+        if user_id is not None:
+            await _show_merchant_profile(query.message, context, user_id)
     elif data == "action:history":
         await history_command(update, context)
     elif data == "action:feedback":
@@ -2408,6 +2490,16 @@ async def handle_callback(update: Any, context: Any) -> None:
         await _show_templates_delete_list(query.message, context, user_id, page=page)
     elif data == "template_new":
         await _start_new_template_flow(query.message, context)
+    elif data == "merchant_profile_edit":
+        await _start_merchant_profile_wizard(query.message, context)
+    elif data == "merchant_profile_clear":
+        if user_id is not None:
+            await _get_db(context).delete_merchant_profile(user_id)
+            _reset_navigation_state(context)
+            await query.message.reply_text(
+                "🗑 Профиль магазина очищен.",
+                reply_markup=build_merchant_profile_keyboard(has_profile=False),
+            )
     elif data.startswith("template_use:"):
         if user_id is None:
             return
@@ -2547,6 +2639,7 @@ def create_application(settings: Settings) -> Any:
     application.add_handler(CommandHandler("images", images_command))
     application.add_handler(CommandHandler("balance", balance_command))
     application.add_handler(CommandHandler("templates", templates_command))
+    application.add_handler(CommandHandler("profile", profile_command))
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("buy", buy_command))
     application.add_handler(CommandHandler("help", help_command))

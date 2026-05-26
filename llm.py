@@ -7,6 +7,7 @@ from typing import Any
 
 from marketplace_rules import sanitize_description, sanitize_ozon_hashtags, sanitize_title
 from image_prompt_templates import build_image_template_prompts
+from merchant_profile import build_merchant_profile_prompt_block
 from prompts import OZON_SYSTEM_PROMPT, WB_SYSTEM_PROMPT
 
 
@@ -256,12 +257,14 @@ def build_user_prompt(
     marketplace: str,
     user_input: str,
     resolved_fields: dict[str, Any] | None = None,
+    merchant_profile: dict[str, Any] | None = None,
 ) -> str:
     normalized = normalize_marketplace(marketplace)
     name = MARKETPLACE_NAMES[normalized]
     return (
         f"Маркетплейс: {name}\n"
         f"Товар: {user_input.strip()}"
+        f"{build_merchant_profile_prompt_block(merchant_profile)}"
         f"{build_resolved_fields_prompt_block(resolved_fields)}"
     )
 
@@ -354,6 +357,7 @@ async def generate_card(
     marketplace: str = "wb",
     category_profile: dict[str, Any] | None = None,
     resolved_fields: dict[str, Any] | None = None,
+    merchant_profile: dict[str, Any] | None = None,
 ) -> CardGeneration:
     from openai import AsyncOpenAI
 
@@ -375,7 +379,7 @@ async def generate_card(
         },
         {
             "role": "user",
-            "content": build_user_prompt(marketplace, user_input, resolved_fields),
+            "content": build_user_prompt(marketplace, user_input, resolved_fields, merchant_profile),
         },
     ]
     model_candidates = build_openrouter_model_fallbacks(model)

@@ -35,6 +35,9 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     assert "cost_usd numeric(12,6)" in schema
     assert "failed_count int default 0" in schema
     assert "create table if not exists templates" in schema
+    assert "create table if not exists merchant_profiles" in schema
+    assert "visual_style_default text" in schema
+    assert "typical_product_segment text" in schema
     assert "create table if not exists payment_events" in schema
     assert "create table if not exists broadcast_messages" in schema
     assert "create table if not exists broadcast_deliveries" in schema
@@ -209,6 +212,71 @@ async def test_log_payment_event_stores_sanitized_audit_payload():
     assert "signaturevalue" not in args[4].casefold()
     assert args[:4] == ("abc123", 598380407, "result", "invalid_signature")
     assert args[5] == "invalid_signature"
+
+
+@pytest.mark.asyncio
+async def test_upsert_merchant_profile_uses_owner_scoped_row():
+    conn = _FakeConn()
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    await db.upsert_merchant_profile(
+        123,
+        visual_style_default="clean premium",
+        text_tone="friendly",
+        preferred_card_formats="benefit bullets",
+        banned_words="best, cheap",
+        typical_product_segment="women activewear",
+    )
+
+    query, args = conn.calls[0]
+    normalized = " ".join(query.casefold().split())
+    assert "insert into merchant_profiles" in normalized
+    assert "on conflict (user_id) do update" in normalized
+    assert "updated_at = now()" in normalized
+    assert args == (
+        123,
+        "clean premium",
+        "friendly",
+        "benefit bullets",
+        "best, cheap",
+        "women activewear",
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_merchant_profile_scopes_lookup_to_owner():
+    row = {
+        "user_id": 123,
+        "visual_style_default": "clean premium",
+        "text_tone": "friendly",
+        "preferred_card_formats": "benefit bullets",
+        "banned_words": "best, cheap",
+        "typical_product_segment": "women activewear",
+    }
+    conn = _FakeConn(fetchrow_result=row)
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    result = await db.get_merchant_profile(123)
+
+    assert result == row
+    query, args = conn.calls[0]
+    assert "where user_id = $1" in " ".join(query.casefold().split())
+    assert args == (123,)
+
+
+@pytest.mark.asyncio
+async def test_delete_merchant_profile_scopes_delete_to_owner():
+    conn = _FakeConn()
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    await db.delete_merchant_profile(123)
+
+    query, args = conn.calls[0]
+    assert "delete from merchant_profiles where user_id = $1" in " ".join(query.casefold().split())
+    assert args == (123,)
 
 
 @pytest.mark.asyncio

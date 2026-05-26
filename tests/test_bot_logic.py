@@ -69,11 +69,14 @@ from bot import (
     should_generate_text_with_images,
     _handle_new_template_text,
     _handle_new_template_name,
+    _handle_merchant_profile_input,
     _handle_template_name,
+    profile_command,
     is_allowed_image_count,
     is_supported_image_document,
     truncate_template_name,
 )
+from merchant_profile import merge_merchant_profile_image_guidance
 from db import TRIAL_GENERATIONS
 from db import UsageMode
 from image_generator import (
@@ -263,6 +266,9 @@ class _FakeTemplateDb:
         self.saved = []
         self.generation = None
         self.recent_generations = []
+        self.merchant_profile = None
+        self.saved_profile = None
+        self.deleted_profile_user_id = None
 
     async def upsert_user(self, *args, **kwargs):
         return None
@@ -282,6 +288,15 @@ class _FakeTemplateDb:
 
     async def get_recent_generations(self, user_id, limit=5):
         return self.recent_generations[:limit]
+
+    async def get_merchant_profile(self, user_id):
+        return self.merchant_profile
+
+    async def upsert_merchant_profile(self, user_id, **kwargs):
+        self.saved_profile = {"user_id": user_id, **kwargs}
+
+    async def delete_merchant_profile(self, user_id):
+        self.deleted_profile_user_id = user_id
 
 
 class _FakeTemplateApplication:
@@ -332,6 +347,72 @@ def test_new_template_flow_collects_name_then_saves_text_without_generation():
         assert "Найдёте его в «Мои шаблоны»" in text_update.effective_message.replies[0][0]
         assert "awaiting_new_template_text" not in context.user_data
         assert "new_template_name" not in context.user_data
+
+    asyncio.run(run_flow())
+
+
+def test_main_menu_exposes_merchant_profile_entrypoint():
+    keyboard = build_main_menu()
+    persistent = build_persistent_main_keyboard()
+
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+    reply_labels = [getattr(label, "text", label) for row in persistent.keyboard for label in row]
+
+    assert "action:profile" in callbacks
+    assert classify_reply_action("🏪 Профиль магазина") == "profile"
+    assert "🏪 Профиль магазина" in reply_labels
+
+
+def test_profile_command_shows_current_profile_and_edit_action():
+    async def run_flow():
+        db = _FakeTemplateDb()
+        db.merchant_profile = {"visual_style_default": "clean premium"}
+        context = _FakeTemplateContext(db)
+        update = _FakeCallbackUpdate("unused")
+
+        await profile_command(update, context)
+
+        text, kwargs = update.effective_message.replies[0]
+        callbacks = [button.callback_data for row in kwargs["reply_markup"].inline_keyboard for button in row]
+        assert "Профиль магазина" in text
+        assert "clean premium" in text
+        assert "merchant_profile_edit" in callbacks
+        assert "merchant_profile_clear" in callbacks
+
+    asyncio.run(run_flow())
+
+
+def test_merchant_profile_wizard_collects_five_fields_and_saves_profile():
+    async def run_flow():
+        db = _FakeTemplateDb()
+        context = _FakeTemplateContext(db)
+        update = _FakeUpdate("")
+        context.user_data["awaiting_merchant_profile_field"] = True
+        context.user_data["merchant_profile_field_index"] = 0
+        context.user_data["merchant_profile_draft"] = {}
+
+        values = [
+            "clean premium",
+            "friendly expert",
+            "benefit bullets",
+            "best, cheap",
+            "women activewear",
+        ]
+        for value in values:
+            handled = await _handle_merchant_profile_input(update, context, user_id=123, user_input=value)
+            assert handled is True
+
+        assert db.saved_profile == {
+            "user_id": 123,
+            "visual_style_default": "clean premium",
+            "text_tone": "friendly expert",
+            "preferred_card_formats": "benefit bullets",
+            "banned_words": "best, cheap",
+            "typical_product_segment": "women activewear",
+        }
+        assert "awaiting_merchant_profile_field" not in context.user_data
+        assert "merchant_profile_draft" not in context.user_data
+        assert "Профиль сохранён" in update.effective_message.replies[-1][0]
 
     asyncio.run(run_flow())
 
@@ -867,6 +948,7 @@ def test_generate_image_prompts_for_batch_forwards_category_profile(monkeypatch)
 def test_text_generation_uses_persisted_id_for_result_actions(monkeypatch):
     async def run_flow():
         captured = {}
+        card_kwargs = {}
 
         class Db(_FakeTemplateDb):
             async def get_usage_mode(self, user_id, trial_generations):
@@ -880,11 +962,13 @@ def test_text_generation_uses_persisted_id_for_result_actions(monkeypatch):
             return None, {}
 
         async def fake_generate_card(*args, **kwargs):
+            card_kwargs.update(kwargs)
             return CardGeneration("Title", "Description", "Keywords", "Props", 10)
 
         monkeypatch.setattr("bot._resolve_generation_enrichment", fake_resolve)
         monkeypatch.setattr("bot.generate_card", fake_generate_card)
         db = Db()
+        db.merchant_profile = {"visual_style_default": "clean premium"}
         context = _FakeTemplateContext(db)
         context.application.bot_data["settings"] = type(
             "Settings",
@@ -913,6 +997,7 @@ def test_text_generation_uses_persisted_id_for_result_actions(monkeypatch):
         assert "generation_repeat:41" in callbacks
         assert captured["marketplace"] == "ozon"
         assert captured["mode"] == "text_only"
+        assert card_kwargs["merchant_profile"] == {"visual_style_default": "clean premium"}
 
     asyncio.run(run_flow())
 
@@ -961,6 +1046,7 @@ def test_images_only_generation_persists_history_after_images_are_saved(monkeypa
         monkeypatch.setattr("bot.generate_image_prompts", fake_prompts)
         monkeypatch.setattr("bot._generate_and_send_image_concepts", fake_images)
         db = Db()
+        db.merchant_profile = {"visual_style_default": "clean premium"}
         context = _FakeTemplateContext(db)
         context.user_data.update(
             {
@@ -992,6 +1078,8 @@ def test_images_only_generation_persists_history_after_images_are_saved(monkeypa
         assert captured["input_text"] == "Часы песочные"
         assert captured["photo_file_ids"] == ["photo-1"]
         assert captured["images_count"] == 1
+        assert captured["image_guidance"].startswith("светлый фон")
+        assert "clean premium" in captured["image_guidance"]
 
     asyncio.run(run_flow())
 
@@ -999,6 +1087,8 @@ def test_images_only_generation_persists_history_after_images_are_saved(monkeypa
 def test_combined_generation_keeps_persisted_actions_when_image_stage_fails(monkeypatch):
     async def run_flow():
         captured = {}
+        card_kwargs = {}
+        prompt_kwargs = {}
 
         class Db(_FakeTemplateDb):
             async def get_usage_mode(self, user_id, trial_generations):
@@ -1027,15 +1117,18 @@ def test_combined_generation_keeps_persisted_actions_when_image_stage_fails(monk
             return None, {}
 
         async def fake_generate_card(*args, **kwargs):
+            card_kwargs.update(kwargs)
             return CardGeneration("Title", "Description", "Keywords", "Props", 10)
 
         async def fail_image_prompts(**kwargs):
+            prompt_kwargs.update(kwargs)
             raise RuntimeError("image prompts failed")
 
         monkeypatch.setattr("bot._resolve_generation_enrichment", fake_resolve)
         monkeypatch.setattr("bot.generate_card", fake_generate_card)
         monkeypatch.setattr("bot._generate_image_prompts_for_batch", fail_image_prompts)
         db = Db()
+        db.merchant_profile = {"visual_style_default": "clean premium"}
         context = _FakeTemplateContext(db)
         context.user_data.update(
             {
@@ -1069,7 +1162,10 @@ def test_combined_generation_keeps_persisted_actions_when_image_stage_fails(monk
         assert captured["mode"] == "text_and_images"
         assert captured["photo_file_ids"] == ["photo-1"]
         assert captured["images_count"] == 3
-        assert captured["image_guidance"] == "светлый фон"
+        assert captured["image_guidance"].startswith("светлый фон")
+        assert "clean premium" in captured["image_guidance"]
+        assert card_kwargs["merchant_profile"] == {"visual_style_default": "clean premium"}
+        assert "clean premium" in prompt_kwargs["image_guidance"]
 
     asyncio.run(run_flow())
 

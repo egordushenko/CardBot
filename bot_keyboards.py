@@ -20,12 +20,14 @@ IMAGE_COUNT_OPTIONS = (1, 3, 5, 7)
 HOME_CALLBACK = "action:home"
 HOME_BUTTON_TEXT = "🏠 Главная"
 BACK_BUTTON_TEXT = "⬅️ Назад"
+PROFILE_BUTTON_TEXT = "🏪 Профиль магазина"
 COMBO_PACKAGE_BUTTON_TEXT = "💳 Комбо: карточки + изображения"
 REPLY_ACTIONS = {
     "⚡ Сгенерировать карточку": "generate",
     "💳 Купить генерации": "buy",
     "📊 Мой баланс": "balance",
     "📋 Мои шаблоны": "templates",
+    PROFILE_BUTTON_TEXT: "profile",
     "🕐 История": "history",
     "❓ Помощь": "help",
     HOME_BUTTON_TEXT: "home",
@@ -99,7 +101,8 @@ def build_persistent_main_keyboard() -> Any:
     rows = [
         ["⚡ Сгенерировать карточку"],
         ["💳 Купить генерации", "📊 Мой баланс"],
-        ["📋 Мои шаблоны", "🕐 История"],
+        ["📋 Мои шаблоны", PROFILE_BUTTON_TEXT],
+        ["🕐 История"],
         ["❓ Помощь"],
     ]
     try:
@@ -120,13 +123,22 @@ def build_main_menu() -> Any:
             ],
             [
                 _button("📋 Мои шаблоны", "action:templates"),
-                _button("🕐 История", "action:history"),
+                _button(PROFILE_BUTTON_TEXT, "action:profile"),
             ],
+            [_button("🕐 История", "action:history")],
             [
                 _button("❓ Помощь", "action:help"),
             ],
         ]
     )
+
+
+def build_merchant_profile_keyboard(has_profile: bool = False) -> Any:
+    rows = [[_button("✏️ Заполнить заново", "merchant_profile_edit")]]
+    if has_profile:
+        rows.append([_button("🗑 Очистить", "merchant_profile_clear")])
+    rows.append([_home_button()])
+    return _keyboard(rows)
 
 
 def _payment_button(package_code: str) -> Any:
