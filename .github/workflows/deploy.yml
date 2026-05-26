@@ -14,7 +14,6 @@ jobs:
 
       - name: Deploy files
         run: |
-          sudo systemctl stop cardbot
           rsync -a --delete \
             --exclude '.git' \
             --exclude '.env' \
