@@ -14,7 +14,7 @@ jobs:
 
       - name: Deploy files
         run: |
-          rsync -a --no-owner --no-group --no-perms --delete \
+          rsync -a --no-owner --no-group --no-perms --no-times --delete \
             --exclude '.git' \
             --exclude '.env' \
             --exclude '.env.example' \
