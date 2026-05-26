@@ -23,8 +23,12 @@ jobs:
             --exclude '__pycache__/' \
             --exclude '.pytest_cache/' \
             ./ /opt/cardbot/
-          sudo touch /opt/cardbot/cardbot.log
-          sudo chmod 664 /opt/cardbot/cardbot.log
+          if [ ! -e /opt/cardbot/cardbot.log ]; then
+            umask 0002
+            touch /opt/cardbot/cardbot.log
+            chgrp cardbot /opt/cardbot/cardbot.log || true
+            chmod 664 /opt/cardbot/cardbot.log || true
+          fi
 
       - name: Install dependencies
         run: |
