@@ -1424,9 +1424,9 @@ def test_text_package_buttons_are_short_enough_for_mobile():
     labels = [row[0].text for row in keyboard.inline_keyboard if row[0].callback_data.startswith("buy:")]
 
     assert labels == [
-        "10 карточек за 560 ₽",
-        "30 карточек за 1 370 ₽",
-        "100 карточек за 3 440 ₽",
+        "10 текстов за 560 ₽",
+        "30 текстов за 1 370 ₽",
+        "100 текстов за 3 440 ₽",
     ]
     assert all("—" not in label for label in labels)
     assert all("Докупить" not in label for label in labels)

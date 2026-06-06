@@ -20,7 +20,7 @@ HOME_CALLBACK = "action:home"
 HOME_BUTTON_TEXT = "🏠 Главная"
 BACK_BUTTON_TEXT = "⬅️ Назад"
 PROFILE_BUTTON_TEXT = "🏪 Профиль магазина"
-COMBO_PACKAGE_BUTTON_TEXT = "💳 Комбо: карточки + изображения"
+COMBO_PACKAGE_BUTTON_TEXT = "💳 Текст + изображения"
 REPLY_ACTIONS = {
     "⚡ Сгенерировать карточку": "generate",
     "💳 Купить генерации": "buy",
@@ -143,9 +143,9 @@ def build_merchant_profile_keyboard(has_profile: bool = False) -> Any:
 def _payment_button(package_code: str) -> Any:
     package = PAYMENT_PACKAGES[package_code]
     if package_code.startswith("addon_text_"):
-        label = f"{package.text_count} карточек за {package.price_rub:,} ₽"
+        label = f"{package.text_count} текстов за {package.price_rub:,} ₽"
     elif package_code.startswith("first_addon_text_"):
-        label = f"{package.text_count} карточек за {package.price_rub:,} ₽ · Скидка 50%"
+        label = f"{package.text_count} текстов за {package.price_rub:,} ₽ · Скидка 50%"
     elif package_code.startswith("addon_img_") or package_code.startswith("first_addon_img_") or package_code in PROMO_PACKAGE_CODES:
         label = f"{package.images_count} изображений за {package.price_rub:,} ₽"
         if package_code in PROMO_PACKAGE_CODES:
@@ -186,7 +186,7 @@ def build_buy_keyboard(show_first_image_promo: bool = False) -> Any:
     return _keyboard(
         [
             [_button(COMBO_PACKAGE_BUTTON_TEXT, "action:buy_combo")],
-            [_button("Только карточки", "action:buy_text")],
+            [_button("Только текст", "action:buy_text")],
             [_button("Только изображения", "action:buy_images")],
             [_home_button()],
         ]

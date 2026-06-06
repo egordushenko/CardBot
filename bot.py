@@ -587,13 +587,13 @@ async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "
     first_purchase = await _get_db(context).is_first_purchase(user_id)
     if kind == "combo":
         await message.reply_text(
-            "💳 Сколько карточек нужно в комбо-пакете?",
+            "💳 Сколько текстовых генераций нужно в комбо-пакете?",
             reply_markup=build_combo_card_count_keyboard(),
         )
         return
     if kind == "text":
         await message.reply_text(
-            "📝 Выберите пакет текстовых карточек:",
+            "📝 Выберите пакет текстовых генераций:",
             reply_markup=build_text_packages_keyboard(show_first_image_promo=first_purchase),
         )
         return
