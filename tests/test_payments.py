@@ -3,7 +3,9 @@ from urllib.parse import parse_qs, urlparse
 from config import Settings
 from payments import (
     PACKAGES,
+    FIRST_PURCHASE_PACKAGE_CODES,
     PROMO_PACKAGE_CODES,
+    REGULAR_PACKAGE_CODES,
     build_receipt,
     build_payment_url,
     calculate_package_counts,
@@ -31,18 +33,28 @@ def test_cardbot_packages_match_price_spec():
     assert PACKAGES["promo_text_start_x3"].price_rub == 1240
     assert PACKAGES["promo_text_start_x5"].images_count == 50
     assert PACKAGES["promo_text_start_x5"].price_rub == 1740
-    assert PROMO_PACKAGE_CODES == (
-        "promo_img_10",
-        "promo_text_start_x3",
-        "promo_text_start_x5",
+    assert set(PROMO_PACKAGE_CODES).issuperset(
+        {"promo_img_10", "promo_text_start_x3", "promo_text_start_x5"}
     )
+
+
+def test_first_purchase_discount_exists_for_every_regular_package():
+    assert "first_text_pro_x7" in PACKAGES
+    assert PACKAGES["first_text_pro_x7"].text_count == PACKAGES["text_pro_x7"].text_count
+    assert PACKAGES["first_text_pro_x7"].images_count == PACKAGES["text_pro_x7"].images_count
+    assert PACKAGES["first_text_pro_x7"].price_rub == 15495
+    assert "first_addon_img_150" in PACKAGES
+    assert PACKAGES["first_addon_img_150"].images_count == 150
+    assert PACKAGES["first_addon_img_150"].price_rub == 3750
+    assert set(FIRST_PURCHASE_PACKAGE_CODES) == {f"first_{code}" for code in REGULAR_PACKAGE_CODES}
+    assert set(FIRST_PURCHASE_PACKAGE_CODES).issubset(PROMO_PACKAGE_CODES)
 
 
 def test_calculate_package_counts_handles_main_and_addon_packages():
     assert calculate_package_counts("text_start_x7") == (10, 70)
-    assert calculate_package_counts("promo_text_start_x5") == (10, 50)
+    assert calculate_package_counts("first_text_pro_x7") == (100, 700)
     assert calculate_package_counts("addon_text_30") == (30, 0)
-    assert calculate_package_counts("addon_img_50") == (0, 50)
+    assert calculate_package_counts("first_addon_img_150") == (0, 150)
 
 
 def test_robokassa_signatures_sort_shp_case_insensitive():

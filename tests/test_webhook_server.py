@@ -35,7 +35,7 @@ class FakeDb:
     async def get_payment_by_inv_id(self, inv_id):
         return self.payment if inv_id == self.payment["inv_id"] else None
 
-    async def mark_payment_paid_and_add_balance(self, inv_id):
+    async def mark_payment_paid_and_add_balance(self, inv_id, first_purchase_only_package_codes=()):
         self.mark_calls += 1
         self.payment["status"] = "paid"
         return True
@@ -175,6 +175,49 @@ async def test_robokassa_result_is_idempotent_for_already_paid_payment():
     assert response.text == "OKabc123"
     assert db.mark_calls == 0
     assert db.payment_events[-1]["status"] == "already_paid"
+    assert bot.messages == []
+
+
+@pytest.mark.asyncio
+async def test_robokassa_result_rejects_stale_first_purchase_discount_invoice():
+    class UsedFirstPurchaseDb(FakeDb):
+        async def mark_payment_paid_and_add_balance(self, inv_id, first_purchase_only_package_codes=()):
+            self.mark_calls += 1
+            assert "first_text_pro_x7" in first_purchase_only_package_codes
+            return False
+
+    db = UsedFirstPurchaseDb()
+    db.payment.update(
+        {
+            "package_code": "first_text_pro_x7",
+            "amount_rub": 15495,
+            "text_count": 100,
+            "images_count": 700,
+        }
+    )
+    bot = FakeBot()
+    signature = robokassa_result_signature(
+        out_sum="15495.00",
+        inv_id="abc123",
+        password2="pass2",
+        shp_params={"Shp_package": "first_text_pro_x7", "Shp_user_id": "598380407"},
+    )
+    request = FakeRequest(
+        {
+            "OutSum": "15495.00",
+            "InvId": "abc123",
+            "SignatureValue": signature,
+            "Shp_user_id": "598380407",
+            "Shp_package": "first_text_pro_x7",
+        },
+        {"db": db, "bot": bot, "robokassa_password2": "pass2"},
+    )
+
+    response = await handle_robokassa_result(request)
+
+    assert response.status == 400
+    assert db.mark_calls == 1
+    assert db.payment_events[-1]["status"] == "first_purchase_used"
     assert bot.messages == []
 
 

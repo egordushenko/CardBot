@@ -7,7 +7,6 @@ from payments import (
     IMAGE_ADDON_CODES,
     MAIN_PACKAGE_CODES,
     PACKAGES as PAYMENT_PACKAGES,
-    PROMO_PACKAGE_CODE,
     PROMO_PACKAGE_CODES,
     TEXT_ADDON_CODES,
 )
@@ -145,12 +144,16 @@ def _payment_button(package_code: str) -> Any:
     package = PAYMENT_PACKAGES[package_code]
     if package_code.startswith("addon_text_"):
         label = f"{package.text_count} карточек за {package.price_rub:,} ₽"
-    elif package_code.startswith("addon_img_") or package_code == PROMO_PACKAGE_CODE:
+    elif package_code.startswith("first_addon_text_"):
+        label = f"{package.text_count} карточек за {package.price_rub:,} ₽ · Скидка 50%"
+    elif package_code.startswith("addon_img_") or package_code.startswith("first_addon_img_") or package_code in PROMO_PACKAGE_CODES:
         label = f"{package.images_count} изображений за {package.price_rub:,} ₽"
-        if package_code == PROMO_PACKAGE_CODE:
+        if package_code in PROMO_PACKAGE_CODES:
             label = f"Скидка 50%: {label}"
     else:
         label = f"{package.title} — {package.description} за {package.price_rub:,} ₽"
+        if package_code in PROMO_PACKAGE_CODES:
+            label = f"{package.description} за {package.price_rub:,} ₽ · Скидка 50%"
     return _button(
         label.replace(",", " "),
         f"buy:{package_code}",
@@ -158,11 +161,11 @@ def _payment_button(package_code: str) -> Any:
 
 
 def _combo_package_code(text_count: int, images_per_card: int, show_first_image_promo: bool = False) -> str:
-    if show_first_image_promo and text_count == 10 and images_per_card in (3, 5):
-        return f"promo_text_start_x{images_per_card}"
     for code in MAIN_PACKAGE_CODES:
         package = PAYMENT_PACKAGES[code]
         if package.text_count == text_count and package.images_per_card == images_per_card:
+            if show_first_image_promo:
+                return f"first_{code}"
             return code
     raise ValueError(f"Unknown combo package: {text_count=} {images_per_card=}")
 
@@ -229,15 +232,15 @@ def build_balance_keyboard() -> Any:
 
 
 def build_image_packages_keyboard(show_first_image_promo: bool = False) -> Any:
-    rows = [[_payment_button(code)] for code in IMAGE_ADDON_CODES]
-    if show_first_image_promo:
-        rows.insert(0, [_payment_button(PROMO_PACKAGE_CODE)])
+    codes = [f"first_{code}" for code in IMAGE_ADDON_CODES] if show_first_image_promo else IMAGE_ADDON_CODES
+    rows = [[_payment_button(code)] for code in codes]
     rows.append(_nav_row("buy_back:root"))
     return _keyboard(rows)
 
 
-def build_text_packages_keyboard() -> Any:
-    rows = [[_payment_button(code)] for code in TEXT_ADDON_CODES]
+def build_text_packages_keyboard(show_first_image_promo: bool = False) -> Any:
+    codes = [f"first_{code}" for code in TEXT_ADDON_CODES] if show_first_image_promo else TEXT_ADDON_CODES
+    rows = [[_payment_button(code)] for code in codes]
     rows.append(_nav_row("buy_back:root"))
     return _keyboard(rows)
 

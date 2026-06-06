@@ -6,7 +6,7 @@ from typing import Any
 
 from aiohttp import web
 
-from payments import PACKAGES, format_out_sum, robokassa_result_signature
+from payments import PACKAGES, PROMO_PACKAGE_CODES, format_out_sum, robokassa_result_signature
 
 
 logger = logging.getLogger(__name__)
@@ -290,7 +290,20 @@ async def handle_robokassa_result(request: Any) -> web.Response:
         )
         return web.Response(text="Amount mismatch", status=400)
 
-    paid_now = await db.mark_payment_paid_and_add_balance(inv_id)
+    paid_now = await db.mark_payment_paid_and_add_balance(
+        inv_id,
+        first_purchase_only_package_codes=PROMO_PACKAGE_CODES,
+    )
+    if not paid_now and package_code in PROMO_PACKAGE_CODES:
+        await _log_payment_event(
+            db,
+            inv_id=inv_id,
+            user_id=user_id,
+            status="first_purchase_used",
+            payload=payload,
+            error_reason="first_purchase_used",
+        )
+        return web.Response(text="First purchase discount already used", status=400)
     if paid_now:
         logger.info(
             "CardBot payment OK: user=%s package=%s text=%s images=%s",

@@ -76,12 +76,38 @@ MAIN_PACKAGE_CODES = [
 ]
 TEXT_ADDON_CODES = ["addon_text_10", "addon_text_30", "addon_text_100"]
 IMAGE_ADDON_CODES = ["addon_img_20", "addon_img_50", "addon_img_150"]
-PROMO_PACKAGE_CODE = "promo_img_10"
-PROMO_PACKAGE_CODES = (
+REGULAR_PACKAGE_CODES = tuple(code for code in PACKAGES if not code.startswith("promo_"))
+FIRST_PURCHASE_PACKAGE_CODES = tuple(f"first_{code}" for code in REGULAR_PACKAGE_CODES)
+
+
+def _first_purchase_price(price_rub: int) -> int:
+    return (price_rub + 1) // 2
+
+
+PACKAGES.update(
+    {
+        first_code: PaymentPackage(
+            first_code,
+            f"Скидка 50%: {PACKAGES[regular_code].title}",
+            PACKAGES[regular_code].text_count,
+            PACKAGES[regular_code].images_per_card,
+            _first_purchase_price(PACKAGES[regular_code].price_rub),
+        )
+        for regular_code, first_code in zip(
+            REGULAR_PACKAGE_CODES,
+            FIRST_PURCHASE_PACKAGE_CODES,
+            strict=True,
+        )
+    }
+)
+
+PROMO_PACKAGE_CODE = "first_addon_img_20"
+LEGACY_PROMO_PACKAGE_CODES = (
     "promo_img_10",
     "promo_text_start_x3",
     "promo_text_start_x5",
 )
+PROMO_PACKAGE_CODES = FIRST_PURCHASE_PACKAGE_CODES + LEGACY_PROMO_PACKAGE_CODES
 
 
 def generate_inv_id() -> str:

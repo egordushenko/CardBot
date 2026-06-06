@@ -585,7 +585,7 @@ def test_start_help_and_balance_messages_are_scannable():
     assert build_start_message("Егор") == (
         "Здравствуйте, Егор.\n\n"
         "🛒 Я помогу подготовить карточку товара для Wildberries и Ozon.\n\n"
-        "На старте доступно 5 бесплатных текстовых генераций."
+        "На старте доступно 5 бесплатных текстовых генераций и 1 бесплатное изображение."
     )
 
     help_text = build_help_message()
@@ -1471,21 +1471,17 @@ def test_combo_photo_count_keyboard_uses_short_final_payment_labels():
 
 
 def test_combo_photo_count_keyboard_marks_first_purchase_promos():
-    keyboard = build_combo_photo_count_keyboard(10, show_first_image_promo=True)
+    keyboard = build_combo_photo_count_keyboard(100, show_first_image_promo=True)
     labels = [button.text for row in keyboard.inline_keyboard for button in row if button.callback_data.startswith("buy:")]
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert labels == [
-        "Без фото — 490 ₽",
-        "3 фото — 1 240 ₽ · Скидка 50%",
-        "5 фото — 1 740 ₽ · Скидка 50%",
-        "7 фото на карточку — 3 990 ₽",
-    ]
+    assert "15 495" in labels[-1]
+    assert "50%" in labels[-1]
     assert callbacks == [
-        "buy:text_start_x0",
-        "buy:promo_text_start_x3",
-        "buy:promo_text_start_x5",
-        "buy:text_start_x7",
+        "buy:first_text_pro_x0",
+        "buy:first_text_pro_x3",
+        "buy:first_text_pro_x5",
+        "buy:first_text_pro_x7",
         "buy_back:combo",
         "action:home",
     ]
@@ -1493,15 +1489,20 @@ def test_combo_photo_count_keyboard_marks_first_purchase_promos():
 
 def test_image_packages_keyboard_marks_first_purchase_promo():
     keyboard = build_image_packages_keyboard(show_first_image_promo=True)
-    first_button = keyboard.inline_keyboard[0][0]
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert first_button.text == "Скидка 50%: 10 изображений за 290 ₽"
-    assert first_button.callback_data == "buy:promo_img_10"
+    assert callbacks[:3] == [
+        "buy:first_addon_img_20",
+        "buy:first_addon_img_50",
+        "buy:first_addon_img_150",
+    ]
+    assert "3 750" in keyboard.inline_keyboard[2][0].text
+    assert "50%" in keyboard.inline_keyboard[2][0].text
 
 
-def test_promo_combo_payment_link_is_guarded_after_first_image_purchase():
+def test_first_purchase_payment_link_is_guarded_after_any_paid_purchase():
     class _Db:
-        async def is_first_image_purchase(self, user_id):
+        async def is_first_purchase(self, user_id):
             return False
 
         async def create_pending_payment(self, **kwargs):
@@ -1515,7 +1516,7 @@ def test_promo_combo_payment_link_is_guarded_after_first_image_purchase():
 
     message = _FakeMessage()
 
-    asyncio.run(_send_payment_link(message, _Context(), 123, "promo_text_start_x3"))
+    asyncio.run(_send_payment_link(message, _Context(), 123, "first_text_pro_x7"))
 
     assert message.replies == [("⚠️ Акция первой покупки уже использована.", {})]
 

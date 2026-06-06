@@ -24,6 +24,7 @@ def test_schema_creates_users_generations_packages_and_payments_tables():
     assert "add column if not exists notifications_enabled" in schema
     assert "add column if not exists blocked_at" in schema
     assert "add column if not exists image_balance" in schema
+    assert "alter table users alter column image_balance set default 1" in schema
     assert "create table if not exists generations" in schema
     assert "create table if not exists packages" in schema
     assert "create table if not exists payments" in schema
@@ -170,6 +171,23 @@ async def test_upsert_user_stores_support_profile_and_refreshes_last_seen():
     assert "last_seen_at = now()" in normalized
     assert "blocked_at = null" in normalized
     assert args == (598380407, "alterega", "Egor", "Duschenko", "ru")
+
+
+@pytest.mark.asyncio
+async def test_is_first_purchase_checks_any_paid_payment():
+    conn = _FakeConn(fetchval_result=0)
+    db = Database("postgresql://test")
+    db.pool = _FakePool(conn)
+
+    result = await db.is_first_purchase(123)
+
+    assert result is True
+    query, args = conn.calls[0]
+    normalized = " ".join(query.casefold().split())
+    assert "from payments" in normalized
+    assert "status = 'paid'" in normalized
+    assert "images_count > 0" not in normalized
+    assert args == (123,)
 
 
 @pytest.mark.asyncio

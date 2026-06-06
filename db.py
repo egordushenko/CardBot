@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS image_balance INT DEFAULT 0;
+ALTER TABLE users ALTER COLUMN image_balance SET DEFAULT 1;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS language_code TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
@@ -663,7 +664,11 @@ class Database:
             )
         return dict(row) if row else None
 
-    async def mark_payment_paid_and_add_balance(self, inv_id: str) -> bool:
+    async def mark_payment_paid_and_add_balance(
+        self,
+        inv_id: str,
+        first_purchase_only_package_codes: tuple[str, ...] = (),
+    ) -> bool:
         pool = self._require_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
@@ -671,10 +676,21 @@ class Database:
                     """
                     UPDATE payments
                     SET status = 'paid', paid_at = NOW()
-                    WHERE inv_id = $1 AND status <> 'paid'
+                    WHERE inv_id = $1
+                      AND status <> 'paid'
+                      AND (
+                          NOT (package_code = ANY($2::text[]))
+                          OR NOT EXISTS (
+                              SELECT 1
+                              FROM payments paid
+                              WHERE paid.user_id = payments.user_id
+                                AND paid.status = 'paid'
+                          )
+                      )
                     RETURNING user_id, text_count, images_count
                     """,
                     inv_id,
+                    list(first_purchase_only_package_codes),
                 )
                 if row is None:
                     return False
@@ -691,7 +707,7 @@ class Database:
                 )
                 return True
 
-    async def is_first_image_purchase(self, user_id: int) -> bool:
+    async def is_first_purchase(self, user_id: int) -> bool:
         pool = self._require_pool()
         async with pool.acquire() as conn:
             count = await conn.fetchval(
@@ -700,11 +716,13 @@ class Database:
                 FROM payments
                 WHERE user_id = $1
                   AND status = 'paid'
-                  AND images_count > 0
                 """,
                 user_id,
             )
         return int(count or 0) == 0
+
+    async def is_first_image_purchase(self, user_id: int) -> bool:
+        return await self.is_first_purchase(user_id)
 
     async def get_user(self, user_id: int) -> dict[str, Any] | None:
         pool = self._require_pool()

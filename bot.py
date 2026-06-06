@@ -278,7 +278,7 @@ def build_start_message(first_name: str | None, trial_generations: int = 5) -> s
     return (
         f"Здравствуйте{name}.\n\n"
         "🛒 Я помогу подготовить карточку товара для Wildberries и Ozon.\n\n"
-        f"На старте доступно {trial_generations} бесплатных текстовых генераций."
+        f"На старте доступно {trial_generations} бесплатных текстовых генераций и 1 бесплатное изображение."
     )
 
 
@@ -584,7 +584,7 @@ async def _handle_merchant_profile_input(update: Any, context: Any, user_id: int
 
 
 async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "all") -> None:
-    first_image_purchase = await _get_db(context).is_first_image_purchase(user_id)
+    first_purchase = await _get_db(context).is_first_purchase(user_id)
     if kind == "combo":
         await message.reply_text(
             "💳 Сколько карточек нужно в комбо-пакете?",
@@ -594,18 +594,18 @@ async def _show_buy_menu(message: Any, context: Any, user_id: int, kind: str = "
     if kind == "text":
         await message.reply_text(
             "📝 Выберите пакет текстовых карточек:",
-            reply_markup=build_text_packages_keyboard(),
+            reply_markup=build_text_packages_keyboard(show_first_image_promo=first_purchase),
         )
         return
     if kind == "images":
         await message.reply_text(
             "🖼 Выберите пакет изображений:",
-            reply_markup=build_image_packages_keyboard(show_first_image_promo=first_image_purchase),
+            reply_markup=build_image_packages_keyboard(show_first_image_promo=first_purchase),
         )
         return
     await message.reply_text(
         "💳 Что хотите купить?",
-        reply_markup=build_combined_buy_keyboard(show_first_image_promo=first_image_purchase),
+        reply_markup=build_combined_buy_keyboard(show_first_image_promo=first_purchase),
     )
 
 
@@ -615,7 +615,7 @@ async def _send_payment_link(message: Any, context: Any, user_id: int, package_c
         return
 
     db = _get_db(context)
-    if package_code in PROMO_PACKAGE_CODES and not await db.is_first_image_purchase(user_id):
+    if package_code in PROMO_PACKAGE_CODES and not await db.is_first_purchase(user_id):
         await message.reply_text("⚠️ Акция первой покупки уже использована.")
         return
 
@@ -2580,10 +2580,10 @@ async def handle_callback(update: Any, context: Any) -> None:
             text_count = int(data.split(":", 1)[1])
         except ValueError:
             return
-        first_image_purchase = await _get_db(context).is_first_image_purchase(user_id)
+        first_purchase = await _get_db(context).is_first_purchase(user_id)
         await query.message.reply_text(
             f"🖼 {text_count} карточек: выберите количество фото",
-            reply_markup=build_combo_photo_count_keyboard(text_count, show_first_image_promo=first_image_purchase),
+            reply_markup=build_combo_photo_count_keyboard(text_count, show_first_image_promo=first_purchase),
         )
     elif data.startswith(("buy:", "img_buy:")):
         if user_id is None:
