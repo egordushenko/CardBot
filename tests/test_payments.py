@@ -23,6 +23,8 @@ def test_cardbot_packages_match_price_spec():
     assert PACKAGES["text_business_x5"].price_rub == 7940
     assert PACKAGES["text_pro_x7"].images_count == 700
     assert PACKAGES["text_pro_x7"].price_rub == 30990
+    assert PACKAGES["addon_img_10"].images_count == 10
+    assert PACKAGES["addon_img_10"].price_rub == 575
     assert PACKAGES["addon_img_50"].price_rub == 2750
     assert PACKAGES["addon_img_150"].price_rub == 7500
     assert PACKAGES["promo_img_10"].images_count == 10
@@ -44,6 +46,8 @@ def test_first_purchase_discount_exists_for_every_regular_package():
     assert PACKAGES["first_text_pro_x7"].images_count == PACKAGES["text_pro_x7"].images_count
     assert PACKAGES["first_text_pro_x7"].price_rub == 15495
     assert "first_addon_img_150" in PACKAGES
+    assert PACKAGES["first_addon_img_10"].images_count == 10
+    assert PACKAGES["first_addon_img_10"].price_rub == 288
     assert PACKAGES["first_addon_img_150"].images_count == 150
     assert PACKAGES["first_addon_img_150"].price_rub == 3750
     assert set(FIRST_PURCHASE_PACKAGE_CODES) == {f"first_{code}" for code in REGULAR_PACKAGE_CODES}

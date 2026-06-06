@@ -649,7 +649,7 @@ def test_image_keyboards_follow_spec_callbacks():
     assert "img_count:9" not in full_count_callbacks
     assert is_allowed_image_count(7) is True
     assert is_allowed_image_count(9) is False
-    assert packages_keyboard.inline_keyboard[0][0].callback_data == "buy:addon_img_20"
+    assert packages_keyboard.inline_keyboard[0][0].callback_data == "buy:addon_img_10"
     assert after_keyboard.inline_keyboard[0][0].callback_data == "action:generate"
 
 

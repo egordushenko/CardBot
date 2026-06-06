@@ -233,7 +233,7 @@ def build_balance_keyboard() -> Any:
 
 def build_image_packages_keyboard(show_first_image_promo: bool = False) -> Any:
     codes = (
-        ["promo_img_10"] + [f"first_{code}" for code in IMAGE_ADDON_CODES]
+        ["promo_img_10"] + [f"first_{code}" for code in IMAGE_ADDON_CODES if code != "addon_img_10"]
         if show_first_image_promo
         else IMAGE_ADDON_CODES
     )

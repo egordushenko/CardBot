@@ -52,6 +52,7 @@ PACKAGES: dict[str, PaymentPackage] = {
     "addon_text_10": PaymentPackage("addon_text_10", "Докупить 10 карточек", 10, 0, 560),
     "addon_text_30": PaymentPackage("addon_text_30", "Докупить 30 карточек", 30, 0, 1370),
     "addon_text_100": PaymentPackage("addon_text_100", "Докупить 100 карточек", 100, 0, 3440),
+    "addon_img_10": PaymentPackage("addon_img_10", "Докупить 10 изображений", 0, 10, 575),
     "addon_img_20": PaymentPackage("addon_img_20", "Докупить 20 изображений", 0, 20, 1150),
     "addon_img_50": PaymentPackage("addon_img_50", "Докупить 50 изображений", 0, 50, 2750),
     "addon_img_150": PaymentPackage("addon_img_150", "Докупить 150 изображений", 0, 150, 7500),
@@ -75,7 +76,7 @@ MAIN_PACKAGE_CODES = [
     "text_pro_x7",
 ]
 TEXT_ADDON_CODES = ["addon_text_10", "addon_text_30", "addon_text_100"]
-IMAGE_ADDON_CODES = ["addon_img_20", "addon_img_50", "addon_img_150"]
+IMAGE_ADDON_CODES = ["addon_img_10", "addon_img_20", "addon_img_50", "addon_img_150"]
 REGULAR_PACKAGE_CODES = tuple(code for code in PACKAGES if not code.startswith("promo_"))
 FIRST_PURCHASE_PACKAGE_CODES = tuple(f"first_{code}" for code in REGULAR_PACKAGE_CODES)
 
