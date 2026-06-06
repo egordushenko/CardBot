@@ -232,7 +232,11 @@ def build_balance_keyboard() -> Any:
 
 
 def build_image_packages_keyboard(show_first_image_promo: bool = False) -> Any:
-    codes = [f"first_{code}" for code in IMAGE_ADDON_CODES] if show_first_image_promo else IMAGE_ADDON_CODES
+    codes = (
+        ["promo_img_10"] + [f"first_{code}" for code in IMAGE_ADDON_CODES]
+        if show_first_image_promo
+        else IMAGE_ADDON_CODES
+    )
     rows = [[_payment_button(code)] for code in codes]
     rows.append(_nav_row("buy_back:root"))
     return _keyboard(rows)

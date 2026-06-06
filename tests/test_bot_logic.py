@@ -1491,13 +1491,15 @@ def test_image_packages_keyboard_marks_first_purchase_promo():
     keyboard = build_image_packages_keyboard(show_first_image_promo=True)
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
-    assert callbacks[:3] == [
+    assert callbacks[:4] == [
+        "buy:promo_img_10",
         "buy:first_addon_img_20",
         "buy:first_addon_img_50",
         "buy:first_addon_img_150",
     ]
-    assert "3 750" in keyboard.inline_keyboard[2][0].text
-    assert "50%" in keyboard.inline_keyboard[2][0].text
+    assert "290" in keyboard.inline_keyboard[0][0].text
+    assert "3 750" in keyboard.inline_keyboard[3][0].text
+    assert "50%" in keyboard.inline_keyboard[3][0].text
 
 
 def test_first_purchase_payment_link_is_guarded_after_any_paid_purchase():
