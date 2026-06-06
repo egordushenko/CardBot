@@ -20,7 +20,7 @@ HOME_CALLBACK = "action:home"
 HOME_BUTTON_TEXT = "🏠 Главная"
 BACK_BUTTON_TEXT = "⬅️ Назад"
 PROFILE_BUTTON_TEXT = "🏪 Профиль магазина"
-COMBO_PACKAGE_BUTTON_TEXT = "💳 Текст + изображения"
+COMBO_PACKAGE_BUTTON_TEXT = "📝🖼 Текст + изображения"
 REPLY_ACTIONS = {
     "⚡ Сгенерировать карточку": "generate",
     "💳 Купить генерации": "buy",
@@ -186,8 +186,8 @@ def build_buy_keyboard(show_first_image_promo: bool = False) -> Any:
     return _keyboard(
         [
             [_button(COMBO_PACKAGE_BUTTON_TEXT, "action:buy_combo")],
-            [_button("Только текст", "action:buy_text")],
-            [_button("Только изображения", "action:buy_images")],
+            [_button("📝 Только текст", "action:buy_text")],
+            [_button("🖼 Только изображения", "action:buy_images")],
             [_home_button()],
         ]
     )
@@ -223,8 +223,8 @@ def build_balance_keyboard() -> Any:
         [
             [_button(COMBO_PACKAGE_BUTTON_TEXT, "action:buy_combo")],
             [
-                _button("💳 Купить текстовые", "action:buy_text"),
-                _button("💳 Купить изображения", "action:buy_images"),
+                _button("📝 Купить текстовые", "action:buy_text"),
+                _button("🖼 Купить изображения", "action:buy_images"),
             ],
             [_home_button()],
         ]
@@ -282,7 +282,7 @@ def build_no_image_balance_keyboard() -> Any:
     return _keyboard(
         [
             [
-                _button("💳 Купить изображения", "action:buy_images"),
+                _button("🖼 Купить изображения", "action:buy_images"),
                 _button("📝 Только текст", "mode:text_only"),
             ],
             [_home_button()],
@@ -392,7 +392,7 @@ def build_image_count_keyboard(image_balance: int | None = None) -> Any:
     if image_balance is not None:
         counts = [count for count in counts if count <= image_balance]
     if not counts:
-        return _keyboard([[_button("💳 Купить изображения", "action:buy_images")], [_home_button()]])
+        return _keyboard([[_button("🖼 Купить изображения", "action:buy_images")], [_home_button()]])
     rows = [[_button(str(count), f"img_count:{count}") for count in counts[:3]]]
     if len(counts) > 3:
         rows.append([_button(str(count), f"img_count:{count}") for count in counts[3:]])
