@@ -84,6 +84,7 @@ OZON_GROUNDED_FIELD_MARKERS = (
     "количество",
     "совместимость",
     "подключение",
+    "беспроводное",
     "тип беспроводной связи",
     "беспроводной связи",
     "bluetooth",
@@ -101,6 +102,7 @@ OZON_VALUE_LIKE_FIELD_RE = re.compile(
 )
 OZON_HASHTAGS_MIN = 12
 OZON_HASHTAGS_MAX = 18
+OZON_TITLE_SOFT_MAX = 120
 
 OZON_PLACEHOLDER_VALUES = {
     "не указана",
@@ -140,10 +142,8 @@ OZON_BRAND_MODEL_TOKENS = (
 
 OZON_HEADPHONE_ONLY_FIELDS = {
     "Активное",
-    "Беспроводное",
     "В ушной раковине",
     "Наличие микрофона",
-    "Тип беспроводной связи",
     "Конструкция наушников",
 }
 
@@ -155,6 +155,7 @@ OZON_CLEANING_ONLY_FIELD_MARKERS = (
 )
 
 OZON_AUDIO_CONTEXT_RE = re.compile(r"\b(наушник\w*|гарнитур\w*|колонк\w*|аудио|микрофон\w*)\b", re.IGNORECASE)
+OZON_KEYBOARD_CONTEXT_RE = re.compile(r"\b(клавиатур\w*|keyboard)\b", re.IGNORECASE)
 OZON_CLEANING_CONTEXT_RE = re.compile(r"\b(уборк\w*|мыть\w*|чистк\w*|щетк\w*|швабр\w*|губк\w*)\b", re.IGNORECASE)
 OZON_GENDER_VALUE_RE = re.compile(r"\b(женск\w*|мужск\w*|детск\w*)\b", re.IGNORECASE)
 
@@ -248,17 +249,77 @@ def _remove_unmentioned_brand_model_tokens(text: str, user_input: str) -> str:
     return _cleanup_text_spacing(cleaned)
 
 
+def _extract_keyboard_title(text: str, user_input: str) -> str:
+    context = f"{text} {user_input}"
+    if not OZON_KEYBOARD_CONTEXT_RE.search(context):
+        return ""
+
+    parts: list[str] = []
+    brand_model = re.search(r"\b([A-Z0-9]{2,})\s+([A-Z0-9][A-Z0-9-]{2,})\b", text)
+    if brand_model:
+        parts.append(f"{brand_model.group(1)} {brand_model.group(2)}")
+
+    if re.search(r"\bмеханическ\w*\s+клавиатур\w*\b", context, flags=re.IGNORECASE):
+        parts.append("механическая клавиатура")
+    elif OZON_KEYBOARD_CONTEXT_RE.search(context):
+        parts.append("клавиатура")
+
+    form_factor = re.search(r"\b\d+%", context)
+    if form_factor:
+        parts.append(form_factor.group(0))
+
+    prefix = " ".join(dict.fromkeys(parts))
+    features: list[str] = []
+    bluetooth = re.search(r"\bBluetooth\s*\d+(?:[.,]\d+)?\b", context, flags=re.IGNORECASE)
+    if bluetooth:
+        features.append(bluetooth.group(0).replace(",", "."))
+    elif re.search(r"\bBluetooth\b", context, flags=re.IGNORECASE):
+        features.append("Bluetooth")
+    if re.search(r"\b2[,.]4\s*ГГц\b", context, flags=re.IGNORECASE):
+        features.append("2.4 ГГц")
+    if re.search(r"\bUSB-?C\b", context, flags=re.IGNORECASE):
+        features.append("USB-C")
+    if re.search(r"\bRGB\b", context, flags=re.IGNORECASE):
+        features.append("RGB")
+    switch = re.search(r"\b(красн\w*)\s+свитч\w*\b", context, flags=re.IGNORECASE)
+    if switch:
+        features.append("красные свитчи")
+
+    title = prefix
+    if features:
+        title = f"{prefix}, {', '.join(dict.fromkeys(features))}" if prefix else ", ".join(dict.fromkeys(features))
+    return _cleanup_text_spacing(title)
+
+
+def _compact_ozon_title(title: str, user_input: str) -> str:
+    if len(title) <= OZON_TITLE_SOFT_MAX:
+        return title
+    keyboard_title = _extract_keyboard_title(title, user_input)
+    if keyboard_title and len(keyboard_title) <= OZON_TITLE_SOFT_MAX:
+        return keyboard_title
+    words: list[str] = []
+    for word in sanitize_title(title, "ozon").split():
+        candidate = " ".join(words + [word])
+        if len(candidate) > OZON_TITLE_SOFT_MAX:
+            break
+        words.append(word)
+    return _cleanup_text_spacing(" ".join(words) or title[:OZON_TITLE_SOFT_MAX])
+
+
 def _sanitize_ozon_generated_text(text: str, user_input: str, *, is_title: bool) -> str:
     cleaned = _remove_unmentioned_brand_model_tokens(text, user_input)
-    return sanitize_title(cleaned, "ozon") if is_title else sanitize_description(cleaned, "ozon")
+    if is_title:
+        return _compact_ozon_title(sanitize_title(cleaned, "ozon"), user_input)
+    return sanitize_description(cleaned, "ozon")
 
 
 def _is_contextually_wrong_field(field: str, user_input: str, title: str, category_profile: dict[str, Any] | None) -> bool:
     field_lower = field.casefold()
-    context = f"{user_input} {title} {(category_profile or {}).get('category') or ''}".casefold()
-    if field in OZON_HEADPHONE_ONLY_FIELDS and not OZON_AUDIO_CONTEXT_RE.search(context):
+    product_context = f"{user_input} {title}".casefold()
+    category_context = f"{product_context} {(category_profile or {}).get('category') or ''}".casefold()
+    if field in OZON_HEADPHONE_ONLY_FIELDS and not OZON_AUDIO_CONTEXT_RE.search(product_context):
         return True
-    if any(marker in field_lower for marker in OZON_CLEANING_ONLY_FIELD_MARKERS) and not OZON_CLEANING_CONTEXT_RE.search(context):
+    if any(marker in field_lower for marker in OZON_CLEANING_ONLY_FIELD_MARKERS) and not OZON_CLEANING_CONTEXT_RE.search(category_context):
         return True
     return False
 
@@ -304,6 +365,8 @@ def _user_mentions_field(user_input: str, field: str) -> bool:
         return _mentions_any(user_input, (r"\b\d+\s*(w|вт|ватт)\b", r"\bмощност\w*\b"))
     if "тип беспроводной связи" in field_lower or "беспроводной связи" in field_lower:
         return _mentions_any(user_input, (r"\bbluetooth\b", r"\bблютуз\b", r"\bwi-?fi\b", r"\bбеспровод\w*\b"))
+    if field_lower == "беспроводное":
+        return _mentions_any(user_input, (r"\bbluetooth\b", r"\bблютуз\b", r"\bwi-?fi\b", r"\b2[,.]4\s*ггц\b", r"\bбеспровод\w*\b"))
     if "микрофон" in field_lower:
         return _mentions_any(user_input, (r"\bмикрофон\w*\b",))
     if "шумоподав" in field_lower:

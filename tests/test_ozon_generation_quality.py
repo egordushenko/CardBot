@@ -414,6 +414,57 @@ def test_apply_ozon_generation_quality_drops_headphone_fields_from_smartphone():
     assert "Конструкция наушников:" not in result.characteristics
 
 
+def test_apply_ozon_generation_quality_compacts_keyboard_title_and_drops_headphone_fields():
+    card = CardGeneration(
+        title=(
+            "AJAZZ AK820 механическая клавиатура 75% 82 клавиши беспроводная "
+            "Bluetooth 5.0 2.4 ГГц USB-C hot-swap RGB подсветка алюминиевый корпус "
+            "аккумулятор 4000 мАч красные свитчи"
+        ),
+        description="Механическая клавиатура AJAZZ AK820 для игр и работы.",
+        keywords="#механическая_клавиатура #клавиатура_для_игр",
+        characteristics=(
+            "Тип: Механическая клавиатура\n"
+            "Назначение: Для игр, Для работы\n"
+            "USB Type-C: Да\n"
+            "Беспроводное: Да\n"
+            "Активное: Нет\n"
+            "В ушной раковине: Нет\n"
+            "Страна-изготовитель: Китай"
+        ),
+        marketplace="ozon",
+    )
+
+    result = apply_ozon_generation_quality(
+        card,
+        category_profile={
+            "category": "Электроника / Наушники",
+            "prompt_characteristics": [
+                "Тип",
+                "Назначение",
+                "USB Type-C",
+                "Беспроводное",
+                "Активное",
+                "В ушной раковине",
+                "Страна-изготовитель",
+            ],
+        },
+        user_input=(
+            "Механическая клавиатура AJAZZ AK820. 75% формат, 82 клавиши. "
+            "Bluetooth 5.0, 2.4 ГГц, USB-C, hot-swap, RGB подсветка, "
+            "алюминиевый корпус, аккумулятор 4000 мАч, красные свитчи."
+        ),
+    )
+
+    assert len(result.title) <= 120
+    assert result.title == (
+        "AJAZZ AK820 механическая клавиатура 75%, Bluetooth 5.0, 2.4 ГГц, USB-C, RGB, красные свитчи"
+    )
+    assert "Беспроводное: Да" in result.characteristics
+    assert "Активное:" not in result.characteristics
+    assert "В ушной раковине:" not in result.characteristics
+
+
 def test_apply_ozon_generation_quality_remaps_clothing_gender_from_height_field():
     card = CardGeneration(
         title="Платье женское черное",
