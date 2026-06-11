@@ -1046,20 +1046,24 @@ async def _show_image_style_step(message: Any, context: Any) -> None:
     )
 
 
+def _as_callback_update(update: Any) -> Any:
+    if getattr(update, "callback_query", None) is not None:
+        return update
+    return SimpleNamespace(
+        callback_query=SimpleNamespace(message=update.effective_message),
+        effective_message=update.effective_message,
+        effective_user=getattr(update, "effective_user", None),
+    )
+
+
 async def _continue_after_image_style(update: Any, context: Any, user_id: int) -> None:
-    query = getattr(update, "callback_query", None)
+    generation_update = _as_callback_update(update)
     if context.user_data.get("repeat_images_count"):
         images_count = int(context.user_data.pop("repeat_images_count"))
         if not is_allowed_image_count(images_count):
             await _show_image_count_step(update.effective_message, context, user_id)
             return
         context.user_data["img_count"] = images_count
-        generation_update = update
-        if query is None:
-            generation_update = SimpleNamespace(
-                callback_query=SimpleNamespace(message=update.effective_message),
-                effective_message=update.effective_message,
-            )
         if should_generate_text_with_images(context.user_data.get("mode")):
             await _generate_text_and_images_for_user(generation_update, context, user_id, images_count)
         else:
@@ -1070,9 +1074,9 @@ async def _continue_after_image_style(update: Any, context: Any, user_id: int) -
         await _show_image_count_step(update.effective_message, context, user_id)
         return
     if should_generate_text_with_images(context.user_data.get("mode")):
-        await _generate_text_and_images_for_user(update, context, user_id, images_count)
+        await _generate_text_and_images_for_user(generation_update, context, user_id, images_count)
     else:
-        await _generate_images_for_user(update, context, user_id, images_count)
+        await _generate_images_for_user(generation_update, context, user_id, images_count)
 
 
 async def _handle_image_guidance(update: Any, context: Any, user_id: int, user_input: str) -> bool:
@@ -2304,7 +2308,7 @@ async def handle_callback(update: Any, context: Any) -> None:
             return
         await _show_image_count_step(query.message, context, user.id)
     elif data == "img_guidance_write":
-        await _show_image_guidance_step(query.message, context)
+        context.user_data["generation_step"] = "image_guidance"
     elif data == "img_guidance_skip":
         user = update.effective_user
         if user is None:

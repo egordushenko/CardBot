@@ -615,7 +615,7 @@ def test_image_keyboards_follow_spec_callbacks():
     guidance_callbacks = [
         button.callback_data for row in guidance_keyboard.inline_keyboard for button in row
     ]
-    assert guidance_callbacks == ["img_guidance_write", "img_guidance_skip", "action:home"]
+    assert guidance_callbacks == ["img_guidance_skip", "action:home"]
     style_callbacks = [button.callback_data for row in style_keyboard.inline_keyboard for button in row]
     assert style_callbacks == [
         "img_style:minimalism",
@@ -864,7 +864,13 @@ def test_image_style_custom_saves_text_and_reuses_generation_count(monkeypatch):
         calls = []
 
         async def fake_generate(update, context, user_id, images_count):
-            calls.append((user_id, images_count))
+            calls.append(
+                (
+                    user_id,
+                    images_count,
+                    update.callback_query.message is update.effective_message,
+                )
+            )
 
         monkeypatch.setattr("bot._generate_images_for_user", fake_generate)
         context = _FakeTemplateContext(_FakeTemplateDb())
@@ -887,7 +893,46 @@ def test_image_style_custom_saves_text_and_reuses_generation_count(monkeypatch):
         assert handled is True
         assert context.user_data["img_style_custom"] == "натуральный дневной свет, чистый WB фон"
         assert context.user_data["img_style_preset"] == ""
-        assert calls == [(123, 3)]
+        assert calls == [(123, 3, True)]
+
+    asyncio.run(run_flow())
+
+
+def test_image_style_custom_text_and_images_uses_callback_compatible_update(monkeypatch):
+    async def run_flow():
+        calls = []
+
+        async def fake_generate(update, context, user_id, images_count):
+            calls.append(
+                (
+                    user_id,
+                    images_count,
+                    update.callback_query.message is update.effective_message,
+                )
+            )
+
+        monkeypatch.setattr("bot._generate_text_and_images_for_user", fake_generate)
+        context = _FakeTemplateContext(_FakeTemplateDb())
+        context.user_data.update(
+            {
+                "awaiting_image_style_custom": True,
+                "mode": "text_and_images",
+                "img_count": 5,
+            }
+        )
+        update = _FakeUpdate("medical eco style")
+
+        handled = await _handle_image_style_custom(
+            update,
+            context,
+            user_id=123,
+            user_input="medical eco style",
+        )
+
+        assert handled is True
+        assert context.user_data["img_style_custom"] == "medical eco style"
+        assert context.user_data["img_style_preset"] == ""
+        assert calls == [(123, 5, True)]
 
     asyncio.run(run_flow())
 

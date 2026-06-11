@@ -312,10 +312,7 @@ def build_image_photo_keyboard(photos_count: int) -> Any:
 def build_image_guidance_keyboard() -> Any:
     return _keyboard(
         [
-            [
-                _button("✍️ Написать пожелания", "img_guidance_write"),
-                _button("Пропустить", "img_guidance_skip"),
-            ],
+            [_button("Пропустить", "img_guidance_skip")],
             [_home_button()],
         ]
     )
