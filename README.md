@@ -114,4 +114,4 @@ Public bot: [@CaardMakerBot](https://t.me/CaardMakerBot)
 ## Related Links
 
 * Product / brand: [alterega.ru](https://alterega.ru)
-* Author: [OzzY12345](https://github.com/OzzY12345)
+* Author: [Egor Dushenko](https://github.com/egordushenko)
